@@ -64,7 +64,8 @@ export function defaultLayout() {
     //   face  horizontal width of the drop (small = sheer)
     //   pf    face profile (< 1 bulges and stays sheer, > 1 is a slope that flattens out)
     //   L, D  seabed: how far out it takes to get deep, and how deep
-    defaults: { sand: 0, face: 12, pf: 0.8, L: 18, D: 34 },
+    //   murk  sand hanging in the water, which turns shallow bays milky turquoise
+    defaults: { sand: 0, murk: 0, face: 12, pf: 0.8, L: 18, D: 34 },
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
       { name: 'beach south crescent', at: [70, 95], r: 30, sand: 1 },
@@ -76,8 +77,9 @@ export function defaultLayout() {
       { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
-      { name: 'kelingking cove', at: [30, 230], r: 130, L: 110, D: 24 },
-      { name: 'east bay', at: [340, 20], r: 190, L: 220, D: 18 },
+      { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.35 },
+      { name: 'east bay shelf', at: [430, 10], r: 150, L: 260, D: 12, murk: 1 },
+      { name: 'channel along the neck', at: [175, 25], r: 85, L: 22, D: 32 },
     ],
 
     beach: { top: 4.6, spread: 24, shift: 8 },

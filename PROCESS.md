@@ -72,3 +72,50 @@ First render with those numbers had the head and islet within a few pixels.
   built, since the scroll starts standing there.
 - The overview photo is CC BY 4.0 and now registered to the map. It could guide the
   vegetation and rock masks in stage 3, with credit.
+
+## Stage 2: water (2026-09-24)
+
+### Targets
+
+Four water photos, each for one thing: straight down on the surf (foam texture and colour
+over sand), from the cliff into the cove (the break line and the bands), a backlit breaking
+wave at eye level, and the high drone shot (the milky plumes). Two new shots were set up to
+match them, `surfTop` and `cove`, plus `shoreBreak` at eye level.
+
+### What the comparisons caught
+
+1. **Rings around the headland.** The first wave train followed the coast everywhere, so
+   concentric rings wrapped the rock. Real surf only forms off beaches. On rock the swell
+   runs straight into the cliff.
+2. **Brown water.** Stirred-up sand first came out muddy brown. The fix is physical: the
+   light it scatters back has already lost its red on the way down, so it glows turquoise.
+3. **A beige seabed.** The first sand colour was the dry beach colour. Under water the
+   reference sand is close to white, and that is what makes the turquoise.
+4. **Voronoi foam.** Cell noise read as crackle glaze, not foam. Domain-warped noise for the
+   swirls and ridged noise for the filaments works much better.
+5. **Pixel steps on the waterline.** The distance-to-shore field was built from a
+   rasterised outline and carried its staircase into every wave front. A small blur fixed it.
+6. **A row of grey teeth along every crest.** This one took three wrong guesses (mesh
+   density, texture resolution, the crest lean) before a hide-one-object test showed it
+   came from the water mesh and the normals view showed steep patches. The real cause was
+   each wave picking a random size and switching to the next wave's size exactly at the
+   crest, a vertical step of up to a metre that a grid can only draw as teeth. Handing the
+   size over in the trough, blended, fixed it. Lesson: when a pattern repeats with the mesh,
+   look for a discontinuity in the function before blaming the mesh.
+
+### Speed
+
+First version: 16 to 27 fps. Hiding objects showed the water was about three quarters of
+the frame, and a half-resolution test showed it was the per-pixel cost. What helped:
+direction to the coast baked into a texture instead of sampled four times per pixel,
+forward differences for the normal, a shorter shadow march that skips open water, foam
+and caustics only computed where they can show, the ring grid scaled with camera height,
+and a resolution governor. Now 50 to 68 fps.
+
+### Known limits after stage 2
+
+- The eye-level wave has no curl and no spray. A heightfield cannot fold over, so a
+  plunging lip needs its own mesh plus a spray particle layer. That fits stage 5.
+- The milky plume in the east bay is patchier and dimmer than in the drone photo.
+- Open sea from 1 km up is a little smooth next to the photo's texture.
+- Cliff faces still streak, which is stage 3.

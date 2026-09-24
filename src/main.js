@@ -1,4 +1,4 @@
-// Kelingking, stage 1: grey terrain plus the tools for matching it to photos.
+// Kelingking: grey terrain (stage 1), the sea (stage 2), and the tools for matching both to photos.
 //
 // URL parameters
 //   shot=viewpoint     start on a shot from shots.js
@@ -10,8 +10,11 @@
 //   outline=1          photo at full strength with the render's coastline (red) and
 //                      silhouettes (yellow) traced over it
 //   capture=1          hide the UI and set window.__ready once the frame is final
+//   t=12               freeze the clock at this many seconds (the sea animates)
+//   debug=1..5         water debug view: sediment, see-through, foam, underwater light, normals
+//   hide=terrain,water leave objects out (for tracking down which one draws what)
 //
-// Keys: O overlay, D difference, F free camera, C contours, 1-5 shots.
+// Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -19,6 +22,8 @@ import { GUI } from 'lil-gui';
 import { defaultLayout } from './terrain/layout.js';
 import { createTerrain, sample } from './terrain/terrain-mesh.js';
 import { SHOTS } from './shots.js';
+import { createWater } from './water/water.js';
+import { SKY_GLSL } from './water/water-shader.js';
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
@@ -39,6 +44,10 @@ const state = {
   exposure: 1.0,
 };
 const layout = defaultLayout();
+const FIXED_T = params.has('t') ? +params.get('t') : null;
+const clock = new THREE.Clock();
+let simTime = FIXED_T ?? 0;
+const timeCtl = { paused: false, speed: 1 };
 const deg = THREE.MathUtils.degToRad;
 
 // ---------------------------------------------------------------- renderer and scene
@@ -51,15 +60,15 @@ outlineCanvas.id = 'outline';
 stage.append(outlineCanvas);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: CAPTURE });
-renderer.setPixelRatio(CAPTURE ? 1 : Math.min(devicePixelRatio, 2));
-renderer.toneMapping = THREE.AgXToneMapping;
+renderer.setPixelRatio(CAPTURE ? 1 : Math.min(devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 stage.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const HORIZON = new THREE.Color(0xd3e4ee);
-scene.fog = new THREE.FogExp2(HORIZON, 0.00014);
+const HORIZON = new THREE.Color(0xb9d3ea);
+scene.fog = new THREE.FogExp2(HORIZON, 0.00009);
 
 const camera = new THREE.PerspectiveCamera(57, 1, 0.3, 30000);
 camera.rotation.order = 'YXZ';
@@ -68,14 +77,20 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.enabled = false;
 
+const ZENITH = new THREE.Color(0x2566c8);
+const water = createWater();
 const sky = new THREE.Mesh(
   new THREE.SphereGeometry(20000, 32, 16),
   new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x3a7cc0) }, horizon: { value: HORIZON } },
+    uniforms: {
+      uSunDir: water.uniforms.uSunDir, uSunIrr: water.uniforms.uSunIrr,
+      uZenith: water.uniforms.uZenith, uHorizon: water.uniforms.uHorizon,
+    },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `uniform vec3 top; uniform vec3 horizon; varying vec3 vDir;
-      void main(){ float t = pow(max(vDir.y, 0.0), 0.5); gl_FragColor = vec4(mix(horizon, top, t), 1.0);
+    fragmentShader: `${SKY_GLSL}
+      varying vec3 vDir;
+      void main(){ gl_FragColor = vec4(skyRadiance(normalize(vDir)), 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       }`,
@@ -100,18 +115,17 @@ function placeSun() {
 }
 placeSun();
 
-const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(60000, 60000),
-  new THREE.MeshStandardMaterial({ color: 0x1b5874, roughness: 0.22, metalness: 0, transparent: true, opacity: 0.8 })
-);
-water.rotation.x = -Math.PI / 2;
-water.receiveShadow = true;
-water.renderOrder = 1;
-scene.add(water);
+scene.add(water.mesh);
+water.uniforms.uDebug.value = +(params.get('debug') || 0);
 
 const terrain = createTerrain();
 scene.add(terrain.mesh);
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
+for (const name of (params.get('hide') || '').split(',')) {
+  if (name === 'terrain') terrain.mesh.visible = false;
+  if (name === 'water') water.mesh.visible = false;
+  if (name === 'sky') sky.visible = false;
+}
 
 // ---------------------------------------------------------------- terrain generation
 
@@ -123,6 +137,17 @@ worker.onmessage = (e) => {
   if (e.data.id !== genId) return;
   hf = e.data;
   terrain.update(hf, CAPTURE ? 2048 : 1024);
+  const tex = new THREE.DataTexture(hf.water, hf.N, hf.N, THREE.RGBAFormat, THREE.HalfFloatType);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+  const dir = new THREE.DataTexture(hf.shoreDir, hf.N, hf.N, THREE.RGBAFormat);
+  dir.minFilter = THREE.LinearFilter;
+  dir.magFilter = THREE.LinearFilter;
+  dir.needsUpdate = true;
+  water.uniforms.uData.value?.dispose();
+  water.uniforms.uShoreDir.value?.dispose();
+  water.setData(tex, dir, hf.extent);
   terrainFrames = 0;
   outlineDirty = true;
   status();
@@ -206,8 +231,8 @@ let outlineDirty = false;
 function drawOutline() {
   const w = renderer.domElement.width, h = renderer.domElement.height;
   const rt = new THREE.WebGLRenderTarget(w, h);
-  const keep = { fog: scene.fog, water: water.visible, sky: sky.visible };
-  scene.fog = null; water.visible = false; sky.visible = false;
+  const keep = { fog: scene.fog, water: water.mesh.visible, sky: sky.visible };
+  scene.fog = null; water.mesh.visible = false; sky.visible = false;
   scene.overrideMaterial = maskMaterial;
   renderer.setRenderTarget(rt);
   renderer.setClearColor(0x000000, 1);
@@ -217,7 +242,7 @@ function drawOutline() {
   renderer.toneMapping = tm;
   renderer.setRenderTarget(null);
   scene.overrideMaterial = null;
-  scene.fog = keep.fog; water.visible = keep.water; sky.visible = keep.sky;
+  scene.fog = keep.fog; water.mesh.visible = keep.water; sky.visible = keep.sky;
   const px = new Uint8Array(w * h * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
   rt.dispose();
@@ -266,7 +291,7 @@ addEventListener('resize', resize);
 
 // ---------------------------------------------------------------- GUI
 
-const gui = new GUI({ title: 'Kelingking · stage 1' });
+const gui = new GUI({ title: 'Kelingking' });
 if (CAPTURE) gui.hide();
 gui.add(state, 'shot', Object.keys(SHOTS)).onChange(setShot).listen();
 gui.add(state, 'free').name('free camera (F)').onChange(setFree).listen();
@@ -321,6 +346,27 @@ tf.add(layout.noise, 'broad', 0, 15, 0.1).name('broad noise').onChange(regenerat
 tf.add(layout.noise, 'fine', 0, 5, 0.1).name('fine noise').onChange(regenerateSoon);
 tf.close();
 
+const wf = gui.addFolder('Water');
+const wp = water.params, wa = () => water.applyParams();
+wf.add(timeCtl, 'paused').name('pause time');
+wf.add(timeCtl, 'speed', 0, 3, 0.05).name('time speed');
+wf.add(wp, 'period', 4, 18, 0.1).name('wave period (s)').onChange(wa);
+wf.add(wp, 'swell', 0, 3, 0.01).name('swell height (m)').onChange(wa);
+wf.add(wp, 'breakAt', 4, 60, 0.5).name('break distance (m)').onChange(wa);
+wf.add(wp, 'surge', 0, 1.5, 0.01).name('swash run-up (m)').onChange(wa);
+wf.add(wp, 'swellHeading', 0, 360, 1).name('swell heading').onChange(wa);
+wf.add(wp, 'windHeading', 0, 360, 1).name('wind heading').onChange(wa);
+wf.add(wp, 'chop', 0, 3, 0.01).name('wind chop').onChange(wa);
+wf.add(wp, 'foam', 0, 2, 0.01).onChange(wa);
+wf.add(wp, 'turbidity', 0, 2, 0.01).name('stirred sand').onChange(wa);
+wf.add(wp.absorb, 0, 0.05, 1.5, 0.005).name('absorb red').onChange(wa);
+wf.add(wp.absorb, 1, 0.005, 0.5, 0.001).name('absorb green').onChange(wa);
+wf.add(wp.absorb, 2, 0.005, 0.5, 0.001).name('absorb blue').onChange(wa);
+wf.addColor(wp, 'scatter').name('scatter colour').onChange(wa);
+wf.addColor(wp, 'sandAlbedo').name('seabed sand').onChange(wa);
+wf.addColor(wp, 'reefAlbedo').name('seabed reef').onChange(wa);
+wf.close();
+
 const lf = gui.addFolder('Light and view');
 lf.add(state, 'sunAz', 0, 360, 1).name('sun heading').onChange(placeSun);
 lf.add(state, 'sunEl', 5, 90, 1).name('sun elevation').onChange(placeSun);
@@ -350,7 +396,8 @@ function status() {
 controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
 // Handles for poking at the scene from the console or a test script.
-window.__app = { THREE, scene, camera, renderer, terrain, layout, SHOTS, state, groundAt,
+window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt,
+  setTime(t) { simTime = t; },
   project(x, y, h) {
     const v = new THREE.Vector3(x, h ?? groundAt(x, y), -y).project(camera);
     return [+((v.x * 0.5 + 0.5) * 1400).toFixed(0), +((0.5 - v.y * 0.5) * (1400 / camera.aspect)).toFixed(0), +v.z.toFixed(3)];
@@ -362,7 +409,26 @@ window.__app = { THREE, scene, camera, renderer, terrain, layout, SHOTS, state, 
 setShot(state.shot);
 resize();
 
+// Dynamic resolution: drop the pixel ratio when frames run long, raise it when there is room.
+const MAX_PR = Math.min(devicePixelRatio, 1.5);
+let pr = MAX_PR, frameAvg = 16;
+function governResolution(dt) {
+  if (CAPTURE) return;
+  frameAvg += (dt * 1000 - frameAvg) * 0.05;
+  const next = frameAvg > 22 ? Math.max(0.85, pr - 0.1) : frameAvg < 13 ? Math.min(MAX_PR, pr + 0.05) : pr;
+  if (Math.abs(next - pr) > 0.01) {
+    pr = next;
+    renderer.setPixelRatio(pr);
+    resize();
+    frameAvg = 16;
+  }
+}
+
 renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  governResolution(dt);
+  if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
+  water.update(simTime, sun, hemi, ZENITH, HORIZON, camera);
   if (state.free) controls.update();
   sky.position.copy(camera.position);
   renderer.render(scene, camera);

@@ -7,6 +7,8 @@
 //   node tools/capture.mjs viewpoint --overlay=0.5 --diff
 //   node tools/capture.mjs viewpoint --outline     render edges traced over the photo
 //   node tools/capture.mjs --width=1600 --q=2048 --contours
+//   node tools/capture.mjs beach --t=20.5           freeze the sea at 20.5 s (default 12)
+//   node tools/capture.mjs beach --clip=8           8 s clip from --t, 30 fps, to captures/<shot>.mp4 (needs ffmpeg)
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
 // `python3 -m http.server 5178`). Output goes to captures/<shot>[-compare].png
@@ -77,12 +79,14 @@ try {
     const aspect = await refAspect(shot.ref);
     const compare = flag('compare', false);
     const w = WIDTH, h = Math.round(WIDTH / aspect);
-    const q = new URLSearchParams({ shot: name, capture: '1', q: flag('q', '2048') });
+    const q = new URLSearchParams({ shot: name, capture: '1', q: flag('q', '2048'), t: flag('t', '12') });
     if (compare) q.set('compare', 'side');
     if (flag('overlay')) q.set('overlay', flag('overlay'));
     if (flag('diff')) q.set('diff', '1');
     if (flag('contours')) q.set('contours', '1');
     if (flag('outline')) q.set('outline', '1');
+    if (flag('debug')) q.set('debug', flag('debug'));
+    if (flag('hide')) q.set('hide', flag('hide'));
 
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
@@ -96,6 +100,28 @@ try {
       if (r.result.value) break;
       if (Date.now() - t0 > 120000) throw new Error(`${name}: page never became ready`);
       await new Promise((res) => setTimeout(res, 250));
+    }
+    if (flag('clip')) {
+      const secs = +flag('clip'), fps = +flag('fps', 30), t0s = +flag('t', 12);
+      const dir = mkdtempSync(join(tmpdir(), 'kelingking-clip-'));
+      const n = Math.round(secs * fps);
+      for (let f = 0; f < n; f++) {
+        await send('Runtime.evaluate', {
+          expression: `new Promise(r => { window.__app.setTime(${t0s + f / fps}); requestAnimationFrame(() => requestAnimationFrame(r)); })`,
+          awaitPromise: true,
+        }, sessionId);
+        const fr = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
+        writeFileSync(join(dir, `f${String(f).padStart(4, '0')}.png`), Buffer.from(fr.data, 'base64'));
+      }
+      const mp4 = join(root, 'captures', `${name}.mp4`);
+      const { spawnSync } = await import('node:child_process');
+      const enc = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', join(dir, 'f%04d.png'),
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', mp4]);
+      rmSync(dir, { recursive: true, force: true });
+      if (enc.status !== 0) throw new Error('ffmpeg failed: ' + enc.stderr);
+      console.log(`${name}: ${mp4.replace(root + '/', '')} (${n} frames, ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
+      await send('Target.closeTarget', { targetId });
+      continue;
     }
     const shotPng = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
     const out = join(root, 'captures', `${name}${compare ? '-compare' : ''}${flag('overlay') ? '-overlay' : ''}${flag('outline') ? '-outline' : ''}.png`);

@@ -30,9 +30,11 @@ export function generateHeightfield(layout, N = 2048) {
   for (let k = 0; k < land.length; k++) land[k] |= isle[k];
   const high = fill([cliffRing], N, x0, y0, cell);
 
-  const dCoast = signedDistance(land, N, cell).sd;
+  // Distances to a rasterised outline carry the pixel staircase with them. A light blur
+  // takes it out, which matters where a sharp wave front or the swash edge follows them.
+  const dCoast = blur(signedDistance(land, N, cell).sd, N, 2);
   const cliff = signedDistance(high, N, cell);
-  const dCliff = cliff.sd;
+  const dCliff = blur(cliff.sd, N, 2);
 
   const noise = makeNoise(layout.noise.seed);
   const spine = buildSpine(layout.spinePath, layout.spine);
@@ -44,6 +46,11 @@ export function generateHeightfield(layout, N = 2048) {
 
   const H = new Float32Array(N * N);
   const TOP = new Float32Array(N * N);
+  // For the water: signed distance to the waterline (positive on land, after the beach
+  // shift) and how much each spot is a sandy beach.
+  const SHORE = new Float32Array(N * N);
+  const SAND = new Float32Array(N * N);
+  const MURK = new Float32Array(N * N);
   const near = { d: 0, t: 0 };
   const probe = { d: 0, t: 0 };
 
@@ -94,11 +101,14 @@ export function generateHeightfield(layout, N = 2048) {
       // In beach zones the sand runs a little past the mapped waterline.
       const sandW = smooth(0, 0.7, z.sand);
       const dc = dCoast[k] + beach.shift * sandW;
+      SHORE[k] = dc;
+      SAND[k] = sandW;
+      MURK[k] = z.murk;
 
       if (dc <= 0) {
         // Seabed. Shallow shelves in the coves, a fast drop off the cliffs.
         const depth = z.D * (1 - Math.exp(dc / z.L)) + Math.abs(noise(x * 0.02, y * 0.02)) * Math.min(1.5, -dc * 0.05);
-        H[k] = -Math.max(depth, 0.5 * smooth(0, 3, -dc) + 0.05);
+        H[k] = -Math.max(depth, -dc * 0.03);
         continue;
       }
 
@@ -125,17 +135,17 @@ export function generateHeightfield(layout, N = 2048) {
         const edge = TOP[cliff.nearestIn[k]] || top;
         cove = edge * (1 - Math.min(-dk / face, 1)) ** z.pf;
       }
-      const sand = 0.3 + beach.top * (1 - Math.exp(-dc / beach.spread));
+      const sand = beach.top * (1 - Math.exp(-dc / beach.spread));
       cove = Math.max(cove, sand);
 
       let h = lerp(rock, cove, sandW);
-      h = Math.min(h, 0.3 + dc * 40); // meet the water
+      h = Math.min(h, dc * 40); // meet the water
       H[k] = h;
     }
   }
 
   const ms = Math.round(performance.now() - t0);
-  return { heights: H, N, cell, extent: layout.extent, land, ms };
+  return { heights: H, shore: SHORE, sand: SAND, murk: MURK, N, cell, extent: layout.extent, land, ms };
 }
 
 // ---------------------------------------------------------------- helpers
@@ -157,7 +167,7 @@ function nearestIslet(islets, x, y) {
 
 // Gaussian-weighted blend of zone parameters. Each field only blends among the zones
 // that set it, and fades to the default away from them.
-const FIELDS = ['sand', 'face', 'pf', 'L', 'D'];
+const FIELDS = ['sand', 'murk', 'face', 'pf', 'L', 'D'];
 const zoneW = new Float64Array(64);
 const zoneOut = {};
 function blendZones(zones, defaults, x, y) {
@@ -199,6 +209,34 @@ function fill(rings, N, x0, y0, cell) {
     }
   }
   return mask;
+}
+
+// Two passes of a separable box blur of radius r texels (close to a Gaussian).
+function blur(f, N, r) {
+  const tmp = new Float32Array(N);
+  const w = 2 * r + 1;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let j = 0; j < N; j++) {
+      const row = j * N;
+      let acc = 0;
+      for (let i = -r; i <= r; i++) acc += f[row + Math.min(N - 1, Math.max(0, i))];
+      for (let i = 0; i < N; i++) {
+        tmp[i] = acc / w;
+        acc += f[row + Math.min(N - 1, i + r + 1)] - f[row + Math.max(0, i - r)];
+      }
+      f.set(tmp, row);
+    }
+    for (let i = 0; i < N; i++) {
+      let acc = 0;
+      for (let j = -r; j <= r; j++) acc += f[Math.min(N - 1, Math.max(0, j)) * N + i];
+      for (let j = 0; j < N; j++) {
+        tmp[j] = acc / w;
+        acc += f[Math.min(N - 1, j + r + 1) * N + i] - f[Math.max(0, j - r) * N + i];
+      }
+      for (let j = 0; j < N; j++) f[j * N + i] = tmp[j];
+    }
+  }
+  return f;
 }
 
 // Signed distance in metres, positive inside the mask. Exact Euclidean transform

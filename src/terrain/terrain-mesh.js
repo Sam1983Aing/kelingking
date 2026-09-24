@@ -23,8 +23,10 @@ export function createTerrain() {
         '#include <color_fragment>',
         `#include <color_fragment>
         // Warm the sand and cool the seabed slightly so the beach reads in grey clay.
-        float sandBand = smoothstep(7.0, 3.5, vHeight) * smoothstep(-0.5, 0.6, vHeight);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.80, 0.68), sandBand * uSandTint);
+        float sandBand = smoothstep(7.0, 3.5, vHeight) * smoothstep(-0.6, 0.2, vHeight);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.60, 0.48, 0.33), sandBand * uSandTint);
+        // Wet sand where the swash reaches.
+        diffuseColor.rgb *= 1.0 - 0.32 * smoothstep(0.9, 0.15, vHeight) * sandBand * uSandTint;
         diffuseColor.rgb *= mix(1.0, 0.8, smoothstep(0.0, -6.0, vHeight) * uSandTint);
         // Contour lines every 10 m, stronger every 50 m.
         float q = vHeight / 10.0;
