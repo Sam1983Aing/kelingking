@@ -90,6 +90,16 @@ export function defaultLayout() {
     mesh: { samples: 48, below: 12, above: 45, weight: 1 },
     // The wave-cut notch at the foot of the rock: how deep, and how high it reaches.
     notch: { depth: 2.6, top: 5 },
+
+    // Plants (src/veg/scatter.js). Spacing and scale blend from near to far with distance
+    // from focus. Scale multiplies the scanned tree (3.4 to 5 m tall), so 0.35 is a bush.
+    plants: {
+      seed: 11, focus: [60, 60],
+      nearRadius: 260, farRadius: 520,
+      nearSpacing: 1.35, farSpacing: 3.6,
+      nearScale: 0.45, farScale: 0.95,
+      density: 0.95, ledgeChance: 0.07,
+    },
     noise: { seed: 7, broad: 5, fine: 1.4, faceJitter: 0.35, edgeJitter: 2.5 },
   };
 }

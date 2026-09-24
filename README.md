@@ -142,4 +142,9 @@ caught.
 - Reference photos are not included in this repo. `references/refs.json` and
   `references/REFERENCES.md` list every source with its author and licence (Unsplash and
   Wikimedia Commons), and `node references/fetch-refs.mjs --get` downloads them locally.
+- Rock, sand and ground textures and the tree scans are from Poly Haven (polyhaven.com),
+  CC0. `node tools/fetch-assets.mjs` downloads the originals (about 260 MB, not committed),
+  `node tools/prepare-assets.mjs` makes the 10 MB of textures in `assets/textures/`, and
+  `node tools/bake-impostors.mjs` bakes the trees into `assets/veg/`. See
+  `assets/textures/CREDITS.md`.
 - three.js and lil-gui load from jsDelivr.

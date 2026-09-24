@@ -185,3 +185,24 @@ What was found and fixed:
   sea) became one read from a baked shadow-height texture.
 
 Still not fast enough in the overview. See the README.
+
+## Real textures and plants (2026-09-24)
+
+Sam looked at stage 3 and asked whether that was the final texture. It was the right
+question: procedural noise read as a 2010 game. His bar, in his words: water, sand and rock
+must feel like real life; vegetation can be imagined but must feel alive.
+
+- **Scanned surfaces.** Five CC0 scans from Poly Haven (limestone, layered rock, wet rock,
+  rippled beach sand, scrub ground), repacked into three texture arrays and mapped from three
+  directions so vertical faces do not smear. Each scan is recoloured by a single measured
+  gain (target average / scan average, in linear light) so its detail survives and its
+  colour matches Kelingking. The layered-rock scan is used for relief only, except for the
+  ochre stain over the beach.
+- **Trees as impostors.** Three tree scans (1 to 2 million triangles each) are baked into
+  64 views each, colour plus normal, depth and canopy shading, and drawn as one card per plant
+  that picks the nearest view and is lit live. 118,000 plants.
+- Bug worth remembering: the first bake put all 64 views in one frame. three.js reads a
+  render target's viewport when the target is bound, so it has to be bound again per frame.
+
+Better, but not there yet. See the plan in the reply of this date: plants are too uniform
+and too dark close up, the rock faces still read as smooth, the sea is too flat far out.

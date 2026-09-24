@@ -2,3 +2,6 @@
 references/**/*.jpg
 captures/
 .DS_Store
+
+# Raw CC0 downloads (Poly Haven). Big; fetch with tools/fetch-assets.mjs.
+assets-src/

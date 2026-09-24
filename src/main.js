@@ -27,6 +27,8 @@ import { SHOTS } from './shots.js';
 import { createWater } from './water/water.js';
 import { SKY_GLSL } from './water/water-shader.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
+import { loadSurfaceTextures } from './terrain/surface-textures.js';
+import { createPlants } from './veg/impostors.js';
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
@@ -101,6 +103,8 @@ const sky = new THREE.Mesh(
     fragmentShader: `${SKY_GLSL}
       varying vec3 vDir;
       void main(){ gl_FragColor = vec4(skyRadiance(normalize(vDir)), 1.0);
+      // A little noise, so an 8-bit screen does not show the gradient as bands.
+      gl_FragColor.rgb += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       }`,
@@ -131,8 +135,23 @@ terrain.uniforms.uContours.value = state.contours ? 1 : 0;
 terrain.uniforms.uClay.value = state.clay ? 1 : 0;
 terrain.uniforms.uSunDirW = water.uniforms.uSunDir;   // same sun for ground and sea
 const sunShadow = createSunShadow(renderer);
+let texturesReady = false;
+let plants = null, plantsReady = false;
+fetch('assets/veg/impostors.json').then((r) => r.json())
+  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02']))
+  .then((p) => {
+    plants = p;
+    plants.group.visible = !hidden.has('plants');
+    scene.add(plants.group);
+    if (hf) plants.setInstances(hf.plants);
+    plantsReady = true;
+  })
+  .catch((e) => { console.error('plants failed', e); plantsReady = true; });
+loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true; })
+  .catch((e) => { console.error('surface textures failed', e); texturesReady = true; });
 terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
-for (const name of (params.get('hide') || '').split(',')) {
+const hidden = new Set((params.get('hide') || '').split(','));
+for (const name of hidden) {
   if (name === 'terrain') terrain.mesh.visible = false;
   if (name === 'water') water.mesh.visible = false;
   if (name === 'sky') sky.visible = false;
@@ -160,6 +179,7 @@ worker.onmessage = (e) => {
   water.uniforms.uShoreDir.value?.dispose();
   water.setData(tex, dir, hf.extent);
   terrain.setData(tex, hf.extent, layout.beach.top);
+  plants?.setInstances(hf.plants);
   shadowDirty = true;
   terrainFrames = 0;
   outlineDirty = true;
@@ -244,8 +264,9 @@ let outlineDirty = false;
 function drawOutline() {
   const w = renderer.domElement.width, h = renderer.domElement.height;
   const rt = new THREE.WebGLRenderTarget(w, h);
-  const keep = { fog: scene.fog, water: water.mesh.visible, sky: sky.visible };
+  const keep = { fog: scene.fog, water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible };
   scene.fog = null; water.mesh.visible = false; sky.visible = false;
+  if (plants) plants.group.visible = false;
   scene.overrideMaterial = maskMaterial;
   renderer.setRenderTarget(rt);
   renderer.setClearColor(0x000000, 1);
@@ -256,6 +277,7 @@ function drawOutline() {
   renderer.setRenderTarget(null);
   scene.overrideMaterial = null;
   scene.fog = keep.fog; water.mesh.visible = keep.water; sky.visible = keep.sky;
+  if (plants) plants.group.visible = keep.plants;
   const px = new Uint8Array(w * h * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
   rt.dispose();
@@ -410,6 +432,7 @@ controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
 // Handles for poking at the scene from the console or a test script.
 window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt,
+  get plants() { return plants; },
   setTime(t) { simTime = t; },
   project(x, y, h) {
     const v = new THREE.Vector3(x, h ?? groundAt(x, y), -y).project(camera);
@@ -444,6 +467,10 @@ renderer.setAnimationLoop(() => {
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
   water.update(simTime, sun, hemi, ZENITH, HORIZON, camera);
+  if (plants) {
+    plants.update(sun, hemi, hf?.extent);
+    plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;
+  }
   if (shadowDirty && hf) {
     shadowDirty = false;
     water.uniforms.uSunShadow.value = sunShadow.bake(water.uniforms.uData.value, hf.extent, water.uniforms.uSunDir.value, hf.N);
@@ -452,10 +479,10 @@ renderer.setAnimationLoop(() => {
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
   if (state.outline && outlineDirty && hf) { outlineDirty = false; drawOutline(); }
-  if (terrainFrames >= 0 && ++terrainFrames === 3 && refReady) {
+  // Ready for a capture once the terrain and the textures are in and a few frames have run.
+  if (terrainFrames >= 0 && texturesReady && plantsReady) terrainFrames++;
+  if (!window.__ready && terrainFrames >= 3 && refReady) {
     window.__ready = true;
     status();
-  } else if (terrainFrames > 3 && refReady && !window.__ready) {
-    window.__ready = true;
   }
 });

@@ -1,9 +1,11 @@
 // The ground mesh and its material. Geometry comes from the worker (mesh-builder.js),
-// already carrying normals from the smooth surface. The look is procedural (terrain-shader.js),
-// patched into three.js's standard material so it keeps the normal lighting and fog.
+// already carrying normals from the smooth surface. The look comes from scanned textures
+// (terrain-shader.js, surfaces.js), patched into three.js's standard material so it keeps
+// the normal lighting and fog.
 
 import * as THREE from 'three';
 import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL } from './terrain-shader.js';
+import { SURFACES, surfaceGains } from './surfaces.js';
 
 export function createTerrain() {
   const material = new THREE.MeshStandardMaterial({
@@ -20,6 +22,11 @@ export function createTerrain() {
     uContours: { value: 0 },
     uClay: { value: 0 },
     uBeachTop: { value: 4.6 },
+    uSurfColor: { value: null },
+    uSurfNormal: { value: null },
+    uSurfMask: { value: null },
+    uGain: { value: surfaceGains().map((g) => new THREE.Vector3(...g)) },
+    uTile: { value: SURFACES.map((s) => s.tile) },
   };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
@@ -58,13 +65,19 @@ export function createTerrain() {
     prepass.geometry = g;
   }
 
+  function setSurfaces(t) {
+    uniforms.uSurfColor.value = t.color;
+    uniforms.uSurfNormal.value = t.normal;
+    uniforms.uSurfMask.value = t.mask;
+  }
+
   function setData(texture, extent, beachTop) {
     uniforms.uData.value = texture;
     uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
     uniforms.uBeachTop.value = beachTop;
   }
 
-  return { mesh, material, uniforms, update, setData };
+  return { mesh, material, uniforms, update, setData, setSurfaces };
 }
 
 // Bilinear height lookup in local metres (x east, y north).
