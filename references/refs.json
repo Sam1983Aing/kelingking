@@ -1,0 +1,64 @@
+{
+  "place": "Kelingking Beach, Nusa Penida, Bali",
+  "coords": { "lat": -8.7512, "lon": 115.4718, "satellite": "https://www.google.com/maps/@-8.7512,115.4718,350m/data=!3m1!1e3" },
+  "facts": [
+    "Cliff about 180 m high",
+    "Top of trail: 156 concrete steps, then a steep dirt and rock path with a low bamboo handrail for roughly two thirds of the way",
+    "Beach: white sand, strong shore break, swimming banned since 2023",
+    "Layout from satellite: the ridge runs from the viewpoint (NE) south-west and hooks west into the T-Rex head. The beach sits inside the hook, facing NW. Small islet (Batu Rananja) to the south.",
+    "Unfinished glass lift shaft and crane on the cliff since 2025. Leave it out."
+  ],
+  "chapters": [
+    { "key": "01-overview", "title": "Overview from afar", "why": "Layout of the headland, bay and coastline. What the opening shot looks like." },
+    { "key": "02-viewpoint", "title": "Clifftop viewpoint", "why": "The postcard. Colour and light target for the whole piece." },
+    { "key": "03-trail", "title": "The trail down the spine", "why": "Railings, steps, how the headland changes as you descend." },
+    { "key": "04-beach", "title": "Beach level", "why": "Final shot. Sand, cliff wall above you, shore break." },
+    { "key": "05-water", "title": "Water and waves", "why": "Shader targets for foam, colour bands and the breaking wave." }
+  ],
+  "images": [
+    { "ch": "01-overview", "file": "aerial-high-whole-bay", "src": "commons", "name": "Kelingking_Beach_aerial_2026_03.jpg", "hash": "c/c0", "author": "FBilula", "license": "CC BY 4.0", "note": "Highest shot. Whole bay, the village on top, the hook of the headland. Best single layout reference." },
+    { "ch": "01-overview", "file": "aerial-coastline", "src": "commons", "name": "Kelingking_Beach_aerial_2026_02.jpg", "hash": "5/51", "author": "FBilula", "license": "CC BY 4.0", "note": "Coastline and headland from far out. Candidate opening frame." },
+    { "ch": "01-overview", "file": "aerial-over-ridge", "src": "commons", "name": "Kelingking_Beach_aerial_2026_01.jpg", "hash": "f/ff", "author": "FBilula", "license": "CC BY 4.0", "note": "Drone just above the ridge, beach and head together." },
+    { "ch": "01-overview", "file": "topdown-ridge", "src": "unsplash", "id": "C782FdI_I2Q", "path": "photo-1566729695736-55c5269dc356", "author": "carlesrgm", "license": "Unsplash", "note": "Straight down along the spine. For tracing the ridge line." },
+    { "ch": "01-overview", "file": "topdown-cove", "src": "unsplash", "id": "MFJPlhIdg2o", "path": "photo-1512270094797-d45489e84533", "author": "iswanto", "license": "Unsplash", "note": "Top-down of the whole cove, beach curve and wave lines." },
+    { "ch": "01-overview", "file": "aerial-side-from-sea", "src": "unsplash", "id": "fpnMHKhioY0", "path": "photo-1566987827585-6c556cc32848", "author": "domikay", "license": "Unsplash", "note": "Headland side-on from the sea. Profile and height." },
+    { "ch": "01-overview", "file": "aerial-beach-curve", "src": "unsplash", "id": "iY2Pole688I", "path": "photo-1550664255-94d114340500", "author": "domikay", "license": "Unsplash", "note": "Headland and beach curve from the north." },
+    { "ch": "01-overview", "file": "aerial-back-of-trex", "src": "unsplash", "id": "Fa7B8jKrswA", "path": "photo-1566987827915-1be295694110", "author": "domikay", "license": "Unsplash", "note": "The seaward side nobody photographs. Needed so the model has a back." },
+
+    { "ch": "02-viewpoint", "file": "viewpoint-midday-a", "src": "commons", "name": "Kelingking_Beach_(T-Rex_Bay)_of_Nusa_Penida,_Bali_(2025)_-_img_07.jpg", "hash": "0/0c", "author": "Chainwit.", "license": "CC BY 4.0", "note": "Midday, clear sky. Main colour target." },
+    { "ch": "02-viewpoint", "file": "viewpoint-midday-b", "src": "commons", "name": "Kelingking_Beach_(T-Rex_Bay)_of_Nusa_Penida,_Bali_(2025)_-_img_09.jpg", "hash": "2/23", "author": "Chainwit.", "license": "CC BY 4.0", "note": "Same light, tighter framing." },
+    { "ch": "02-viewpoint", "file": "viewpoint-lush", "src": "unsplash", "id": "oOewK0KGXtI", "path": "photo-1696222055852-09372c13ba9f", "author": "nick_jpeg", "license": "Unsplash", "note": "Greener season, strong turquoise." },
+    { "ch": "02-viewpoint", "file": "viewpoint-classic", "src": "unsplash", "id": "tsnJEq4744s", "path": "photo-1566987827971-f2c40e748a54", "author": "domikay", "license": "Unsplash", "note": "The textbook angle." },
+    { "ch": "02-viewpoint", "file": "viewpoint-wide", "src": "unsplash", "id": "hDIIitDyCUU", "path": "photo-1685264450644-3d1331a9f7b2", "author": "anubhavsonker", "license": "Unsplash", "note": "Wider, shows the islet and horizon." },
+
+    { "ch": "03-trail", "file": "trail-top-railing", "src": "unsplash", "id": "Y6llHB9rNac", "path": "photo-1565707215110-4f361d2a0985", "author": "kilarov345", "license": "Unsplash", "note": "Start of the descent. Path along the spine with the railing." },
+    { "ch": "03-trail", "file": "trail-from-above", "src": "commons", "name": "Kelingking_Beach_(2022).jpg", "hash": "4/49", "author": "LukeTriton", "license": "CC BY-SA 4.0", "note": "The trail seen from the top, how it follows the ridge." },
+    { "ch": "03-trail", "file": "trail-stairs-viewpoint", "src": "commons", "name": "Kelingking_Beach_(T-Rex_Bay)_of_Nusa_Penida,_Bali_(2025)_-_img_06.jpg", "hash": "c/ce", "author": "Chainwit.", "license": "CC BY 4.0", "note": "Concrete steps at the top." },
+    { "ch": "03-trail", "file": "trail-railing-golden", "src": "unsplash", "id": "cGj8E5s5Ihc", "path": "photo-1711786120067-fcadce6c481f", "author": "shkipp", "license": "Unsplash", "note": "Wooden railing along the ridge, low sun." },
+    { "ch": "03-trail", "file": "trail-mid-descent-a", "src": "unsplash", "id": "P2sNdnQ9zlg", "path": "photo-1567504925747-1ab79d774235", "author": "kilarov345", "license": "Unsplash", "note": "Partway down, head of the T-Rex getting bigger." },
+    { "ch": "03-trail", "file": "trail-mid-descent-b", "src": "unsplash", "id": "Rpr57JSPiZ8", "path": "photo-1570133435540-864b240db84c", "author": "alexazabache", "license": "Unsplash", "note": "Mid descent with handrail in frame." },
+    { "ch": "03-trail", "file": "trail-looking-into-cove", "src": "unsplash", "id": "ekId8mT7W6k", "path": "photo-1723756422767-a0bbf0d064e0", "author": "tomsnauticalmiles", "license": "Unsplash", "note": "Looking down into the cove from the path." },
+    { "ch": "03-trail", "file": "trail-low-beach-close", "src": "unsplash", "id": "iR5_4XHEIhk", "path": "photo-1710943682914-1e5a105b0257", "author": "unleashedagency", "license": "Unsplash", "note": "Low on the trail, beach close below." },
+
+    { "ch": "04-beach", "file": "beach-white-sand-cliff", "src": "unsplash", "id": "S2RXXulrlsw", "path": "photo-1697652428485-37b5ca59535f", "author": "merveky", "license": "Unsplash", "note": "Standing on the sand, the cliff wall above. Final frame candidate." },
+    { "ch": "04-beach", "file": "beach-white-sand-surf", "src": "unsplash", "id": "rS1AgJJodyo", "path": "photo-1697650271496-2d56ef8b0fdc", "author": "merveky", "license": "Unsplash", "note": "Same spot, wave breaking." },
+    { "ch": "04-beach", "file": "beach-headland-waves", "src": "unsplash", "id": "PzTs0NbPkHc", "path": "photo-1568038050574-83ed0e595951", "author": "kilarov345", "license": "Unsplash", "note": "Headland on the left, shore break." },
+    { "ch": "04-beach", "file": "beach-people-scale", "src": "unsplash", "id": "5GALUr4jAqU", "path": "photo-1568906451957-71e1ab745cc2", "author": "kilarov345", "license": "Unsplash", "note": "People for scale against the cliff." },
+    { "ch": "04-beach", "file": "beach-vertical", "src": "unsplash", "id": "OAlYPNvRoJM", "path": "photo-1570811408580-9cd088a65f09", "author": "kilarov345", "license": "Unsplash", "note": "Portrait framing along the beach." },
+    { "ch": "04-beach", "file": "beach-under-cliff", "src": "unsplash", "id": "GUdP9Hdx0Yk", "path": "photo-1568294489849-f057233215c1", "author": "kilarov345", "license": "Unsplash", "note": "Under the cliff, shadow side." },
+    { "ch": "04-beach", "file": "beach-from-overhang", "src": "unsplash", "id": "-HUPP2SzqGg", "path": "photo-1576479068577-e332902a7f04", "author": "wild_away", "license": "Unsplash", "note": "From under the rock overhang looking out." },
+    { "ch": "04-beach", "file": "cove-from-east-cliff", "src": "commons", "name": "Kelingking_Beach_(T-Rex_Bay)_of_Nusa_Penida,_Bali_(2025)_-_img_05.jpg", "hash": "3/34", "author": "Chainwit.", "license": "CC BY 4.0", "note": "The cove from the other side, full beach length." },
+
+    { "ch": "05-water", "file": "wave-breaking-closeup", "src": "unsplash", "id": "6mLr0ARzdyA", "path": "photo-1533393239556-754fcc768a8e", "author": "paul_nic", "license": "Unsplash", "note": "Breaking wave at Kelingking, backlit. Target for the beach-level wave." },
+    { "ch": "05-water", "file": "topdown-foam-sand", "src": "unsplash", "id": "EvcJ521flvs", "path": "photo-1654703941199-0660bd11fd40", "author": "k_woorld", "license": "Unsplash", "note": "Foam lines over sand from above." },
+    { "ch": "05-water", "file": "topdown-colour-bands", "src": "unsplash", "id": "Wibty7aUonI", "path": "photo-1560626703-d93df43201c2", "author": "mamunsrizon", "license": "Unsplash", "note": "Turquoise to navy bands, foam." },
+    { "ch": "05-water", "file": "aerial-shore-waves", "src": "unsplash", "id": "92gP7CP76Zc", "path": "photo-1716822697600-82795ac19544", "author": "ronak_mokashi", "license": "Unsplash", "note": "Shore break from above with sand." },
+    { "ch": "05-water", "file": "waves-from-cliff", "src": "unsplash", "id": "FkJ67GEB9DI", "path": "photo-1624527171320-c4783a2217e1", "author": "hectorjp", "license": "Unsplash", "note": "Wave lines seen from the clifftop." }
+  ],
+  "videos": [
+    { "file": "drone-stairs", "src": "pexels", "id": "15537790", "page": "https://www.pexels.com/video/drone-video-of-people-on-the-stairs-to-kelingking-beach-in-nusa-penida-indonesia-15537790/", "note": "Drone over the stairs. Motion reference for the descent." },
+    { "file": "drone-aerial", "src": "pexels", "id": "29652593", "page": "https://www.pexels.com/video/drone-aerial-view-of-kelingking-beach-nusa-penida-29652593/", "note": "Aerial move around the headland." },
+    { "file": "beach-clip", "src": "pexels", "id": "18146448", "page": "https://www.pexels.com/video/kelingking-beach-18146448/", "note": "Wave timing." },
+    { "file": "viewpoint-cc0", "src": "commons", "name": "Kelingking_Beach.webm", "hash": "d/d0", "license": "CC0", "note": "Vertical clip from the viewpoint, 52 MB." }
+  ]
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kelingking</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d0f11; overflow: hidden; font: 12px/1.4 -apple-system, system-ui, sans-serif; color: #ddd; }
+    #stage { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+    #stage canvas { display: block; }
+    #ref, #outline { position: absolute; top: 0; left: 0; pointer-events: none; }
+    #ref { opacity: 0; }
+    #outline { display: none; }
+    #status { position: fixed; left: 10px; bottom: 8px; opacity: .8; pointer-events: none; white-space: pre; text-shadow: 0 1px 2px #000; }
+    .capture #status { display: none; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="stage"><img id="ref" alt=""></div>
+  <div id="status"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

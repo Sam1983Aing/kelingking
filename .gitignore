@@ -1,0 +1,4 @@
+# Reference photos belong to their authors. List and download them with references/fetch-refs.mjs.
+references/**/*.jpg
+captures/
+.DS_Store
