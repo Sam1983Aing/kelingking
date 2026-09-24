@@ -1,0 +1,41 @@
+# v9: speed and the shareable build
+
+**Goal.** Smooth along the whole descent on a laptop, a single file Sam can double-click, and
+the repo ready to go public.
+
+## Speed
+
+At v1 (see `docs/gallery/v1/README.md`) every hero frame renders in well under 30 ms at
+1400 px on an M1 Max with nothing else on the GPU. The 1 km overview is the slowest, and the
+ground shader and the sea cost the most per pixel. Versions v2 to v8 will add cost. Measure
+back to back against the previous tag, never against old numbers (see CLAUDE.md). Ideas:
+
+- Cheaper shading far away: fewer texture samples, baked far-field colour for the ground.
+- Cheaper water beyond a few hundred metres.
+- Plant level of detail and culling, fewer instances far away.
+- Ship the generated terrain data instead of generating it at load (about 3 s now), which
+  also helps the standalone build.
+- Target: at least 60 fps at 1080p on an M1 Max along the path, and 30 fps on a mid-range
+  laptop.
+
+## The standalone build
+
+Follow `/Users/sam/Projects/Claude Code/CLAUDE.md`:
+
+- Assets (textures, tree atlases, terrain data) go to `Sam1983Aing/aura-assets` under a
+  project folder, served by jsDelivr, pinned to a tag. Reference photos never go there.
+- It runs from `file://`, so no ES module imports in the build. Bundle to a classic script.
+  The terrain worker is a module worker today. Shipping pre-generated terrain removes the need
+  for it at runtime.
+- Inline the stylesheet and font. Degrade without network.
+- Verify the bundle with `node --check`.
+
+## Going public
+
+- A licence for the code (ask Sam). OpenStreetMap data stays under the ODbL, credited.
+- README written for strangers: what it is, how it was made, the gallery, how to run it.
+- Check nothing private is in the history (paths, emails beyond the commit author).
+
+## Found by other versions
+
+(nothing yet)

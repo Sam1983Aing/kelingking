@@ -24,6 +24,18 @@ export const SHOTS = {
     ref: 'references/03-trail/trail-top-railing.jpg',
     pos: [178, 134, 96], yaw: 233, pitch: -13, roll: 0, fov: 54,
   },
+  stairs: {
+    label: 'On the stairs',
+    ref: 'references/03-trail/trail-mid-descent-a.jpg',
+    // Placeholder until the trail version builds the steps and matches this photo.
+    pos: [232, 238, 146.7], yaw: 228, pitch: -36, roll: 0, fov: 62,
+  },
+  trailLow: {
+    label: 'Low on the trail',
+    ref: 'references/03-trail/trail-low-beach-close.jpg',
+    // Placeholder, on the mapped zigzag, looking into the overhang at the back of the beach.
+    pos: [181, 158, 73.7], yaw: 245, pitch: -45, roll: 0, fov: 60,
+  },
   surfTop: {
     label: 'Surf from above',
     ref: 'references/05-water/topdown-foam-sand.jpg',
@@ -45,3 +57,7 @@ export const SHOTS = {
     pos: [124, 200, 4.4], yaw: 208, pitch: -3.8, roll: 0, fov: 40,
   },
 };
+
+// The hero frames: the shots every version is judged on, in the order the scroll passes
+// through them, plus the head from the sea. tools/hero.mjs renders and times these.
+export const HERO = ['overview', 'viewpoint', 'stairs', 'trailTop', 'trailLow', 'beach', 'shoreBreak', 'sideFromSea'];

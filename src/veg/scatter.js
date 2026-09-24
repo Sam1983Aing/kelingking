@@ -8,6 +8,22 @@
 //   x, height, z (world), scale, yaw, species, tint (0..1, colour variation)
 
 import { makeNoise, fbm } from '../terrain/heightfield.js';
+import { TRAIL } from '../terrain/geo.js';
+
+// Nothing grows on the path. Distance from a point to the mapped trail, in metres.
+const TRAIL_LINES = Object.values(TRAIL);
+function trailDistance(x, y) {
+  let best = Infinity;
+  for (const line of TRAIL_LINES) {
+    for (let i = 1; i < line.length; i++) {
+      const [ax, ay] = line[i - 1], [bx, by] = line[i];
+      const ex = bx - ax, ey = by - ay, l2 = ex * ex + ey * ey || 1;
+      const u = Math.min(Math.max(((x - ax) * ex + (y - ay) * ey) / l2, 0), 1);
+      best = Math.min(best, Math.hypot(x - ax - u * ex, y - ay - u * ey));
+    }
+  }
+  return best;
+}
 
 export const STRIDE = 7;
 
@@ -40,6 +56,8 @@ export function scatterPlants(hf, layout, species) {
       x += spacing;
 
       if (sample(f.DC, px, py) < 2) continue;                 // sea
+      // Keep the path clear. Trees are wide, so the clearance grows with plant size.
+      if (trailDistance(px, py) < cfg.trailClear * (0.6 + far)) continue;
       const h = heightAt(px, py);
       if (h < 4) continue;
       const e = 0.8;

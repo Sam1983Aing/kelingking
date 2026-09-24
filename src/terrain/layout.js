@@ -98,7 +98,7 @@ export function defaultLayout() {
       nearRadius: 260, farRadius: 520,
       nearSpacing: 1.35, farSpacing: 3.6,
       nearScale: 0.45, farScale: 0.95,
-      density: 0.95, ledgeChance: 0.07,
+      density: 0.95, ledgeChance: 0.07, trailClear: 5.5,
     },
     noise: { seed: 7, broad: 5, fine: 1.4, faceJitter: 0.35, edgeJitter: 2.5 },
   };

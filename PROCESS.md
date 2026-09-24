@@ -206,3 +206,33 @@ must feel like real life; vegetation can be imagined but must feel alive.
 
 Better, but not there yet. See the plan in the reply of this date: plants are too uniform
 and too dark close up, the rock faces still read as smooth, the sea is too flat far out.
+
+## Stage 0: versions, history and hero frames (2026-09-24)
+
+Sam wants each element worked on in its own chat session, and v1 split into its stages.
+
+- **The history was rebuilt from the session log.** The project had no git. Every file edit
+  (tool writes, and the inline Python and sed edits run from the shell) is in the session
+  transcript, in order, with the messages that ended each stage. A replay script ran only the
+  file-editing parts into a scratch folder and snapshotted it at each stage boundary. The
+  check that made it trustworthy: the full replay reproduces all 34 source files byte for
+  byte. Generated files (map data, texture and tree atlases) were copied in. Each stage is a
+  commit, dated to when it really ended, tagged `stage-1`, `stage-2`, `stage-3` and `v1`.
+  Checking out each tag and rendering it proved they all still run.
+- **Hero frames.** Eight shots along the scroll path plus the head from the sea, listed in
+  `HERO` in `src/shots.js`. Two new placeholder cameras on the mapped trail (`stairs`,
+  `trailLow`). The first try put the stairs camera inside a tree, because the scatter planted
+  trees on the path. Plants now keep a small clearance from the mapped route until v6 builds
+  the real one.
+- **`tools/hero.mjs`** renders the hero frames for a version into `docs/gallery/<v>/`, times
+  them against the previous version, and keeps side by sides with the photos local.
+- **Briefs** for v2 to v9 in `docs/versions/`, and a project `CLAUDE.md` so every new session
+  starts with the workflow and the known traps.
+
+- **The frame times were wrong, by a lot.** Rendering the v1 hero frames on a quiet machine
+  gave 5 to 14 ms per frame, where stage 3 had measured 30 to 100 ms. Nothing in the
+  rendering had changed. During stage 3 the browser pane was showing the page, rendering it
+  continuously at full size, and competing for the same GPU. Two back-to-back runs a few
+  minutes apart still differed by 30 to 100%. So `tools/hero.mjs` now checks out the
+  previous version from its git tag and times both, alternating, in the same run. Only that
+  difference counts toward the frame budget.

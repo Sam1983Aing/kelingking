@@ -4,16 +4,28 @@ A real place rebuilt in the browser: Kelingking Beach on Nusa Penida, the T-Rex 
 The plan is a scroll piece that starts with the whole bay from the air, walks down the
 trail on the ridge, and ends standing on the sand with the waves coming in.
 
-It is built in stages, each one checked against real photos before moving on.
+![How v1 was built, stage by stage](docs/gallery/history/progression.jpg)
 
-| Stage | What | Status |
+v1 was built in three stages (shape, sea, surfaces) plus a first pass of scanned textures and
+trees. Each stage is a tagged commit you can check out and run: `stage-1`, `stage-2`,
+`stage-3`, `stage-3b`, and `v1` (the same look plus the setup for the versions). See [how v1 was built](docs/gallery/history/README.md).
+
+From here it is built one element per version, each checked against real photos before
+moving on. The plan, the rules and a brief per version are in
+[docs/versions](docs/versions/README.md), and every version's hero frames are in
+[docs/gallery](docs/gallery/README.md).
+
+| Version | Element | Status |
 |---|---|---|
-| 1 | Terrain shape in grey clay, plus the photo-matching tools | done |
-| 2 | Water: depth colour, shore foam, breaking waves, sun glitter | done |
-| 3 | Surfaces: limestone cliffs, vegetation, sand | done |
-| 4 | Light, atmosphere and colour grade | next |
-| 5 | Life: wave timing, foam drift, cloud shadows | |
-| 6 | The scroll descent from the viewpoint to the beach | |
+| v1 | Shape, sea, surfaces, first scans and trees | done |
+| v2 | Light and atmosphere | next |
+| v3 | Rock | |
+| v4 | Water | |
+| v5 | Sand and the waterline | |
+| v6 | Trail and stairs | |
+| v7 | Plants | |
+| v8 | The scroll descent | |
+| v9 | Speed and the shareable build | |
 
 ## Run it
 
@@ -24,7 +36,7 @@ python3 -m http.server 5178
 Then open http://localhost:5178. It needs a local server (module workers do not run from
 `file://`). A standalone single-file build comes later.
 
-Keys: `1` to `8` switch shots, `O` photo overlay, `D` difference blend, `L` outline mode,
+Keys: `1` to `9` switch shots, `O` photo overlay, `D` difference blend, `L` outline mode,
 `F` free camera, `C` contour lines. The panel on the right tunes the camera and the terrain
 live.
 
@@ -127,11 +139,10 @@ caught.
 
 ## Known limits
 
-- **Speed.** On an M1 Max at about 1 megapixel: the clifftop view runs at 45 fps and the
-  beach and sea views at around 30, but the 1 km overview is under 20. The ground material
-  and the sea both cost too much per pixel when they fill the screen. A resolution governor
-  hides some of it. The fix (cheaper far-away shading, baked far-field colour) is planned
-  once the scroll path says which views matter.
+- **Speed.** With nothing else on the GPU, every hero frame renders in well under 30 ms at
+  1400 px on an M1 Max. Earlier figures in `PROCESS.md` (10 to 30 fps) were measured while
+  the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
+  See `docs/gallery/v1` for the baseline.
 - **Cliff rims** still show a comb of small fins in some views, where rim triangles zigzag.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
 

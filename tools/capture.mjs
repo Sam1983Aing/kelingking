@@ -9,6 +9,9 @@
 //   node tools/capture.mjs --width=1600 --q=2048 --contours
 //   node tools/capture.mjs beach --t=20.5           freeze the sea at 20.5 s (default 12)
 //   node tools/capture.mjs beach --clip=8           8 s clip from --t, 30 fps, to captures/<shot>.mp4 (needs ffmpeg)
+//   node tools/capture.mjs --hero                   the hero frames (src/shots.js), see tools/hero.mjs
+//   node tools/capture.mjs --out=some/dir --jpeg    write elsewhere, as JPEG
+//   node tools/capture.mjs --bench                  render time per shot (with --out, also bench.json)
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
 // `python3 -m http.server 5178`). Output goes to captures/<shot>[-compare].png
@@ -30,9 +33,12 @@ const BASE = flag('url', 'http://localhost:5178/');
 const WIDTH = +flag('width', 1400);
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-const { SHOTS } = await import(join(root, 'src/shots.js'));
+const { SHOTS, HERO } = await import(join(root, 'src/shots.js'));
 let shots = args.filter((a) => !a.startsWith('--'));
-if (!shots.length) shots = Object.keys(SHOTS);
+if (!shots.length) shots = flag('hero') ? HERO : Object.keys(SHOTS);
+const OUTDIR = join(root, flag('out', 'captures'));
+const JPEG = !!flag('jpeg');
+const benchResults = {};
 
 const profile = mkdtempSync(join(tmpdir(), 'kelingking-cap-'));
 const chrome = spawn(CHROME, [
@@ -75,7 +81,7 @@ const send = (method, params = {}, sessionId) =>
     ws.send(JSON.stringify({ id, method, params, sessionId }));
   });
 
-mkdirSync(join(root, 'captures'), { recursive: true });
+mkdirSync(OUTDIR, { recursive: true });
 try {
   for (const name of shots) {
     const shot = SHOTS[name];
@@ -130,6 +136,7 @@ try {
         out.reversed = R.capabilities.reversedDepthBuffer;
         return out; })()` }, sessionId);
       const o = r.result.value, f = (v) => v.toFixed(1).padStart(5);
+      benchResults[name] = { ms: +o.all.toFixed(1), noGround: +o.noGround.toFixed(1), noSea: +o.noSea.toFixed(1), mp: +o.mp.toFixed(2) };
       console.log(`${name.padEnd(12)} ${f(o.all)} ms (${(1000 / o.all).toFixed(0).padStart(3)} fps) at ${o.mp.toFixed(2)} MP   no ground ${f(o.noGround)}   no sea ${f(o.noSea)}`
         + Object.keys(o).filter((k) => k.startsWith('SKIP')).map((k) => `   ${k.slice(5).toLowerCase()} ${f(o[k])}`).join(''));
       await send('Target.closeTarget', { targetId });
@@ -147,7 +154,7 @@ try {
         const fr = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(join(dir, `f${String(f).padStart(4, '0')}.png`), Buffer.from(fr.data, 'base64'));
       }
-      const mp4 = join(root, 'captures', `${name}.mp4`);
+      const mp4 = join(OUTDIR, `${name}.mp4`);
       const { spawnSync } = await import('node:child_process');
       const enc = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', join(dir, 'f%04d.png'),
         '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', mp4]);
@@ -157,12 +164,13 @@ try {
       await send('Target.closeTarget', { targetId });
       continue;
     }
-    const shotPng = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
-    const out = join(root, 'captures', `${name}${compare ? '-compare' : ''}${flag('overlay') ? '-overlay' : ''}${flag('outline') ? '-outline' : ''}.png`);
+    const shotPng = await send('Page.captureScreenshot', JPEG ? { format: 'jpeg', quality: 88 } : { format: 'png' }, sessionId);
+    const out = join(OUTDIR, `${name}${compare ? '-compare' : ''}${flag('overlay') ? '-overlay' : ''}${flag('outline') ? '-outline' : ''}.${JPEG ? 'jpg' : 'png'}`);
     writeFileSync(out, Buffer.from(shotPng.data, 'base64'));
     console.log(`${name}: ${out.replace(root + '/', '')} (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
     await send('Target.closeTarget', { targetId });
   }
+  if (flag('bench') && flag('out')) writeFileSync(join(OUTDIR, 'bench.json'), JSON.stringify(benchResults, null, 2) + '\n');
 } finally {
   ws.close();
   chrome.kill();
