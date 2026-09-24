@@ -157,10 +157,13 @@ export function createAtmosphere(renderer, opts = {}) {
     draw(materials.trans, targets.trans);
     draw(materials.ms, targets.ms);
     lastSkyKey = '';
+    lastApKey = '';
+    version++;
   }
 
   // ---------------------------------------------------------------- per frame
-  let lastSkyKey = '';
+  let lastSkyKey = '', lastApKey = '';
+  let version = 0;   // bumped whenever the air or the light changes (the clouds cache on it)
   const fwd = new THREE.Vector3(), right = new THREE.Vector3(), up = new THREE.Vector3();
   const size = new THREE.Vector2();
   function update(camera) {
@@ -191,7 +194,12 @@ export function createAtmosphere(renderer, opts = {}) {
     u.uCamUp.value.copy(up).multiplyScalar(ty);
     renderer.getDrawingBufferSize(size);
     u.uResolution.value.copy(size);
-    draw(materials.aerial, targets.aerial);
+    // The haze froxels follow the camera: redrawn when it moves (or the sun, or the air).
+    const apKey = `${e.join()}|${ty}|${camera.aspect}|${key}`;
+    if (apKey !== lastApKey) {
+      lastApKey = apKey;
+      draw(materials.aerial, targets.aerial);
+    }
   }
 
   // ---------------------------------------------------------------- sun and sky light
@@ -201,11 +209,10 @@ export function createAtmosphere(renderer, opts = {}) {
   let refPixels = null;
   // The sky as seen from near the ground (50 m), which is what lights the ground.
   const REF_KM = 0.05;
-  function relight() {
+  // Sun and sky light at the ground for a sun direction, for a sun of unit illuminance above
+  // the atmosphere: the sky view from the reference height, read back and projected.
+  function lightFor(sd) {
     const u = uniforms;
-    applyParams();
-    const sd = u.uSunDir.value;
-    // Sky view from the reference height, read back to the CPU.
     const keepR = u.uCamR.value, keepCos = u.uSunCos.value;
     u.uCamR.value = u.uRg.value + REF_KM;
     u.uSunCos.value = sd.y;
@@ -213,11 +220,9 @@ export function createAtmosphere(renderer, opts = {}) {
     u.uCamR.value = keepR; u.uSunCos.value = keepCos;
     refPixels ??= new Float32Array(192 * 128 * 4);
     renderer.readRenderTargetPixels(targets.skyRef, 0, 0, 192, 128, refPixels);
-
-    // For a sun of unit illuminance above the atmosphere.
     const Tsun = transmittance(REF_KM, sd.y, params);
     const cosZ = Math.max(sd.y, 0);
-    const shUnit = projectSky(refPixels, sd, u.uRg.value + REF_KM, u.uRg.value, (dir) => null);
+    const shUnit = projectSky(refPixels, sd, u.uRg.value + REF_KM, u.uRg.value, () => null);
     // Irradiance on flat ground from the sky alone, then the ground's own glow below the
     // horizon from sun plus sky, and project again with it.
     const skyUp = irradianceUp(shUnit);
@@ -225,15 +230,35 @@ export function createAtmosphere(renderer, opts = {}) {
     const g = params.groundAlbedo;
     const ground = [0, 1, 2].map((c) => g[c] * Eh[c] / Math.PI);
     const shFull = projectSky(refPixels, sd, u.uRg.value + REF_KM, u.uRg.value, () => ground);
+    return { Tsun, cosZ, shUnit, skyUp, Eh, shFull };
+  }
 
-    // White balance, like a camera: the chosen light comes out neutral (see wbSky), at the
-    // luminance an uncoloured sun would have given.
-    const ref = [0, 1, 2].map((c) => Tsun[c] * cosZ + skyUp[c] * params.wbSky);
+  // White balance, like a camera: the chosen light (see wbSky) under the reference sun comes
+  // out neutral, at the luminance an uncoloured sun would have given. The reference is the
+  // sun of the photo day (setWhiteBalanceSun), and the balance is held when the sun moves, so
+  // a late afternoon comes out golden instead of being neutralised like a daylight preset
+  // would not.
+  const wbSun = new THREE.Vector3(0, 1, 0);
+  let wbKey = '', wbGains = [1, 1, 1];
+  function whiteBalance() {
+    const key = `${wbSun.toArray().map((v) => v.toFixed(5))}|${JSON.stringify(params)}`;
+    if (key === wbKey) return wbGains;
+    wbKey = key;
+    const L = lightFor(wbSun);
+    const ref = [0, 1, 2].map((c) => L.Tsun[c] * L.cosZ + L.skyUp[c] * params.wbSky);
     const lumRef = ref[0] * LUMA[0] + ref[1] * LUMA[1] + ref[2] * LUMA[2];
-    const lumEh = Eh[0] * LUMA[0] + Eh[1] * LUMA[1] + Eh[2] * LUMA[2];
+    const lumEh = L.Eh[0] * LUMA[0] + L.Eh[1] * LUMA[1] + L.Eh[2] * LUMA[2];
     const wb = ref.map((v) => Math.pow(lumRef / v, params.whiteBalance));
-    const norm = lumEh / (Eh[0] * wb[0] * LUMA[0] + Eh[1] * wb[1] * LUMA[1] + Eh[2] * wb[2] * LUMA[2]);
-    for (let c = 0; c < 3; c++) wb[c] *= norm;
+    const norm = lumEh / (L.Eh[0] * wb[0] * LUMA[0] + L.Eh[1] * wb[1] * LUMA[1] + L.Eh[2] * wb[2] * LUMA[2]);
+    wbGains = wb.map((w) => w * norm);
+    return wbGains;
+  }
+
+  function relight() {
+    const u = uniforms;
+    applyParams();
+    const wb = whiteBalance();
+    const { Tsun, shUnit, skyUp, shFull } = lightFor(u.uSunDir.value);
     const E = wb.map((w) => SOLAR_KLUX * w);
     u.uSunE.value.set(E[0], E[1], E[2]);
     sunIrradiance.setRGB(E[0] * Tsun[0], E[1] * Tsun[1], E[2] * Tsun[2], THREE.LinearSRGBColorSpace);
@@ -246,6 +271,8 @@ export function createAtmosphere(renderer, opts = {}) {
     }
     u.uSkyUp.value.set(skyUp[0] * E[0], skyUp[1] * E[1], skyUp[2] * E[2]);
     lastSkyKey = '';
+    lastApKey = '';
+    version++;
     const upIrr = irradianceUp(sh.coefficients.map((v) => [v.x, v.y, v.z]));
     return { sunIrradiance: sunIrradiance.clone(), skyUp: upIrr, Tsun, wb };
   }
@@ -256,7 +283,9 @@ export function createAtmosphere(renderer, opts = {}) {
   return {
     params, uniforms, targets, sunIrradiance, sh, shSky,
     precompute, update, relight,
+    get version() { return version; },
     setSun(dir) { uniforms.uSunDir.value.copy(dir).normalize(); },
+    setWhiteBalanceSun(dir) { wbSun.copy(dir).normalize(); },
     // Irradiance on a surface facing n, from the current sky light (klux).
     irradiance(n) { return evalIrradiance(sh.coefficients.map((v) => [v.x, v.y, v.z]), n); },
   };

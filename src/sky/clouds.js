@@ -134,6 +134,29 @@ function makeNoise(seed) {
   return tex;
 }
 
+// Cloud shadow on the ground and the sea: follow the sun up to the middle of the cloud
+// layer and read the weather map there. A cumulus in sunlight is close to opaque, so the
+// shadow is deep where the map has cloud, with the blob's own falloff as the soft edge.
+// 1 = full sun.
+export const CLOUD_SHADOW_GLSL = /* glsl */ `
+uniform sampler2D uWeather;
+uniform vec4 uCloudLayer;
+uniform vec2 uCloudWind;
+uniform float uCloudShadow;   // 0 off, 1 on
+float cloudShadow(vec3 wp, vec3 sunDir) {
+  if (uCloudShadow <= 0.0) return 1.0;
+  float hMid = (uCloudLayer.x + 0.35 * (uCloudLayer.y - uCloudLayer.x)) * 1000.0;
+  vec3 q = wp + sunDir * max(hMid - wp.y, 0.0) / max(sunDir.y, 0.1);
+  vec2 xz = q.xz * 0.001;
+  // Inside the clear sky over the island: no cloud, no texture read.
+  float clear = smoothstep(uCloudLayer.w, uCloudLayer.w * 2.2, length(xz));
+  if (clear <= 0.0) return 1.0;
+  vec2 w = texture2D(uWeather, (xz - uCloudWind) / uCloudLayer.z).rg;
+  w.r *= clear;
+  return 1.0 - 0.93 * smoothstep(0.12, 0.45, w.r) * smoothstep(0.08, 0.3, w.g) * uCloudShadow;
+}
+`;
+
 // ---------------------------------------------------------------- the march
 
 export const CLOUD_PARS = /* glsl */ `
@@ -174,6 +197,7 @@ float cloudDensity(vec2 xz, float h, vec2 w, float detail) {
   // Soft edges: density builds up over the outer part of the cloud.
   return d * d;
 }
+
 
 float hg(float c, float g) { float g2 = g * g; return (1.0 - g2) / (4.0 * 3.14159265 * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5)); }
 `;
@@ -267,11 +291,11 @@ void main() {
       float hn = (h - uCloudLayer.x) / (uCloudLayer.y - uCloudLayer.x);
       float above = max(w.g * w.r - hn, 0.0) * (uCloudLayer.y - uCloudLayer.x) / sunY;
       float near = 0.0;
-      for (int k = 1; k <= 3; k++) {
-        float sl = 0.06 * float(k * k);
+      for (int k = 1; k <= 2; k++) {
+        float sl = 0.1 * float(k * k);
         vec3 q = p + uSunDir * sl;
         vec2 wq = cloudWeather(q.xz);
-        near += cloudDensity(q.xz, length(q) - uRg, wq, detail) * 0.06 * float(2 * k - 1);
+        near += cloudDensity(q.xz, length(q) - uRg, wq, detail) * 0.1 * float(2 * k - 1);
       }
       float tau = max(above * 0.5, near) * uCloudSigma;
       // Single scattering for the silver lining, plus light that has diffused through the
@@ -311,6 +335,7 @@ export function createClouds(renderer, atmosphere, opts = {}) {
     uCloudWind: { value: new THREE.Vector2() },
     uCloudSigma: { value: params.density },
     uCloudRes: { value: new THREE.Vector2() },
+    uCloudShadow: { value: 1 },
   };
   let weatherKey = '';
   function applyParams() {
@@ -340,16 +365,23 @@ export function createClouds(renderer, atmosphere, opts = {}) {
     type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false,
   });
   const size = new THREE.Vector2();
+  let lastKey = '';
 
   return {
     params, uniforms, texture: target.texture, applyParams,
-    // Drift with the clock, then march at half the drawing-buffer size.
-    render(time) {
+    // What the ground, sea and plants need for cloud shadows (CLOUD_SHADOW_GLSL).
+    shadowUniforms: { uWeather: uniforms.uWeather, uCloudLayer: uniforms.uCloudLayer, uCloudWind: uniforms.uCloudWind, uCloudShadow: uniforms.uCloudShadow },
+    // Drift with the clock, then march at half the drawing-buffer size. A still view with a
+    // still clock (or drift under a metre) keeps the last march.
+    render(time, camera) {
       const a = THREE.MathUtils.degToRad(params.windHeading);
       // Map coordinates are (x east, z south) in km; heading is a compass bearing.
       uniforms.uCloudWind.value.set(Math.sin(a), -Math.cos(a)).multiplyScalar(params.windSpeed * time);
       renderer.getDrawingBufferSize(size);
       const w = Math.max(1, Math.round(size.x / 2)), h = Math.max(1, Math.round(size.y / 2));
+      const key = `${camera.matrixWorld.elements.join()}|${camera.projectionMatrix.elements.join()}|${w}x${h}|${Math.round(params.windSpeed * time * 1000)}|${JSON.stringify(params)}|${atmosphere.version}`;
+      if (key === lastKey) return;
+      lastKey = key;
       if (target.width !== w || target.height !== h) target.setSize(w, h);
       uniforms.uCloudRes.value.set(w, h);
       const prev = renderer.getRenderTarget();

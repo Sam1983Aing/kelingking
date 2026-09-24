@@ -316,9 +316,9 @@ void main() {
   if (tG > 0.0) dist = min(dist, tG);
   float cosTheta = dot(rd, uSunDirW);
   vec3 T = vec3(1.0), L = vec3(0.0);
-  int n = int(clamp(slice + 2.0, 3.0, 20.0));
+  int n = int(clamp(slice * 0.5 + 2.0, 3.0, 12.0));
   float dt = dist / float(n);
-  for (int k = 0; k < 20; k++) {
+  for (int k = 0; k < 12; k++) {
     if (k >= n) break;
     vec3 p = ro + rd * ((float(k) + 0.5) * dt);
     vec3 sR, sM, e;
@@ -450,4 +450,15 @@ void aerialVertex(vec3 wp) {
 export const AERIAL_FRAG_PARS = /* glsl */ `
 varying vec3 vApT;
 varying vec3 vApIns;
+`;
+
+// The same, packed into one vec4 (what the air adds, and one transmittance for all three
+// channels), for meshes that are never far away: within a couple of kilometres the air dims
+// red, green and blue within a few percent of each other. Fewer outputs from a million
+// ground vertices, and fewer inputs to an already heavy ground shader.
+export const AERIAL_VERT_PACKED = AERIAL_VERT
+  .replace('varying vec3 vApT;\nvarying vec3 vApIns;', 'varying vec4 vAp;')
+  .replace('  aerial(wp, uv, vApT, vApIns);', '  vec3 T, ins;\n  aerial(wp, uv, T, ins);\n  vAp = vec4(ins, dot(T, vec3(0.2126, 0.7152, 0.0722)));');
+export const AERIAL_FRAG_PACKED = /* glsl */ `
+varying vec4 vAp;
 `;

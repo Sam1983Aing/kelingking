@@ -106,14 +106,18 @@ controls.enabled = false;
 const atmoOpts = {};
 for (const k of ['haze', 'mieH', 'seaHaze', 'seaHazeH', 'mieG', 'angstrom', 'whiteBalance', 'wbSky', 'mieBack']) if (params.has(k)) atmoOpts[k] = +params.get(k);
 const atmosphere = createAtmosphere(renderer, atmoOpts);
-const water = createWater(atmosphere.uniforms, grade.uniforms);
-const skyDome = createSkyDome(atmosphere, grade.uniforms);
-const sky = skyDome.mesh;
-scene.add(sky);
-// Fair-weather cumulus, marched at half resolution and blended in by the sky (src/sky/clouds.js).
+// Fair-weather cumulus, marched at half resolution and blended in by the sky, and their
+// shadows on everything else (src/sky/clouds.js).
 const cloudOpts = {};
 for (const k of ['coverage', 'density', 'clearRadius', 'seed']) if (params.has('clouds.' + k)) cloudOpts[k] = +params.get('clouds.' + k);
 const clouds = createClouds(renderer, atmosphere, cloudOpts);
+if (params.get('clouds') === '0') clouds.uniforms.uCloudShadow.value = 0;
+// What every lit material shares: sun, sky light, haze, cloud shadows.
+const lightUniforms = { ...atmosphere.uniforms, ...clouds.shadowUniforms };
+const water = createWater(lightUniforms, grade.uniforms);
+const skyDome = createSkyDome(atmosphere, grade.uniforms);
+const sky = skyDome.mesh;
+scene.add(sky);
 skyDome.material.uniforms.uClouds.value = clouds.texture;
 skyDome.material.uniforms.uHasClouds.value = params.get('clouds') === '0' ? 0 : 1;
 
@@ -133,6 +137,9 @@ function placeSun() {
     state.sunEl = +p.elevation.toFixed(2);
   }
   const az = deg(state.sunAz), el = deg(state.sunEl), d = 2500, t = sun.target.position;
+  // The camera's white balance is set for the photo's light and kept when the sun moves.
+  const ps = sunAtHour(PHOTO_HOUR), pa = deg(ps.azimuth), pe = deg(ps.elevation);
+  atmosphere.setWhiteBalanceSun(new THREE.Vector3(Math.cos(pe) * Math.sin(pa), Math.sin(pe), -Math.cos(pe) * Math.cos(pa)));
   sun.position.set(t.x + d * Math.cos(el) * Math.sin(az), d * Math.sin(el), t.z - d * Math.cos(el) * Math.cos(az));
   atmosphere.setSun(sun.position.clone().sub(t));
   relight();
@@ -155,16 +162,28 @@ placeSun();
 scene.add(water.mesh);
 water.uniforms.uDebug.value = +(params.get('debug') || 0);
 
-const terrain = createTerrain(atmosphere.uniforms, grade.uniforms);
+const terrain = createTerrain(lightUniforms, grade.uniforms);
 scene.add(terrain.mesh);
 if (params.get('bounce') === '0') terrain.uniforms.uBounceAlb.value.forEach((v) => v.set(0, 0, 0));
+// Cloud shadows on the island only when clouds can get over it (the ground shader leaves
+// them out otherwise; it is the most expensive shader on screen).
+function terrainCloudShadows() {
+  const on = clouds.params.clearRadius < 2.5 && clouds.uniforms.uCloudShadow.value > 0;
+  const m = terrain.mesh.material;
+  if (!!m.defines?.TERRAIN_CLOUDS !== on) {
+    m.defines = { ...m.defines };
+    if (on) m.defines.TERRAIN_CLOUDS = 1; else delete m.defines.TERRAIN_CLOUDS;
+    m.needsUpdate = true;
+  }
+}
+terrainCloudShadows();
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
 terrain.uniforms.uClay.value = state.clay ? 1 : 0;
 const sunShadow = createSunShadow(renderer);
 let texturesReady = false;
 let plants = null, plantsReady = false;
 fetch('assets/veg/impostors.json').then((r) => r.json())
-  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02'], { ...atmosphere.uniforms, ...grade.uniforms }))
+  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02'], { ...lightUniforms, ...grade.uniforms }))
   .then((p) => {
     plants = p;
     plants.group.visible = !hidden.has('plants');
@@ -447,11 +466,12 @@ lf.add(ap, 'wbSky', 0, 1, 0.01).name('balance on sky too').onChange(relight);
 const cf = gui.addFolder('Clouds').close();
 const cp = clouds.params, ca = () => clouds.applyParams();
 cf.add(skyDome.material.uniforms.uHasClouds, 'value', 0, 1, 1).name('clouds');
+cf.add(clouds.uniforms.uCloudShadow, 'value', 0, 1, 1).name('cloud shadows').onChange(terrainCloudShadows);
 cf.add(cp, 'coverage', 0, 1, 0.01).onChange(ca);
 cf.add(cp, 'density', 5, 150, 1).name('density (/km)').onChange(ca);
 cf.add(cp, 'base', 0.3, 2, 0.05).name('base (km)').onChange(ca);
 cf.add(cp, 'top', 0.8, 5, 0.05).name('top (km)').onChange(ca);
-cf.add(cp, 'clearRadius', 0, 20, 0.5).name('clear over island (km)').onChange(ca);
+cf.add(cp, 'clearRadius', 0, 20, 0.5).name('clear over island (km)').onChange(() => { ca(); terrainCloudShadows(); });
 cf.add(cp, 'seed', 1, 50, 1).onChange(ca);
 const gp = grade.params, ga = () => grade.apply();
 lf.add(gp, 'compensation', -3, 3, 0.05).name('exposure (stops)').onChange(ga);
@@ -488,7 +508,16 @@ window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, 
   // Region-by-region comparison with the photo (src/measure.js, capture.mjs --measure).
   async measure(opts = {}) {
     const { measure } = await import('./measure.js');
-    return measure({ renderer, scene, camera, refImg, labelUniform: grade.uniforms.uLabel, rois: SHOTS[state.shot].rois, ...opts });
+    // Labels: a uniform for the light shaders, a compile-time switch for the ground (its
+    // shader is heavy enough that even an unused branch costs).
+    const setLabels = (on) => {
+      grade.uniforms.uLabel.value = on ? 1 : 0;
+      const m = terrain.mesh.material;
+      m.defines = { ...m.defines };
+      if (on) m.defines.LABELS = 1; else delete m.defines.LABELS;
+      m.needsUpdate = true;
+    };
+    return measure({ renderer, scene, camera, refImg, setLabels, rois: SHOTS[state.shot].rois, ...opts });
   },
   project(x, y, h) {
     const v = new THREE.Vector3(x, h ?? groundAt(x, y), -y).project(camera);
@@ -522,8 +551,17 @@ function governResolution(dt) {
 // bench in capture.mjs times this.
 function renderFrame() {
   atmosphere.update(camera);
-  if (sky.visible && skyDome.material.uniforms.uHasClouds.value) clouds.render(simTime);
+  if (sky.visible && skyDome.material.uniforms.uHasClouds.value && skyInView()) clouds.render(simTime, camera);
   renderer.render(scene, camera);
+}
+// Whether any of the view looks above the horizon (the clouds are only marched then).
+const corner = new THREE.Vector3();
+function skyInView() {
+  for (const [x, y] of [[-1, 1], [1, 1], [-1, -1], [1, -1], [0, 1]]) {
+    corner.set(x, y, 0.5).unproject(camera).sub(camera.position);
+    if (corner.y > -0.02 * corner.length()) return true;
+  }
+  return false;
 }
 window.__app.renderFrame = renderFrame;
 

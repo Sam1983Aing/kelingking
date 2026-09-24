@@ -1,6 +1,7 @@
-// The sky behind everything: the atmosphere's sky view, the sun's disc, and (later) clouds.
-// Drawn after the ground and plants at the far plane with the depth test on, so it only
-// shades the pixels nothing else covers. The sea is drawn after it and covers the rest.
+// The sky behind everything: the atmosphere's sky view, the sun's disc, and the clouds.
+// Drawn last, at the far plane with the depth test on, so it only shades the pixels nothing
+// else covers (the sea writes depth, so the sky is not shaded under it and then painted
+// over).
 
 import * as THREE from 'three';
 import { SKY_PARS } from './atmosphere-glsl.js';
@@ -74,10 +75,13 @@ export function createSkyDome(atmosphere, extraUniforms = {}) {
     depthWrite: false,
     depthTest: true,
     side: THREE.BackSide,
+    // In the transparent pass so it comes after the sea, but it covers what it draws.
+    transparent: true,
+    blending: THREE.NoBlending,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), material);
   mesh.frustumCulled = false;
-  // After the opaque ground and plants, before the sea (which is transparent).
+  // After everything, the sea included (renderOrder 1).
   mesh.renderOrder = 10;
   return { mesh, material };
 }

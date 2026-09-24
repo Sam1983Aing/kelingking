@@ -44,7 +44,7 @@ const BINS = [
 // rois: extra regions, { name: [x0, y0, x1, y1] } as fractions of the frame from the top left,
 // or { name: { render: [...], photo: [...] } } where the model and the photo put the same
 // surface in different places.
-export function measure({ renderer, scene, camera, refImg, labelUniform, erode = 4, rois = {} }) {
+export function measure({ renderer, scene, camera, refImg, setLabels, erode = 4, rois = {} }) {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const w = size.x, h = size.y;
   const gl = renderer.getContext();
@@ -67,13 +67,13 @@ export function measure({ renderer, scene, camera, refImg, labelUniform, erode =
 
   // Labels.
   const rt = new THREE.WebGLRenderTarget(w, h);
-  labelUniform.value = 1;
+  setLabels(true);
   renderer.setRenderTarget(rt);
   renderer.setClearColor(0x000000, 0);
   renderer.clear();
   renderer.render(scene, camera);
   renderer.setRenderTarget(null);
-  labelUniform.value = 0;
+  setLabels(false);
   const lab = new Uint8Array(w * h * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, w, h, lab);
   rt.dispose();

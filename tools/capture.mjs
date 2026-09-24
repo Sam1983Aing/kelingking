@@ -14,6 +14,8 @@
 //   node tools/capture.mjs --bench                  render time per shot (with --out, also bench.json)
 //   node tools/capture.mjs viewpoint --measure      average colour per region, render against photo
 //   node tools/capture.mjs viewpoint --eval="window.__light"   print something from the page
+//        add --benchpage to load the page as the bench does (q=1024, pr=1, no capture mode)
+//                                                   (a PNG data URL comes back as <shot>-eval.png)
 //   node tools/capture.mjs viewpoint --set="hour=10;haze=4;ev=-0.5"  any page switches (see main.js)
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
@@ -93,7 +95,7 @@ try {
     const compare = flag('compare', false);
     const w = WIDTH, h = Math.round(WIDTH / aspect);
     const q = new URLSearchParams({ shot: name, capture: '1', q: flag('q', '2048'), t: flag('t', '12') });
-    if (flag('bench')) { q.delete('capture'); q.set('q', '1024'); q.set('pr', '1'); }
+    if (flag('bench') || flag('benchpage')) { q.delete('capture'); q.set('q', '1024'); q.set('pr', '1'); }
     if (compare) q.set('compare', 'side');
     if (flag('overlay')) q.set('overlay', flag('overlay'));
     if (flag('diff')) q.set('diff', '1');
@@ -134,7 +136,15 @@ try {
         A.water.mesh.visible = false; out.noSea = time(); A.water.mesh.visible = true;
         out.all = Math.min(out.all, time());
         const mat = A.terrain.mesh.material;
+        // Ablations: SKIP_* defines on the ground material, or whole parts of the frame.
+        const parts = {
+          SKIP_plants: [() => A.plants && (A.plants.group.visible = false), () => A.plants && (A.plants.group.visible = true)],
+          SKIP_sky: [() => (A.scene.getObjectByProperty('renderOrder', 10).visible = false), () => (A.scene.getObjectByProperty('renderOrder', 10).visible = true)],
+          SKIP_passes: [() => (A.__draw = draw), () => {}],
+        };
         for (const k of ${JSON.stringify(String(flag('ablate', '')).split(',').filter(Boolean))}) {
+          if (k === 'SKIP_passes') { out[k] = (() => { const d = () => { R.render(A.scene, A.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }; for (let i = 0; i < 3; i++) d(); const t0 = performance.now(); for (let i = 0; i < 15; i++) d(); return (performance.now() - t0) / 15; })(); continue; }
+          if (parts[k]) { parts[k][0](); time(); out[k] = time(); parts[k][1](); continue; }
           mat.defines = { [k]: 1 }; mat.needsUpdate = true; time(); out[k] = time();
         }
         mat.defines = {}; mat.needsUpdate = true;
@@ -152,7 +162,13 @@ try {
       // Evaluate an expression in the page once it is ready and print the result.
       const r = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: String(flag('eval')) }, sessionId);
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
-      console.log(`${name}:`, JSON.stringify(r.result.value, null, 1));
+      const v = r.result.value;
+      if (typeof v === 'string' && v.startsWith('data:image/png;base64,')) {
+        // The expression drew something and handed back the canvas: save it.
+        const out = join(OUTDIR, `${name}-eval.png`);
+        writeFileSync(out, Buffer.from(v.slice(22), 'base64'));
+        console.log(`${name}: ${out.replace(root + '/', '')}`);
+      } else console.log(`${name}:`, JSON.stringify(v, null, 1));
       await send('Target.closeTarget', { targetId });
       continue;
     }

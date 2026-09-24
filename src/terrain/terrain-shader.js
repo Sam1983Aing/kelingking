@@ -37,7 +37,6 @@ float tRough = 0.9;
 vec3 tNormalW = vec3(0.0, 1.0, 0.0);
 float tSandW = 0.0;   // how much of this pixel is sand, and ground cover (for the labels)
 float tVegW = 0.0;
-vec3 tBounce = vec3(0.0);   // light bounced up from the ground below (irradiance)
 
 
 
@@ -83,14 +82,19 @@ uniform vec3 uBounceAlb[3];   // what the ground below sends back: sea, sand, la
 // and out along the normal, reads what is there from the data texture, whether the sun
 // reaches it, and treats it as a flat ground filling the lower half of the surface's view.
 vec3 groundBounce(vec3 P, vec3 N) {
-  float down = 0.5 * (1.0 - N.y);
+#ifdef SKIP_BOUNCE
+  return vec3(0.0);
+#endif
+  // Faces that look down, and only near the camera: from a kilometre off it is too subtle
+  // to see, and the ground shader is the most expensive thing on screen.
+  float down = 0.5 * (1.0 - N.y) * (1.0 - smoothstep(500.0, 800.0, distance(P, cameraPosition)));
   if (down < 0.02) return vec3(0.0);
   vec2 g = vec2(P.x, -P.z);
   vec2 hz = vec2(N.x, -N.z);
   float lh = length(hz);
-  float here = tData(g).r;
-  float above = max(P.y - max(here, 0.0), 0.0);
-  vec2 q = g + (lh > 1e-3 ? hz / lh : vec2(0.0)) * clamp(above * 0.7 + 2.0, 2.0, 60.0);
+  // How far out to look: further the higher up the surface is (height above the sea stands
+  // in for height above the ground below, which saves a texture read).
+  vec2 q = g + (lh > 1e-3 ? hz / lh : vec2(0.0)) * clamp(P.y * 0.5 + 2.0, 2.0, 60.0);
   vec4 D = tData(q);
   float sea = smoothstep(-0.5, 1.0, D.g);
   float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
@@ -264,18 +268,30 @@ export const TERRAIN_COLOR = /* glsl */ `
   float tFp = max(length(fwidth(vWorldPos)), 0.005);
   diffuseColor.rgb = terrainSurface(vWorldPos, tN, tFp);
   tShadow = groundShadow(vWorldPos, tN);
-  tBounce = groundBounce(vWorldPos, tNormalW);
+  // Cloud shadows only reach the island when the clear sky over it is small (main.js sets
+  // this); by default the island sits in sun, as on the photo day.
+#ifdef TERRAIN_CLOUDS
+  tShadow *= cloudShadow(vWorldPos, uSunDirW);
+#endif
+`;
+
+// Light bounced up from below, added where three.js gathers the indirect light. Worked out
+// here, late, from the final normal, so nothing has to be carried through the shader.
+export const TERRAIN_BOUNCE = /* glsl */ `
+  reflectedLight.indirectDiffuse += groundBounce(vWorldPos, normalize((vec4(normal, 0.0) * viewMatrix).xyz)) * BRDF_Lambert(material.diffuseColor);
 `;
 
 // Labels for the measuring tool: class (sand 3, rock 4, ground cover 5) and whether the sun
 // reaches it.
 export const TERRAIN_LABEL = /* glsl */ `
-  if (uLabel > 0.5) {
+#ifdef LABELS
+  {
     float cls = tSandW > 0.5 ? 3.0 : (tVegW > 0.5 ? 5.0 : 4.0);
     float lit = tShadow * max(dot(tNormalW, uSunDirW), 0.0) > 0.3 ? 1.0 : 0.0;
     float dist = log2(max(distance(vWorldPos, cameraPosition), 1.0)) / 20.0;
     gl_FragColor = vec4(cls / 255.0, dist, lit, 1.0);
   }
+#endif
 `;
 
 // The normal comes from the scanned maps, already in world space.

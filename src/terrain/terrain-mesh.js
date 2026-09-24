@@ -5,9 +5,10 @@
 // atmosphere (src/sky/), and the haze with distance added on top.
 
 import * as THREE from 'three';
-import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL } from './terrain-shader.js';
+import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL, TERRAIN_BOUNCE } from './terrain-shader.js';
 import { SURFACES, surfaceGains } from './surfaces.js';
-import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
+import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
+import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
 
 const srgbToLinear = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
 const surfaceAlbedo = (id) => new THREE.Vector3(...SURFACES.find((s) => s.id === id).target.map(srgbToLinear));
@@ -39,21 +40,26 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, atmosphereUniforms, gradeUniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\n' + AERIAL_VERT)
-      .replace('#include <project_vertex>', '#include <project_vertex>\naerialVertex(vWorldPos);')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\n' + AERIAL_VERT_PACKED)
+      // The haze per vertex. The mesh covers the whole island, so vertices well outside the
+      // view skip it (the ground's triangles are small, so none spans the margin; and near
+      // the camera, where one could, the haze is nothing anyway).
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vAp = vec4(0.0, 0.0, 0.0, 1.0);
+        if (gl_Position.w > 0.0 && all(lessThan(abs(gl_Position.xy), vec2(1.3 * gl_Position.w)))) aerialVertex(vWorldPos);`)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + SKY_PARS + AERIAL_FRAG_PARS + TERRAIN_PARS)
+      .replace('#include <common>', '#include <common>\n' + SKY_PARS + AERIAL_FRAG_PACKED + CLOUD_SHADOW_GLSL + TERRAIN_PARS)
       .replace('#include <color_fragment>', TERRAIN_COLOR)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = tRough;')
       // Drawn two-sided so the few folded facets on the cliffs are not holes. The bump
       // normal is built from the outward vertex normal, so it replaces three's flipped one.
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + TERRAIN_NORMAL)
       .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;')
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse += tBounce * BRDF_Lambert(material.diffuseColor);\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + TERRAIN_BOUNCE + '\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
       // The haze between the camera and the ground, in linear light before the tone curve.
-      .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vApT + vApIns;\n#include <tonemapping_fragment>')
+      .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vAp.a + vAp.rgb;\n#include <tonemapping_fragment>')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + TERRAIN_LABEL);
   };
 

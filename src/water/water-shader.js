@@ -1,5 +1,6 @@
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
 import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
+import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
 
 // GLSL for the sea. Everything is computed from the terrain data texture:
 //   R = terrain height, G = metres offshore from the waterline, B = beach weight.
@@ -177,7 +178,9 @@ void main() {
   vWorld = w;
   vec4 mvPosition = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  aerialVertex(w);
+  // The rings go all the way round the camera: the half behind it needs no haze.
+  vApT = vec3(1.0); vApIns = vec3(0.0);
+  if (gl_Position.w > 0.0) aerialVertex(w);
   #include <logdepthbuf_vertex>
 }
 `;
@@ -187,6 +190,7 @@ ${COMMON}
 ${SKY_PARS}
 ${AERIAL_FRAG_PARS}
 ${SUN_SHADOW_GLSL}
+${CLOUD_SHADOW_GLSL}
 uniform vec3 uSkyIrr;        // irradiance from the sky on flat water
 uniform vec3 uAbsorb;        // extinction per metre, per channel
 uniform vec3 uScatter;       // colour of light scattered back out of the water
@@ -262,7 +266,7 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
 
-  float shadow = bakedShadow(vWorld, 0.05);
+  float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
   // Light under the surface. Follow the refracted view ray down to the seabed. A ray that
   // runs nearly flat (looking through the face of a standing wave) leaves through the back
@@ -298,8 +302,10 @@ void main() {
   vec3 Ebed = uSunIrr * sunY * shadow * caus * Tdown + uSkyIrr * exp(-sigma * depth * 1.3);
   vec3 bedRad = bedAlbedo / PI * Ebed;
   vec3 Rout = normalize(vec3(R.x, max(R.y, 0.08), R.z));
-  vec3 behind = skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1;
-  bedRad = mix(bedRad, behind, through);
+  if (through > 0.001) {
+    vec3 behind = skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1;
+    bedRad = mix(bedRad, behind, through);
+  }
 
   vec3 E = uSunIrr * sunY * mix(0.35, 1.0, shadow) + uSkyIrr;
   // ...but the light it scatters back has already lost its red on the way down, so a sand

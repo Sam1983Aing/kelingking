@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { IMPOSTOR, HEMI_OCT_GLSL } from './impostor-common.js';
 import { STRIDE } from './scatter.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
-import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
+import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
+import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
 
 const VERT = /* glsl */ `
 ${HEMI_OCT_GLSL}
@@ -20,7 +21,7 @@ varying vec3 vWorld;
 varying float vYaw;
 varying float vTint;
 varying vec3 vFrameDir;       // world direction the chosen frame was baked from
-${AERIAL_VERT}
+${AERIAL_VERT_PACKED}
 #include <common>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
@@ -53,7 +54,7 @@ void main() {
 
 const FRAG = /* glsl */ `
 ${SKY_PARS}
-${AERIAL_FRAG_PARS}
+${AERIAL_FRAG_PACKED}
 uniform sampler2D uColor;
 uniform sampler2D uData;
 uniform vec3 uExtent;
@@ -63,6 +64,7 @@ varying float vYaw;
 varying float vTint;
 varying vec3 vFrameDir;
 ${SUN_SHADOW_GLSL}
+${CLOUD_SHADOW_GLSL}
 #include <common>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
@@ -88,7 +90,7 @@ void main() {
   albedo *= mix(vec3(0.78, 0.95, 0.72), vec3(1.2, 1.12, 0.8), vTint);
 
   vec3 V = normalize(cameraPosition - P);
-  float sh = bakedShadow(P, 0.5);
+  float sh = bakedShadow(P, 0.5) * cloudShadow(P, uSunDir);
   float NdL = dot(N, uSunDir);
   float NoV = max(dot(N, V), 0.05);
   // A leaf reflects light on the side it is lit from and passes some through to the other
@@ -102,7 +104,12 @@ void main() {
   float through = pow(max(dot(-V, uSunDir), 0.0), 3.0) * 0.6;
   vec3 sunD = uSunIrr * sh * (front * mix(0.35, 1.0, crown) + (back * TRANS * mix(0.35, 1.0, crown) + through * crown) * TRANS_TINT);
   // Sky light from the atmosphere on the side the leaf faces, and some through from behind.
-  vec3 sky = (skyIrradiance(N) + skyIrradiance(-N) * TRANS * TRANS_TINT) * crown;
+  // One pass for both sides: the even bands are the same for N and -N, the odd band flips.
+  vec3 even = uSkySH[0] * 0.886227 + uSkySH[4] * 0.858086 * N.x * N.y + uSkySH[5] * 0.858086 * N.y * N.z
+            + uSkySH[6] * (0.743125 * N.z * N.z - 0.247708) + uSkySH[7] * 0.858086 * N.x * N.z
+            + uSkySH[8] * 0.429043 * (N.x * N.x - N.y * N.y);
+  vec3 odd = (uSkySH[1] * N.y + uSkySH[2] * N.z + uSkySH[3] * N.x) * 1.023328;
+  vec3 sky = (max(even + odd, 0.0) + max(even - odd, 0.0) * TRANS * TRANS_TINT) * crown;
   vec3 col = albedo / PI * (sunD + sky);
   // The waxy cuticle: a dielectric sheen (index about 1.45) that mirrors the sky and
   // catches the sun, whatever the leaf's colour. Rough, because a canopy is thousands of
@@ -125,7 +132,7 @@ void main() {
   float open = smoothstep(-0.05, 0.3, R.y) * crown * crown * crown;
   col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open;
 
-  gl_FragColor = vec4(col * vApT + vApIns, 1.0);
+  gl_FragColor = vec4(col * vAp.a + vAp.rgb, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) {
