@@ -20,7 +20,7 @@ back to back against the previous tag, never against old numbers (see CLAUDE.md)
 
 ## The standalone build
 
-Follow `/Users/sam/Projects/Claude Code/CLAUDE.md`:
+Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
 
 - Assets (textures, tree atlases, terrain data) go to `Sam1983Aing/aura-assets` under a
   project folder, served by jsDelivr, pinned to a tag. Reference photos never go there.
