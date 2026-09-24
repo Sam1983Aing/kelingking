@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { WATER_VERT, WATER_FRAG } from './water-shader.js';
 
-export function createWater() {
+export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
   const params = {
     period: 9,          // seconds between waves
     swell: 1.1,         // wave height at sea (m)
@@ -22,7 +22,6 @@ export function createWater() {
   };
 
   const uniforms = THREE.UniformsUtils.merge([
-    THREE.UniformsLib.fog,
     {
       uData: { value: null },
       uShoreDir: { value: null },
@@ -35,11 +34,7 @@ export function createWater() {
       uSurge: { value: 0.5 },
       uSwellDir: { value: new THREE.Vector2(0.64, 0.77) },
       uWindAngle: { value: 0 },
-      uSunDir: { value: new THREE.Vector3(0, 1, 0) },
-      uSunIrr: { value: new THREE.Color(1, 1, 1) },
-      uSkyIrr: { value: new THREE.Color(0.5, 0.6, 0.7) },
-      uZenith: { value: new THREE.Color() },
-      uHorizon: { value: new THREE.Color() },
+      uSkyIrr: { value: new THREE.Color(0.5, 0.6, 0.7) },   // sky light on flat ground (klux)
       uAbsorb: { value: new THREE.Vector3() },
       uScatter: { value: new THREE.Color() },
       uSandAlbedo: { value: new THREE.Color() },
@@ -51,12 +46,13 @@ export function createWater() {
       uGridScale: { value: 1 },
     },
   ]);
+  // The sun, the sky and the haze come from the atmosphere (src/sky/), shared, not copied.
+  Object.assign(uniforms, atmosphereUniforms, gradeUniforms);
 
   const material = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: WATER_VERT,
     fragmentShader: WATER_FRAG,
-    fog: true,
     transparent: true,
   });
 
@@ -97,18 +93,12 @@ export function createWater() {
       uniforms.uShoreDir.value = shoreDir;
       uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
     },
-    // Keep the water lit by the same sun and sky as the rest of the scene.
-    update(time, sun, hemi, zenith, horizon, camera) {
+    update(time, camera) {
       uniforms.uTime.value = time;
       // Keep the rings about as dense on screen from 1 km up as from the beach.
       const h = Math.max(camera.position.y, 1);
       uniforms.uGridScale.value = Math.max(1, h / 12);
       mesh.geometry = h > 40 ? light : dense;
-      uniforms.uSunDir.value.copy(sun.position).sub(sun.target.position).normalize();
-      uniforms.uSunIrr.value.copy(sun.color).multiplyScalar(sun.intensity);
-      uniforms.uSkyIrr.value.copy(hemi.color).multiplyScalar(hemi.intensity);
-      uniforms.uZenith.value.copy(zenith);
-      uniforms.uHorizon.value.copy(horizon);
     },
   };
 }

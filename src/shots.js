@@ -8,6 +8,14 @@ export const SHOTS = {
     label: 'Clifftop viewpoint',
     ref: 'references/02-viewpoint/viewpoint-midday-a.jpg',
     pos: [228, 236, 152], yaw: 220.7, pitch: -25.6, roll: 0, fov: 57,
+    // Patches where the model and the photo agree on what is there (src/measure.js).
+    rois: {
+      'horizon sky': [0.52, 0.042, 0.73, 0.059],
+      'far sea': [0.1, 0.076, 0.36, 0.097],
+      'mid sea': [0.1, 0.17, 0.31, 0.24],
+      'islet sunlit face': [0.3, 0.36, 0.33, 0.41],
+      'sand': { photo: [0.515, 0.64, 0.555, 0.75], render: [0.565, 0.7, 0.61, 0.79] },
+    },
   },
   overview: {
     label: 'Overview, straight down',
@@ -50,6 +58,25 @@ export const SHOTS = {
     label: 'Shore break, eye level',
     ref: 'references/05-water/wave-breaking-closeup.jpg',
     pos: [101, 222, 1.9], yaw: 282, pitch: -1.5, roll: -2, fov: 26,
+  },
+  eastCove: {
+    label: 'East cove, same hour',
+    ref: 'references/04-beach/cove-from-east-cliff.jpg',
+    // The same phone, day and hour as the viewpoint photo (12:06, EV100 14.05), looking
+    // south-east with the ultrawide lens. From its EXIF: position, height and heading; the
+    // pitch from the horizon. The coast it shows is off the map; it is here for its sky,
+    // which it shows from the horizon up to 38 degrees.
+    pos: [223, 197, 110], yaw: 137.2, pitch: -4.8, roll: 0, fov: 85.7,
+    rois: {
+      'sky 5 deg': [0.65, 0.393, 0.91, 0.401],
+      'sky 8 deg': [0.65, 0.356, 0.91, 0.364],
+      'sky 12 deg': [0.65, 0.308, 0.91, 0.316],
+      'sky 18 deg': [0.65, 0.231, 0.91, 0.239],
+      'sky 25 deg': [0.65, 0.132, 0.91, 0.14],
+      'sky 32 deg': [0.65, 0.019, 0.91, 0.027],
+      'sea near horizon': [0.68, 0.462, 0.94, 0.479],
+      'sea 1-3 km': [0.73, 0.555, 0.94, 0.625],
+    },
   },
   beach: {
     label: 'On the sand',

@@ -1,22 +1,9 @@
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
+import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
 
 // GLSL for the sea. Everything is computed from the terrain data texture:
 //   R = terrain height, G = metres offshore from the waterline, B = beach weight.
 // Local coordinates in here are metres with x = east, y = north (world z = -north).
-
-export const SKY_GLSL = /* glsl */ `
-uniform vec3 uSunDir;      // world space, pointing at the sun
-uniform vec3 uSunIrr;      // sun colour * intensity
-uniform vec3 uZenith;
-uniform vec3 uHorizon;
-
-vec3 skyRadiance(vec3 d) {
-  float y = max(d.y, 0.0);
-  vec3 c = mix(uHorizon, uZenith, pow(y, 0.5));
-  float sd = max(dot(d, uSunDir), 0.0);
-  return c + uSunIrr * (0.012 * pow(sd, 6.0) + 0.05 * pow(sd, 64.0));
-}
-`;
 
 const COMMON = /* glsl */ `
 uniform sampler2D uData;
@@ -165,8 +152,8 @@ float waterHeight(vec2 p) {
 export const WATER_VERT = /* glsl */ `
 ${COMMON}
 uniform float uGridScale;   // spreads the rings out when the camera is high
+${AERIAL_VERT}
 #include <common>
-#include <fog_pars_vertex>
 #include <logdepthbuf_pars_vertex>
 varying vec3 vWorld;
 varying vec2 vGrid;   // ground position before the crest is leaned over
@@ -182,19 +169,25 @@ void main() {
   // Lean the crest shoreward.
   vec2 toShore = -offshoreAt(p);
   w.xz += vec2(toShore.x, -toShore.y) * sf.y;
+  // The sea curves away with the Earth, so the horizon sits where it really is (0.4 degrees
+  // below level from the clifftop) and the haze sees the true distance. Left flat across
+  // the island, where the terrain is flat too.
+  float far = max(length(w.xz - cameraPosition.xz) - 2000.0, 0.0);
+  w.y -= far * far / (2.0 * 6.36e6);
   vWorld = w;
   vec4 mvPosition = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * mvPosition;
+  aerialVertex(w);
   #include <logdepthbuf_vertex>
-  #include <fog_vertex>
 }
 `;
 
 export const WATER_FRAG = /* glsl */ `
 ${COMMON}
-${SKY_GLSL}
+${SKY_PARS}
+${AERIAL_FRAG_PARS}
 ${SUN_SHADOW_GLSL}
-uniform vec3 uSkyIrr;        // irradiance from the sky dome
+uniform vec3 uSkyIrr;        // irradiance from the sky on flat water
 uniform vec3 uAbsorb;        // extinction per metre, per channel
 uniform vec3 uScatter;       // colour of light scattered back out of the water
 uniform vec3 uSandAlbedo;
@@ -205,7 +198,6 @@ uniform float uFoam;
 uniform float uWindAngle;
 uniform int uDebug;
 #include <common>
-#include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 varying vec3 vWorld;
 varying vec2 vGrid;
@@ -371,7 +363,7 @@ void main() {
   float film = vWorld.y - d.r;
   float alpha = max(smoothstep(0.0, 0.12, film), foam * smoothstep(0.0, 0.03, film));
 
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col * vApT + vApIns, alpha);
   if (uDebug == 1) gl_FragColor = vec4(vec3(turb), 1.0);
   if (uDebug == 2) gl_FragColor = vec4(vec3(through), 1.0);
   if (uDebug == 3) gl_FragColor = vec4(vec3(amount), 1.0);
@@ -379,6 +371,10 @@ void main() {
   if (uDebug == 5) gl_FragColor = vec4(N * 0.5 + 0.5, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
-  #include <fog_fragment>
+  // Label: water (2), distance, and whether the bed is shallow enough to show.
+  if (uLabel > 0.5) {
+    float dist = log2(max(distance(vWorld, cameraPosition), 1.0)) / 20.0;
+    gl_FragColor = vec4(2.0 / 255.0, dist, depth0 < 12.0 ? 1.0 : 0.0, 1.0);
+  }
 }
 `;

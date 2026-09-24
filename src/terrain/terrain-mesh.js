@@ -1,13 +1,15 @@
 // The ground mesh and its material. Geometry comes from the worker (mesh-builder.js),
 // already carrying normals from the smooth surface. The look comes from scanned textures
 // (terrain-shader.js, surfaces.js), patched into three.js's standard material so it keeps
-// the normal lighting and fog.
+// its lighting: the sun as a directional light and the sky as a light probe, both from the
+// atmosphere (src/sky/), and the haze with distance added on top.
 
 import * as THREE from 'three';
-import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL } from './terrain-shader.js';
+import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL } from './terrain-shader.js';
 import { SURFACES, surfaceGains } from './surfaces.js';
+import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
 
-export function createTerrain() {
+export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     roughness: 0.9,
@@ -18,7 +20,7 @@ export function createTerrain() {
     uData: { value: null },
     uSunShadow: { value: null },
     uExtent: { value: new THREE.Vector3(-700, -700, 1600) },
-    uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+    uSunDirW: atmosphereUniforms.uSunDir ?? { value: new THREE.Vector3(0, 1, 0) },
     uContours: { value: 0 },
     uClay: { value: 0 },
     uBeachTop: { value: 4.6 },
@@ -29,20 +31,24 @@ export function createTerrain() {
     uTile: { value: SURFACES.map((s) => s.tile) },
   };
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, atmosphereUniforms, gradeUniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\n' + AERIAL_VERT)
+      .replace('#include <project_vertex>', '#include <project_vertex>\naerialVertex(vWorldPos);')
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + TERRAIN_PARS)
+      .replace('#include <common>', '#include <common>\n' + SKY_PARS + AERIAL_FRAG_PARS + TERRAIN_PARS)
       .replace('#include <color_fragment>', TERRAIN_COLOR)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = tRough;')
       // Drawn two-sided so the few folded facets on the cliffs are not holes. The bump
       // normal is built from the outward vertex normal, so it replaces three's flipped one.
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + TERRAIN_NORMAL)
       .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;')
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);');
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
+      // The haze between the camera and the ground, in linear light before the tone curve.
+      .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vApT + vApIns;\n#include <tonemapping_fragment>')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + TERRAIN_LABEL);
   };
 
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);

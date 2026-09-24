@@ -15,6 +15,10 @@
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
 //   clay=1             plain grey ground, to judge the shape on its own
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
+//   hour=11.96         local time on the photo's day (6 April 2025), sets the sun
+//   sun=az,el          or set the sun directly, compass heading and elevation in degrees
+//   haze=6             aerosol amount (1 = clear continental air)
+//   ev=0               exposure compensation in stops
 //
 // Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
@@ -25,7 +29,10 @@ import { defaultLayout } from './terrain/layout.js';
 import { createTerrain, sample } from './terrain/terrain-mesh.js';
 import { SHOTS } from './shots.js';
 import { createWater } from './water/water.js';
-import { SKY_GLSL } from './water/water-shader.js';
+import { createAtmosphere } from './sky/atmosphere.js';
+import { createSkyDome } from './sky/sky-dome.js';
+import { PHOTO_DAY, PHOTO_HOUR, sunAtHour } from './sky/sun.js';
+import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
 import { loadSurfaceTextures } from './terrain/surface-textures.js';
 import { createPlants } from './veg/impostors.js';
@@ -44,9 +51,10 @@ const state = {
   contours: params.get('contours') === '1',
   outline: params.get('outline') === '1',
   clay: params.get('clay') === '1',
-  sunAz: 345,
-  sunEl: 64,
-  exposure: 1.0,
+  // The sun where it was when the viewpoint photo was taken (src/sky/sun.js).
+  hour: +(params.get('hour') ?? PHOTO_HOUR),
+  sunAz: 0,
+  sunEl: 0,
 };
 const layout = defaultLayout();
 const FIXED_T = params.has('t') ? +params.get('t') : null;
@@ -69,7 +77,13 @@ stage.append(outlineCanvas);
 // turns off early depth testing, and then every hidden layer of ground gets fully shaded.
 const renderer = new THREE.WebGLRenderer({ antialias: true, reversedDepthBuffer: true, preserveDrawingBuffer: CAPTURE });
 renderer.setPixelRatio(CAPTURE ? 1 : Math.min(devicePixelRatio, 1.5));
-renderer.toneMapping = THREE.NeutralToneMapping;
+// Exposure from the viewpoint photo's EXIF, tone curve and grade (src/post/grade.js). Has to
+// be set up before any material compiles.
+const gradeOpts = { ev100: PHOTO_DAY.ev100 };
+if (params.has('ev')) gradeOpts.compensation = +params.get('ev');
+if (params.has('contrast')) gradeOpts.contrast = +params.get('contrast');
+if (params.has('saturation')) gradeOpts.saturation = +params.get('saturation');
+const grade = createGrade(renderer, gradeOpts);
 // No shadow map for now: the ground and the sea both march their own sun shadows through the
 // height data, which a shadow map cannot match on 100 m faces drawn from thin triangles.
 // It comes back for small objects (steps, railings) in the descent.
@@ -77,68 +91,69 @@ renderer.shadowMap.enabled = false;
 stage.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
-const HORIZON = new THREE.Color(0xb9d3ea);
-scene.fog = new THREE.FogExp2(HORIZON, 0.00009);
 
-const camera = new THREE.PerspectiveCamera(57, 1, 0.3, 30000);
+// Far enough for the sea to reach the horizon from the air (118 km from 1 km up).
+const camera = new THREE.PerspectiveCamera(57, 1, 0.3, 400000);
 camera.rotation.order = 'YXZ';
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.enabled = false;
 
-const ZENITH = new THREE.Color(0x2566c8);
-const water = createWater();
-const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(20000, 32, 16),
-  new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
-    uniforms: {
-      uSunDir: water.uniforms.uSunDir, uSunIrr: water.uniforms.uSunIrr,
-      uZenith: water.uniforms.uZenith, uHorizon: water.uniforms.uHorizon,
-    },
-    // Pass the unnormalised position: normalising per pixel then gives the exact view
-    // direction, where interpolating per-vertex directions leaves bands on a coarse sphere.
-    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: `${SKY_GLSL}
-      varying vec3 vDir;
-      void main(){ gl_FragColor = vec4(skyRadiance(normalize(vDir)), 1.0);
-      // A little noise, so an 8-bit screen does not show the gradient as bands.
-      gl_FragColor.rgb += (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
-      #include <tonemapping_fragment>
-      #include <colorspace_fragment>
-      }`,
-  })
-);
-sky.renderOrder = -1;
+// One atmosphere for the sky, the haze, the sun's colour and the sky light (src/sky/).
+const atmoOpts = {};
+for (const k of ['haze', 'mieH', 'seaHaze', 'seaHazeH', 'mieG', 'angstrom', 'whiteBalance']) if (params.has(k)) atmoOpts[k] = +params.get(k);
+const atmosphere = createAtmosphere(renderer, atmoOpts);
+const water = createWater(atmosphere.uniforms, grade.uniforms);
+const skyDome = createSkyDome(atmosphere, grade.uniforms);
+const sky = skyDome.mesh;
 scene.add(sky);
 
-const hemi = new THREE.HemisphereLight(0xcfe3f2, 0x6f6b5c, 0.55);
-scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xfff3e0, 3.2);
+// The sky's light on the ground, as spherical harmonics from the atmosphere.
+const skyLight = new THREE.LightProbe();
+scene.add(skyLight);
+const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.target.position.set(100, 0, -100);
 scene.add(sun, sun.target);
 let shadowDirty = true;
 function placeSun() {
+  if (params.has('sun')) {
+    [state.sunAz, state.sunEl] = params.get('sun').split(',').map(Number);
+  } else {
+    const p = sunAtHour(state.hour);
+    state.sunAz = +p.azimuth.toFixed(2);
+    state.sunEl = +p.elevation.toFixed(2);
+  }
   const az = deg(state.sunAz), el = deg(state.sunEl), d = 2500, t = sun.target.position;
   sun.position.set(t.x + d * Math.cos(el) * Math.sin(az), d * Math.sin(el), t.z - d * Math.cos(el) * Math.cos(az));
+  atmosphere.setSun(sun.position.clone().sub(t));
+  relight();
   shadowDirty = true;
+}
+// The sun's colour at the ground and the sky light both come out of the atmosphere.
+function relight() {
+  const r = atmosphere.relight();
+  sun.color.copy(r.sunIrradiance);
+  sun.intensity = 1;
+  skyLight.sh.copy(atmosphere.sh);
+  water.uniforms.uSkyIrr.value.setRGB(...r.skyUp);
+  window.__light = { sun: r.sunIrradiance.toArray().map((v) => +v.toFixed(2)), skyUp: r.skyUp.map((v) => +v.toFixed(2)),
+    transmittance: r.Tsun.map((v) => +v.toFixed(3)), whiteBalance: r.wb.map((v) => +v.toFixed(3)), sunAz: state.sunAz, sunEl: state.sunEl };
 }
 placeSun();
 
 scene.add(water.mesh);
 water.uniforms.uDebug.value = +(params.get('debug') || 0);
 
-const terrain = createTerrain();
+const terrain = createTerrain(atmosphere.uniforms, grade.uniforms);
 scene.add(terrain.mesh);
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
 terrain.uniforms.uClay.value = state.clay ? 1 : 0;
-terrain.uniforms.uSunDirW = water.uniforms.uSunDir;   // same sun for ground and sea
 const sunShadow = createSunShadow(renderer);
 let texturesReady = false;
 let plants = null, plantsReady = false;
 fetch('assets/veg/impostors.json').then((r) => r.json())
-  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02']))
+  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02'], { ...atmosphere.uniforms, ...grade.uniforms }))
   .then((p) => {
     plants = p;
     plants.group.visible = !hidden.has('plants');
@@ -264,8 +279,8 @@ let outlineDirty = false;
 function drawOutline() {
   const w = renderer.domElement.width, h = renderer.domElement.height;
   const rt = new THREE.WebGLRenderTarget(w, h);
-  const keep = { fog: scene.fog, water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible };
-  scene.fog = null; water.mesh.visible = false; sky.visible = false;
+  const keep = { water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible };
+  water.mesh.visible = false; sky.visible = false;
   if (plants) plants.group.visible = false;
   scene.overrideMaterial = maskMaterial;
   renderer.setRenderTarget(rt);
@@ -276,7 +291,7 @@ function drawOutline() {
   renderer.toneMapping = tm;
   renderer.setRenderTarget(null);
   scene.overrideMaterial = null;
-  scene.fog = keep.fog; water.mesh.visible = keep.water; sky.visible = keep.sky;
+  water.mesh.visible = keep.water; sky.visible = keep.sky;
   if (plants) plants.group.visible = keep.plants;
   const px = new Uint8Array(w * h * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
@@ -403,9 +418,21 @@ wf.addColor(wp, 'reefAlbedo').name('seabed reef').onChange(wa);
 wf.close();
 
 const lf = gui.addFolder('Light and view');
-lf.add(state, 'sunAz', 0, 360, 1).name('sun heading').onChange(placeSun);
-lf.add(state, 'sunEl', 5, 90, 1).name('sun elevation').onChange(placeSun);
-lf.add(state, 'exposure', 0.3, 2, 0.01).onChange((v) => (renderer.toneMappingExposure = v));
+lf.add(state, 'hour', 6, 18.5, 0.05).name('time (6 Apr 2025)').onChange(placeSun);
+lf.add(state, 'sunAz').name('sun heading').disable().listen();
+lf.add(state, 'sunEl').name('sun elevation').disable().listen();
+const ap = atmosphere.params;
+const reair = () => { atmosphere.precompute(); relight(); };
+lf.add(ap, 'haze', 0, 30, 0.1).name('background haze').onChange(reair);
+lf.add(ap, 'seaHaze', 0, 0.4, 0.005).name('sea haze (/km)').onChange(reair);
+lf.add(ap, 'seaHazeH', 0.05, 1.5, 0.05).name('sea haze depth (km)').onChange(reair);
+lf.add(ap, 'mieG', 0.5, 0.95, 0.01).name('haze forward scatter').onChange(reair);
+lf.add(ap, 'angstrom', 0, 2.5, 0.05).name('haze blueness (Angstrom)').onChange(reair);
+lf.add(ap, 'whiteBalance', 0, 1, 0.01).name('white balance').onChange(relight);
+const gp = grade.params, ga = () => grade.apply();
+lf.add(gp, 'compensation', -3, 3, 0.05).name('exposure (stops)').onChange(ga);
+lf.add(gp, 'contrast', -0.5, 0.5, 0.01).onChange(ga);
+lf.add(gp, 'saturation', -0.5, 0.8, 0.01).onChange(ga);
 lf.add(state, 'contours').name('contours (C)').onChange((v) => (terrain.uniforms.uContours.value = v ? 1 : 0)).listen();
 lf.add(state, 'clay').name('clay (no materials)').onChange((v) => (terrain.uniforms.uClay.value = v ? 1 : 0));
 lf.close();
@@ -431,9 +458,14 @@ function status() {
 controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
 // Handles for poking at the scene from the console or a test script.
-window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt,
+window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt, atmosphere, grade,
   get plants() { return plants; },
   setTime(t) { simTime = t; },
+  // Region-by-region comparison with the photo (src/measure.js, capture.mjs --measure).
+  async measure(opts = {}) {
+    const { measure } = await import('./measure.js');
+    return measure({ renderer, scene, camera, refImg, labelUniform: grade.uniforms.uLabel, rois: SHOTS[state.shot].rois, ...opts });
+  },
   project(x, y, h) {
     const v = new THREE.Vector3(x, h ?? groundAt(x, y), -y).project(camera);
     return [+((v.x * 0.5 + 0.5) * 1400).toFixed(0), +((0.5 - v.y * 0.5) * (1400 / camera.aspect)).toFixed(0), +v.z.toFixed(3)];
@@ -466,9 +498,9 @@ renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
-  water.update(simTime, sun, hemi, ZENITH, HORIZON, camera);
+  water.update(simTime, camera);
   if (plants) {
-    plants.update(sun, hemi, hf?.extent);
+    plants.update(hf?.extent);
     plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;
   }
   if (shadowDirty && hf) {
@@ -476,7 +508,7 @@ renderer.setAnimationLoop(() => {
     water.uniforms.uSunShadow.value = sunShadow.bake(water.uniforms.uData.value, hf.extent, water.uniforms.uSunDir.value, hf.N);
   }
   if (state.free) controls.update();
-  sky.position.copy(camera.position);
+  atmosphere.update(camera);
   renderer.render(scene, camera);
   if (state.outline && outlineDirty && hf) { outlineDirty = false; drawOutline(); }
   // Ready for a capture once the terrain and the textures are in and a few frames have run.

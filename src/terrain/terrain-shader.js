@@ -35,6 +35,8 @@ float tShadow = 1.0;
 float tAO = 1.0;
 float tRough = 0.9;
 vec3 tNormalW = vec3(0.0, 1.0, 0.0);
+float tSandW = 0.0;   // how much of this pixel is sand, and ground cover (for the labels)
+float tVegW = 0.0;
 
 // Hash from Dave Hoskins, "Hash without Sine" (MIT).
 float th12(vec2 p) {
@@ -145,6 +147,8 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   veg = max(veg, ledges);
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
   veg *= 1.0 - sand;
+  tSandW = sand;
+  tVegW = veg;
 
   float sea = 1.0 - sandZone;
   float notch = sea * (1.0 - smoothstep(4.5, 6.5, h + (n1 - 0.5) * 2.0));
@@ -233,6 +237,17 @@ export const TERRAIN_COLOR = /* glsl */ `
   float tFp = max(length(fwidth(vWorldPos)), 0.005);
   diffuseColor.rgb = terrainSurface(vWorldPos, tN, tFp);
   tShadow = groundShadow(vWorldPos, tN);
+`;
+
+// Labels for the measuring tool: class (sand 3, rock 4, ground cover 5) and whether the sun
+// reaches it.
+export const TERRAIN_LABEL = /* glsl */ `
+  if (uLabel > 0.5) {
+    float cls = tSandW > 0.5 ? 3.0 : (tVegW > 0.5 ? 5.0 : 4.0);
+    float lit = tShadow * max(dot(tNormalW, uSunDirW), 0.0) > 0.3 ? 1.0 : 0.0;
+    float dist = log2(max(distance(vWorldPos, cameraPosition), 1.0)) / 20.0;
+    gl_FragColor = vec4(cls / 255.0, dist, lit, 1.0);
+  }
 `;
 
 // The normal comes from the scanned maps, already in world space.

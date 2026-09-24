@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { IMPOSTOR, HEMI_OCT_GLSL } from './impostor-common.js';
 import { STRIDE } from './scatter.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
+import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
 
 const VERT = /* glsl */ `
 ${HEMI_OCT_GLSL}
@@ -19,8 +20,8 @@ varying vec3 vWorld;
 varying float vYaw;
 varying float vTint;
 varying vec3 vFrameDir;       // world direction the chosen frame was baked from
+${AERIAL_VERT}
 #include <common>
-#include <fog_pars_vertex>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
@@ -46,18 +47,16 @@ void main() {
   vFrameDir = rotY(d, yaw);
   vec4 mvPosition = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mvPosition;
-  #include <fog_vertex>
+  aerialVertex(wp);
 }
 `;
 
 const FRAG = /* glsl */ `
+${SKY_PARS}
+${AERIAL_FRAG_PARS}
 uniform sampler2D uColor;
 uniform sampler2D uData;
 uniform vec3 uExtent;
-uniform vec3 uSunDir;
-uniform vec3 uSunIrr;
-uniform vec3 uSkyIrr;
-uniform vec3 uGroundIrr;
 varying vec2 vUv;
 varying vec3 vWorld;
 varying float vYaw;
@@ -65,7 +64,6 @@ varying float vTint;
 varying vec3 vFrameDir;
 ${SUN_SHADOW_GLSL}
 #include <common>
-#include <fog_pars_fragment>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 vec3 octDecode(vec2 e) {
@@ -96,17 +94,21 @@ void main() {
   float diffuse = max(NdL * 0.7 + 0.3, 0.0);
   float through = pow(max(dot(-V, uSunDir), 0.0), 3.0) * 0.6;
   vec3 sun = uSunIrr * sh * (diffuse * mix(0.35, 1.0, crown) + through * crown * vec3(1.0, 1.1, 0.6));
-  vec3 sky = mix(uGroundIrr, uSkyIrr, N.y * 0.5 + 0.5) * crown;
-  vec3 col = albedo / PI * (sun + sky * PI * 0.55);
+  // Sky light from the atmosphere, from the direction this bit of canopy faces.
+  vec3 sky = skyIrradiance(N) * crown;
+  vec3 col = albedo / PI * (sun + sky);
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col * vApT + vApIns, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
-  #include <fog_fragment>
+  if (uLabel > 0.5) {
+    float dist = log2(max(distance(P, cameraPosition), 1.0)) / 20.0;
+    gl_FragColor = vec4(6.0 / 255.0, dist, sh * max(NdL, 0.0) > 0.3 ? 1.0 : 0.0, 1.0);
+  }
 }
 `;
 
-export async function createPlants(index, ids, base = 'assets/veg/') {
+export async function createPlants(index, ids, lightUniforms = {}, base = 'assets/veg/') {
   const loader = new THREE.ImageBitmapLoader();
   // No premultiplication: the data atlas keeps shading in alpha, and the colour atlas keeps
   // colour in its empty pixels so mipmaps do not darken the leaf edges.
@@ -122,12 +124,10 @@ export async function createPlants(index, ids, base = 'assets/veg/') {
     res(t);
   }, undefined, rej));
 
+  // The sun, sky light and haze are the atmosphere's uniforms, shared (src/sky/).
   const shared = {
+    ...lightUniforms,
     uExtent: { value: new THREE.Vector3() },
-    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
-    uSunIrr: { value: new THREE.Color() },
-    uSkyIrr: { value: new THREE.Color() },
-    uGroundIrr: { value: new THREE.Color(0.25, 0.24, 0.18) },
     uSunShadow: { value: null },
   };
   const quad = new THREE.PlaneGeometry(2, 2);
@@ -135,11 +135,11 @@ export async function createPlants(index, ids, base = 'assets/veg/') {
     const meta = index[id];
     const [color, data] = await Promise.all([load(`${base}${id}_color.png`), load(`${base}${id}_data.png`)]);
     const material = new THREE.ShaderMaterial({
-      uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+      uniforms: {
         uColor: { value: color }, uData: { value: data },
         uCenter: { value: new THREE.Vector3(...meta.center) }, uRadius: { value: meta.radius }, uGrid: { value: meta.grid },
-      }]),
-      vertexShader: VERT, fragmentShader: FRAG, fog: true,
+      },
+      vertexShader: VERT, fragmentShader: FRAG,
       alphaToCoverage: true,
     });
     Object.assign(material.uniforms, shared);
@@ -173,10 +173,7 @@ export async function createPlants(index, ids, base = 'assets/veg/') {
         s.geo.instanceCount = posScale.length / 4;
       });
     },
-    update(sun, hemi, extent) {
-      shared.uSunDir.value.copy(sun.position).sub(sun.target.position).normalize();
-      shared.uSunIrr.value.copy(sun.color).multiplyScalar(sun.intensity);
-      shared.uSkyIrr.value.copy(hemi.color).multiplyScalar(hemi.intensity);
+    update(extent) {
       if (extent) shared.uExtent.value.set(extent.x0, extent.y0, extent.size);
     },
   };

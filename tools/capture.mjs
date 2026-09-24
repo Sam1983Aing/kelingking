@@ -12,6 +12,9 @@
 //   node tools/capture.mjs --hero                   the hero frames (src/shots.js), see tools/hero.mjs
 //   node tools/capture.mjs --out=some/dir --jpeg    write elsewhere, as JPEG
 //   node tools/capture.mjs --bench                  render time per shot (with --out, also bench.json)
+//   node tools/capture.mjs viewpoint --measure      average colour per region, render against photo
+//   node tools/capture.mjs viewpoint --eval="window.__light"   print something from the page
+//   node tools/capture.mjs viewpoint --set="hour=10;haze=4;ev=-0.5"  any page switches (see main.js)
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
 // `python3 -m http.server 5178`). Output goes to captures/<shot>[-compare].png
@@ -27,7 +30,7 @@ const args = process.argv.slice(2);
 const flag = (name, dflt) => {
   const a = args.find((x) => x === `--${name}` || x.startsWith(`--${name}=`));
   if (!a) return dflt;
-  return a.includes('=') ? a.split('=')[1] : true;
+  return a.includes('=') ? a.slice(a.indexOf('=') + 1) : true;
 };
 const BASE = flag('url', 'http://localhost:5178/');
 const WIDTH = +flag('width', 1400);
@@ -99,6 +102,7 @@ try {
     if (flag('debug')) q.set('debug', flag('debug'));
     if (flag('hide')) q.set('hide', flag('hide'));
     if (flag('clay')) q.set('clay', '1');
+    if (flag('set')) for (const kv of String(flag('set')).split(';')) { const [k, ...v] = kv.split('='); q.set(k, v.join('=')); }
 
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
@@ -139,6 +143,30 @@ try {
       benchResults[name] = { ms: +o.all.toFixed(1), noGround: +o.noGround.toFixed(1), noSea: +o.noSea.toFixed(1), mp: +o.mp.toFixed(2) };
       console.log(`${name.padEnd(12)} ${f(o.all)} ms (${(1000 / o.all).toFixed(0).padStart(3)} fps) at ${o.mp.toFixed(2)} MP   no ground ${f(o.noGround)}   no sea ${f(o.noSea)}`
         + Object.keys(o).filter((k) => k.startsWith('SKIP')).map((k) => `   ${k.slice(5).toLowerCase()} ${f(o[k])}`).join(''));
+      await send('Target.closeTarget', { targetId });
+      continue;
+    }
+    if (flag('eval')) {
+      // Evaluate an expression in the page once it is ready and print the result.
+      const r = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: String(flag('eval')) }, sessionId);
+      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+      console.log(`${name}:`, JSON.stringify(r.result.value, null, 1));
+      await send('Target.closeTarget', { targetId });
+      continue;
+    }
+    if (flag('measure')) {
+      const r = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: 'window.__app.measure()' }, sessionId);
+      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+      const rows = r.result.value;
+      const light = (await send('Runtime.evaluate', { returnByValue: true, expression: 'window.__light' }, sessionId)).result.value;
+      const f = (v) => String(v).padStart(4);
+      console.log(`${name}: region              pixels   render sRGB      photo sRGB     render/photo       scene kcd/m2`);
+      for (const row of rows) {
+        const ratio = row.render.lum / row.photo.lum;
+        console.log(`  ${row.name.padEnd(18)} ${String(row.n).padStart(7)}   ${row.render.srgb.map(f).join('')}   ${row.photo.srgb.map(f).join('')}   ${(Math.log2(ratio) >= 0 ? '+' : '') + Math.log2(ratio).toFixed(2)} stops   ${row.scene.lum.toFixed(2).padStart(6)}`);
+      }
+      if (light) console.log('  light:', JSON.stringify(light));
+      writeFileSync(join(OUTDIR, `${name}-measure.json`), JSON.stringify({ rows, light }, null, 1));
       await send('Target.closeTarget', { targetId });
       continue;
     }
