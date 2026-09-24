@@ -37,6 +37,9 @@ float tRough = 0.9;
 vec3 tNormalW = vec3(0.0, 1.0, 0.0);
 float tSandW = 0.0;   // how much of this pixel is sand, and ground cover (for the labels)
 float tVegW = 0.0;
+vec3 tBounce = vec3(0.0);   // light bounced up from the ground below (irradiance)
+
+
 
 // Hash from Dave Hoskins, "Hash without Sine" (MIT).
 float th12(vec2 p) {
@@ -71,6 +74,30 @@ vec4 tData(vec2 g) {
 float groundShadow(vec3 P, vec3 N) {
   if (dot(N, uSunDirW) < -0.05) return 0.0;   // facing away, the lighting is dark anyway
   return bakedShadow(P + N * (0.6 + 3.0 * (1.0 - abs(N.y))), 0.3);
+}
+
+uniform vec3 uBounceAlb[3];   // what the ground below sends back: sea, sand, land (albedo)
+
+// Light bounced up from the ground below and in front of a surface: the sand under the
+// overhang lights its ceiling warm, the sea lights the cliff foot blue-grey. It looks down
+// and out along the normal, reads what is there from the data texture, whether the sun
+// reaches it, and treats it as a flat ground filling the lower half of the surface's view.
+vec3 groundBounce(vec3 P, vec3 N) {
+  float down = 0.5 * (1.0 - N.y);
+  if (down < 0.02) return vec3(0.0);
+  vec2 g = vec2(P.x, -P.z);
+  vec2 hz = vec2(N.x, -N.z);
+  float lh = length(hz);
+  float here = tData(g).r;
+  float above = max(P.y - max(here, 0.0), 0.0);
+  vec2 q = g + (lh > 1e-3 ? hz / lh : vec2(0.0)) * clamp(above * 0.7 + 2.0, 2.0, 60.0);
+  vec4 D = tData(q);
+  float sea = smoothstep(-0.5, 1.0, D.g);
+  float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
+  vec3 alb = mix(mix(uBounceAlb[2], uBounceAlb[1], sandW), uBounceAlb[0], sea);
+  float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
+  vec3 E = uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp;
+  return alb * E * down;
 }
 
 // ---------------------------------------------------------------- texture sampling
@@ -237,6 +264,7 @@ export const TERRAIN_COLOR = /* glsl */ `
   float tFp = max(length(fwidth(vWorldPos)), 0.005);
   diffuseColor.rgb = terrainSurface(vWorldPos, tN, tFp);
   tShadow = groundShadow(vWorldPos, tN);
+  tBounce = groundBounce(vWorldPos, tNormalW);
 `;
 
 // Labels for the measuring tool: class (sand 3, rock 4, ground cover 5) and whether the sun

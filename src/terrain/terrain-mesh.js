@@ -9,6 +9,9 @@ import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL } from './te
 import { SURFACES, surfaceGains } from './surfaces.js';
 import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
 
+const srgbToLinear = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+const surfaceAlbedo = (id) => new THREE.Vector3(...SURFACES.find((s) => s.id === id).target.map(srgbToLinear));
+
 export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -29,6 +32,9 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     uSurfMask: { value: null },
     uGain: { value: surfaceGains().map((g) => new THREE.Vector3(...g)) },
     uTile: { value: SURFACES.map((s) => s.tile) },
+    // Ground that bounces light up: sea (with the sky it reflects), and the sand and scrub
+    // ground as the surfaces themselves are coloured (surfaces.js).
+    uBounceAlb: { value: [new THREE.Vector3(0.03, 0.05, 0.07), surfaceAlbedo('aerial_beach_01'), surfaceAlbedo('aerial_grass_rock')] },
   };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, atmosphereUniforms, gradeUniforms, uniforms);
@@ -45,7 +51,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
       // normal is built from the outward vertex normal, so it replaces three's flipped one.
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + TERRAIN_NORMAL)
       .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;')
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse += tBounce * BRDF_Lambert(material.diffuseColor);\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
       // The haze between the camera and the ground, in linear light before the tone curve.
       .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vApT + vApIns;\n#include <tonemapping_fragment>')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + TERRAIN_LABEL);

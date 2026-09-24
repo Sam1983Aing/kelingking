@@ -19,6 +19,7 @@
 //   sun=az,el          or set the sun directly, compass heading and elevation in degrees
 //   haze=6             aerosol amount (1 = clear continental air)
 //   ev=0               exposure compensation in stops
+//   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
 //
 // Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
@@ -31,6 +32,7 @@ import { SHOTS } from './shots.js';
 import { createWater } from './water/water.js';
 import { createAtmosphere } from './sky/atmosphere.js';
 import { createSkyDome } from './sky/sky-dome.js';
+import { createClouds } from './sky/clouds.js';
 import { PHOTO_DAY, PHOTO_HOUR, sunAtHour } from './sky/sun.js';
 import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
@@ -102,12 +104,18 @@ controls.enabled = false;
 
 // One atmosphere for the sky, the haze, the sun's colour and the sky light (src/sky/).
 const atmoOpts = {};
-for (const k of ['haze', 'mieH', 'seaHaze', 'seaHazeH', 'mieG', 'angstrom', 'whiteBalance']) if (params.has(k)) atmoOpts[k] = +params.get(k);
+for (const k of ['haze', 'mieH', 'seaHaze', 'seaHazeH', 'mieG', 'angstrom', 'whiteBalance', 'wbSky', 'mieBack']) if (params.has(k)) atmoOpts[k] = +params.get(k);
 const atmosphere = createAtmosphere(renderer, atmoOpts);
 const water = createWater(atmosphere.uniforms, grade.uniforms);
 const skyDome = createSkyDome(atmosphere, grade.uniforms);
 const sky = skyDome.mesh;
 scene.add(sky);
+// Fair-weather cumulus, marched at half resolution and blended in by the sky (src/sky/clouds.js).
+const cloudOpts = {};
+for (const k of ['coverage', 'density', 'clearRadius', 'seed']) if (params.has('clouds.' + k)) cloudOpts[k] = +params.get('clouds.' + k);
+const clouds = createClouds(renderer, atmosphere, cloudOpts);
+skyDome.material.uniforms.uClouds.value = clouds.texture;
+skyDome.material.uniforms.uHasClouds.value = params.get('clouds') === '0' ? 0 : 1;
 
 // The sky's light on the ground, as spherical harmonics from the atmosphere.
 const skyLight = new THREE.LightProbe();
@@ -135,7 +143,9 @@ function relight() {
   const r = atmosphere.relight();
   sun.color.copy(r.sunIrradiance);
   sun.intensity = 1;
-  skyLight.sh.copy(atmosphere.sh);
+  // The ground works out the light bounced up from what lies below it (sand, sea, scrub)
+  // itself, so its probe carries the sky alone.
+  skyLight.sh.copy(atmosphere.shSky);
   water.uniforms.uSkyIrr.value.setRGB(...r.skyUp);
   window.__light = { sun: r.sunIrradiance.toArray().map((v) => +v.toFixed(2)), skyUp: r.skyUp.map((v) => +v.toFixed(2)),
     transmittance: r.Tsun.map((v) => +v.toFixed(3)), whiteBalance: r.wb.map((v) => +v.toFixed(3)), sunAz: state.sunAz, sunEl: state.sunEl };
@@ -147,6 +157,7 @@ water.uniforms.uDebug.value = +(params.get('debug') || 0);
 
 const terrain = createTerrain(atmosphere.uniforms, grade.uniforms);
 scene.add(terrain.mesh);
+if (params.get('bounce') === '0') terrain.uniforms.uBounceAlb.value.forEach((v) => v.set(0, 0, 0));
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
 terrain.uniforms.uClay.value = state.clay ? 1 : 0;
 const sunShadow = createSunShadow(renderer);
@@ -336,6 +347,9 @@ function resize() {
   Object.assign(refImg.style, { width: w + 'px', height: h + 'px', left: (state.compare ? w : 0) + 'px' });
   Object.assign(outlineCanvas.style, { width: w + 'px', height: h + 'px' });
   applyOverlay();
+  // A capture waits for a few whole frames at the final size (the clouds and haze tables
+  // follow the drawing buffer).
+  if (terrainFrames > 0) terrainFrames = 0;
 }
 addEventListener('resize', resize);
 
@@ -429,6 +443,16 @@ lf.add(ap, 'seaHazeH', 0.05, 1.5, 0.05).name('sea haze depth (km)').onChange(rea
 lf.add(ap, 'mieG', 0.5, 0.95, 0.01).name('haze forward scatter').onChange(reair);
 lf.add(ap, 'angstrom', 0, 2.5, 0.05).name('haze blueness (Angstrom)').onChange(reair);
 lf.add(ap, 'whiteBalance', 0, 1, 0.01).name('white balance').onChange(relight);
+lf.add(ap, 'wbSky', 0, 1, 0.01).name('balance on sky too').onChange(relight);
+const cf = gui.addFolder('Clouds').close();
+const cp = clouds.params, ca = () => clouds.applyParams();
+cf.add(skyDome.material.uniforms.uHasClouds, 'value', 0, 1, 1).name('clouds');
+cf.add(cp, 'coverage', 0, 1, 0.01).onChange(ca);
+cf.add(cp, 'density', 5, 150, 1).name('density (/km)').onChange(ca);
+cf.add(cp, 'base', 0.3, 2, 0.05).name('base (km)').onChange(ca);
+cf.add(cp, 'top', 0.8, 5, 0.05).name('top (km)').onChange(ca);
+cf.add(cp, 'clearRadius', 0, 20, 0.5).name('clear over island (km)').onChange(ca);
+cf.add(cp, 'seed', 1, 50, 1).onChange(ca);
 const gp = grade.params, ga = () => grade.apply();
 lf.add(gp, 'compensation', -3, 3, 0.05).name('exposure (stops)').onChange(ga);
 lf.add(gp, 'contrast', -0.5, 0.5, 0.01).onChange(ga);
@@ -458,7 +482,7 @@ function status() {
 controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
 // Handles for poking at the scene from the console or a test script.
-window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt, atmosphere, grade,
+window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt, atmosphere, grade, clouds,
   get plants() { return plants; },
   setTime(t) { simTime = t; },
   // Region-by-region comparison with the photo (src/measure.js, capture.mjs --measure).
@@ -494,6 +518,15 @@ function governResolution(dt) {
   }
 }
 
+// Everything a frame draws: the haze froxels and sky view, the clouds, then the scene. The
+// bench in capture.mjs times this.
+function renderFrame() {
+  atmosphere.update(camera);
+  if (sky.visible && skyDome.material.uniforms.uHasClouds.value) clouds.render(simTime);
+  renderer.render(scene, camera);
+}
+window.__app.renderFrame = renderFrame;
+
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   governResolution(dt);
@@ -508,8 +541,7 @@ renderer.setAnimationLoop(() => {
     water.uniforms.uSunShadow.value = sunShadow.bake(water.uniforms.uData.value, hf.extent, water.uniforms.uSunDir.value, hf.N);
   }
   if (state.free) controls.update();
-  atmosphere.update(camera);
-  renderer.render(scene, camera);
+  renderFrame();
   if (state.outline && outlineDirty && hf) { outlineDirty = false; drawOutline(); }
   // Ready for a capture once the terrain and the textures are in and a few frames have run.
   if (terrainFrames >= 0 && texturesReady && plantsReady) terrainFrames++;

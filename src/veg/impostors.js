@@ -90,13 +90,40 @@ void main() {
   vec3 V = normalize(cameraPosition - P);
   float sh = bakedShadow(P, 0.5);
   float NdL = dot(N, uSunDir);
-  // Leaves scatter light: wrap the diffuse term, and let sun through when looking into it.
-  float diffuse = max(NdL * 0.7 + 0.3, 0.0);
+  float NoV = max(dot(N, V), 0.05);
+  // A leaf reflects light on the side it is lit from and passes some through to the other
+  // side, yellower (chlorophyll lets green and a little red through). TRANS is how much
+  // gets through compared with what is reflected, about 0.6 for thin tropical leaves.
+  const float TRANS = 0.6;
+  const vec3 TRANS_TINT = vec3(1.05, 1.1, 0.55);
+  float front = max(NdL, 0.0);
+  float back = max(-NdL, 0.0);
+  // Looking toward the sun through the canopy: forward scattering through the leaves.
   float through = pow(max(dot(-V, uSunDir), 0.0), 3.0) * 0.6;
-  vec3 sun = uSunIrr * sh * (diffuse * mix(0.35, 1.0, crown) + through * crown * vec3(1.0, 1.1, 0.6));
-  // Sky light from the atmosphere, from the direction this bit of canopy faces.
-  vec3 sky = skyIrradiance(N) * crown;
-  vec3 col = albedo / PI * (sun + sky);
+  vec3 sunD = uSunIrr * sh * (front * mix(0.35, 1.0, crown) + (back * TRANS * mix(0.35, 1.0, crown) + through * crown) * TRANS_TINT);
+  // Sky light from the atmosphere on the side the leaf faces, and some through from behind.
+  vec3 sky = (skyIrradiance(N) + skyIrradiance(-N) * TRANS * TRANS_TINT) * crown;
+  vec3 col = albedo / PI * (sunD + sky);
+  // The waxy cuticle: a dielectric sheen (index about 1.45) that mirrors the sky and
+  // catches the sun, whatever the leaf's colour. Rough, because a canopy is thousands of
+  // leaves at slightly different angles.
+  const float ROUGH = 0.45;
+  float a2 = ROUGH * ROUGH * ROUGH * ROUGH;
+  vec3 Hh = normalize(V + uSunDir);
+  float NoH = max(dot(N, Hh), 0.0);
+  float Dg = a2 / (PI * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
+  float F0 = 0.034;
+  float Fs = F0 + (1.0 - F0) * pow(1.0 - max(dot(Hh, V), 0.0), 5.0);
+  float k = ROUGH * ROUGH * 0.5;
+  float NoLc = max(NdL, 0.0);
+  float Gs = (NoLc / (NoLc * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
+  col += uSunIrr * sh * Dg * Fs * Gs / (4.0 * NoV) * mix(0.4, 1.0, crown);
+  // Reflected sky only where the mirror direction points up and out of the canopy;
+  // downward it sees the ground and other leaves (their light is in the diffuse terms).
+  float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
+  vec3 R = reflect(-V, N);
+  float open = smoothstep(-0.05, 0.3, R.y) * crown * crown * crown;
+  col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open;
 
   gl_FragColor = vec4(col * vApT + vApIns, 1.0);
   #include <tonemapping_fragment>

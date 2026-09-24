@@ -24,6 +24,7 @@ uniform float uSeaH;
 uniform float uMieAbs;      // aerosol absorption as a fraction of its scattering
 uniform vec3 uMieSpectral;  // aerosol scattering per channel relative to 550 nm (Angstrom law)
 uniform float uMieG;        // Mie asymmetry: how forward the haze scatters
+uniform float uMieBack;     // share of a backward lobe (real sea salt scatters more to the side than one lobe gives)
 uniform vec3 uOzone;        // ozone absorption at its peak, per km
 uniform vec3 uGroundAlbedo;
 
@@ -39,10 +40,15 @@ void atmoMedium(float h, out vec3 scatR, out vec3 scatM, out vec3 ext) {
 }
 
 float rayleighPhase(float c) { return 3.0 / (16.0 * A_PI) * (1.0 + c * c); }
-// Cornette-Shanks, a Henyey-Greenstein with the right shape at the back.
+// Cornette-Shanks (a Henyey-Greenstein with the right shape at the back), plus a weak
+// backward Henyey-Greenstein lobe: measured aerosol phase functions have more side and back
+// scattering than a single lobe with the same asymmetry.
 float miePhase(float c, float g) {
   float g2 = g * g;
-  return 3.0 / (8.0 * A_PI) * ((1.0 - g2) * (1.0 + c * c)) / ((2.0 + g2) * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5));
+  float cs = 3.0 / (8.0 * A_PI) * ((1.0 - g2) * (1.0 + c * c)) / ((2.0 + g2) * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5));
+  const float gb = -0.3;
+  float hb = (1.0 - gb * gb) / (4.0 * A_PI * pow(1.0 + gb * gb - 2.0 * gb * c, 1.5));
+  return mix(cs, hb, uMieBack);
 }
 
 // Nearest positive hit of a ray with a sphere centred on the planet, or -1.
@@ -276,7 +282,7 @@ void main() {
 
 // Aerial perspective: 32 x 32 screen tiles x AP_SLICES distances, stored as slices side by
 // side in a 2D atlas (AP_COLS across). Slice k sits at distance uApMaxKm * ((k + 0.5) / N)^2,
-// so the near slices are metres apart and the far ones kilometres.
+// so the near slices are tens of metres apart and the far ones kilometres.
 export const AP_LAYOUT = /* glsl */ `
 const float AP_RES = 32.0;
 const float AP_SLICES = 32.0;
@@ -328,7 +334,7 @@ void main() {
 
 // ---------------------------------------------------------------- used by the scene
 
-const AERIAL_FN = /* glsl */ `
+export const AERIAL_FN = /* glsl */ `
 vec3 aerialSlice(float k, vec2 uv) {
   vec2 tile = vec2(mod(k, AP_COLS), floor(k / AP_COLS));
   vec2 px = tile * AP_RES + clamp(uv * AP_RES, 0.5, AP_RES - 0.5);
@@ -369,6 +375,7 @@ uniform vec3 uCamPos;       // world position of the camera (m)
 uniform float uApMaxKm;
 uniform vec2 uResolution;   // drawing buffer size in pixels
 uniform vec3 uSkySH[9];     // sky and ground irradiance as spherical harmonics (three.js basis)
+uniform vec3 uSkyUp;        // sky light alone on flat ground
 uniform float uLabel;       // > 0: draw flat class labels instead of colour (src/measure.js)
 
 // Sky radiance in a direction, sun disc excluded.

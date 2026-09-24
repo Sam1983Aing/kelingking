@@ -124,7 +124,9 @@ try {
       // frame-to-frame timing in headless Chrome mostly measures the compositor.)
       const r = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `(async () => {
         const A = window.__app, R = A.renderer, gl = R.getContext(), px = new Uint8Array(4);
-        const once = () => { R.render(A.scene, A.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+        // The whole frame where the page says what that is (v2 on: sky tables and clouds too).
+        const draw = A.renderFrame ?? (() => R.render(A.scene, A.camera));
+        const once = () => { draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
         const time = () => { for (let i = 0; i < 3; i++) once(); const t0 = performance.now(); for (let i = 0; i < 15; i++) once(); return (performance.now() - t0) / 15; };
         await new Promise((r) => setTimeout(r, 500));
         const out = { all: time() };

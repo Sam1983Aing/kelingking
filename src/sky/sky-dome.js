@@ -23,7 +23,26 @@ void main() {
 
 const FRAG = /* glsl */ `
 ${SKY_PARS}
+uniform sampler2D uClouds;   // clouds at half resolution: rgb their light and haze, a what passes
+uniform float uHasClouds;
 varying vec3 vDir;
+// The clouds are marched at half resolution; a bicubic B-spline read (four bilinear taps)
+// hides the texel grid along their edges.
+vec4 cloudsAt(vec2 uv) {
+  vec2 size = vec2(textureSize(uClouds, 0));
+  vec2 p = uv * size - 0.5;
+  vec2 f = fract(p);
+  vec2 i = floor(p);
+  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
+  vec2 w3 = f * f * f / 6.0;
+  vec2 w2 = 1.0 - w0 - w1 - w3;
+  vec2 g0 = w0 + w1, g1 = w2 + w3;
+  vec2 h0 = (w1 / g0 - 1.0 + i + 0.5) / size;
+  vec2 h1 = (w3 / g1 + 1.0 + i + 0.5) / size;
+  return g0.y * (g0.x * texture(uClouds, vec2(h0.x, h0.y)) + g1.x * texture(uClouds, vec2(h1.x, h0.y)))
+       + g1.y * (g0.x * texture(uClouds, vec2(h0.x, h1.y)) + g1.x * texture(uClouds, vec2(h1.x, h1.y)));
+}
 void main() {
   vec3 d = normalize(vDir);
   vec3 col = skyRadiance(d);
@@ -32,6 +51,10 @@ void main() {
   if (c > uSunCosAngle) {
     float mu = sqrt(max(1.0 - (1.0 - c) / (1.0 - uSunCosAngle), 0.0));
     col += uSunRadiance * (1.0 - 0.6 * (1.0 - pow(mu, 0.8)));
+  }
+  if (uHasClouds > 0.5) {
+    vec4 cl = cloudsAt(gl_FragCoord.xy / uResolution);
+    col = col * cl.a + cl.rgb;
   }
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -45,7 +68,7 @@ void main() {
 
 export function createSkyDome(atmosphere, extraUniforms = {}) {
   const material = new THREE.ShaderMaterial({
-    uniforms: { ...atmosphere.uniforms, ...extraUniforms },
+    uniforms: { ...atmosphere.uniforms, ...extraUniforms, uClouds: { value: null }, uHasClouds: { value: 0 } },
     vertexShader: VERT,
     fragmentShader: FRAG,
     depthWrite: false,
