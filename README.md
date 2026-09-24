@@ -18,8 +18,8 @@ moving on. The plan, the rules and a brief per version are in
 | Version | Element | Status |
 |---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | done |
-| v2 | Light and atmosphere | ready for review |
-| v3 | Rock | |
+| v2 | Light and atmosphere | done |
+| v3 | Rock | next |
 | v4 | Water | |
 | v5 | Sand and the waterline | |
 | v6 | Trail and stairs | |
@@ -159,6 +159,7 @@ node tools/capture.mjs viewpoint --outline     # render edges traced over the ph
 node tools/capture.mjs --overlay=0.5           # every shot, 50% blend
 node tools/capture.mjs beach --t=17            # freeze the sea at 17 s
 node tools/capture.mjs beach --clip=9          # 9 s clip to captures/beach.mp4 (needs ffmpeg)
+node tools/capture.mjs viewpoint --clip=10 --hours=6.5:17.8   # sunrise to sunset instead
 node tools/capture.mjs shoreBreak --debug=5    # water debug views 1 to 5
 node tools/capture.mjs --bench                 # render time per shot
 node tools/capture.mjs viewpoint --measure     # average colour per region, render and photo

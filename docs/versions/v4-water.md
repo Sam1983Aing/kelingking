@@ -49,4 +49,26 @@ of `src/terrain/layout.js` (`murk`, `D`, `L`).
 
 ## Found by other versions
 
-(nothing yet)
+**From v2 (light).**
+
+- Everything is in physical units now: sun about 110 klux at the ground, sky light about 10
+  klux on flat ground, radiance in kcd/m2. The exposure (EV100 14.2, from the photo's EXIF)
+  turns 1 kcd/m2 into about 0.08 before the tone curve. The water's colour settings were tuned
+  under v1's dimmer light and now give about twice the photo's blue from under the surface.
+  A throwaway test with `scatter` at 0.45 of its value put the mid sea within 0.2 stops of
+  the viewpoint photo, and the sea 1.5 to 15 km out within 0.1. The shallows (turquoise) come
+  out 0.7 stops too bright and the near sea (under 400 m) 0.8. `capture.mjs viewpoint
+  --measure` and `eastCove --measure` give these per region.
+- The water now reads its light from the atmosphere: `skyRadiance(dir)` (sky view table),
+  `uSunIrr`, `uSkyIrr` (sky light on flat water), the per-vertex haze (`vApT`, `vApIns`) and
+  `cloudShadow()`. Keep those inputs.
+- Clouds are not in the sea's reflection (they are marched in screen space). If the far sea
+  needs them, a low-resolution cloud panorama from `src/sky/clouds.js` (it has the weather map
+  and the density function) would do.
+- Far out, `Rd.y = abs(Rd.y) + ch.z * 1.4` and the Fresnel cut at grazing angles make the far
+  sea reflect the deep blue sky 10 to 20 degrees up. The sea beyond 15 km measures 0.6 stops
+  darker than the photo, mostly the horizon haze (v2's), partly this. Worth a look with the
+  new sky.
+- The sea surface curves with the Earth beyond 2 km from the camera (water vertex shader), so
+  the horizon sits where it really is. Keep it.
+

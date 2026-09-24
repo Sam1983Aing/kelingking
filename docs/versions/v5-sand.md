@@ -46,4 +46,16 @@ settings in `src/terrain/layout.js`, the swash parts of `src/water/water-shader.
 
 ## Found by other versions
 
-(nothing yet)
+**From v2 (light).**
+
+- Under the calibrated light the sand comes out 0.3 to 0.5 stops brighter than the viewpoint
+  photo. The `aerial_beach_01` target in `surfaces.js` (0.9, 0.86, 0.78 sRGB, about 0.79
+  reflectance) was picked under v1's dimmer light. A throwaway test at 0.62 of it (about 0.49)
+  put the sunlit sand within 0.13 stops of the photo. The photo's sand is also warmer, (239,
+  222, 188) against the render's (242, 232, 212).
+- `beach-white-sand-cliff.jpg` is film, warm and washed out: match its brightness, not its
+  colour. The same exposure is used for every shot now (the photo's EV100 14.2), so the beach
+  cannot be brightened on its own.
+- The sand's colour also sets the light it bounces onto the cliff foot and the overhang
+  (`uBounceAlb` reads the sand target from `surfaces.js`), so changing it changes those.
+

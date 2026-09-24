@@ -51,4 +51,20 @@ of `src/terrain/terrain-shader.js`, the `plants` settings in `src/terrain/layout
 
 ## Found by other versions
 
-(nothing yet)
+**From v2 (light).**
+
+- The sky light that reaches the plants is now physical: about 10% of the sun on a surface
+  facing up (it was about 27% in v1, which was too much). So shaded foliage got darker, and
+  the dark crowns are mostly the leaf colour, not the light.
+- Measured on `viewpoint`: sunlit canopy averages about 1.7 kcd/m2, an effective reflectance
+  of about 0.045, against about 0.06 for the photo's scrub (the `plants, sun` region reads
+  about 1 stop dark). The leaves in the atlases average about 0.04 linear reflectance (times
+  1.45 in the shader); real leaves are 0.08 to 0.12 in the green.
+- v2 changed how the impostors take light (`impostors.js`): light through the leaves from
+  behind (TRANS 0.6, yellower), a waxy sheen (GGX, F0 0.034, roughness 0.45) that mirrors the
+  sky and catches the sun, and sky light from the spherical harmonics on the side each leaf
+  faces. Keep the inputs (`uSunIrr`, `skyIrradiance()`, `skyRadiance()`, `cloudShadow()`, the
+  per-vertex haze) if the shading is rebuilt.
+- The `plants, shade` region of `--measure` is not comparable: the photo has scrub, not
+  shaded trees, at those pixels.
+

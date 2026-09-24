@@ -38,4 +38,22 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
 
 ## Found by other versions
 
-(nothing yet)
+**From v2 (light).**
+
+- New per-frame work: the aerial-perspective froxels (256 x 128) and the cloud march (half
+  resolution, sky pixels only). Both are skipped when the view, the sun and the clock have
+  not changed, so the still hero frames do not pay for them. Along the scroll they will: 0 to
+  0.6 ms a frame on the M1 Max, most where the sky fills the frame (`shoreBreak`). The sky
+  view table is only redrawn when the camera height or the sun changes.
+- The ground shader is at the point where anything added to it costs about the same,
+  whatever it does: a vertex output, a value kept alive through the lighting, an unused
+  branch (see v2 in `PROCESS.md`). Budget new ground features by what stays alive, not by
+  their maths. Measure with `capture.mjs <shots> --benchpage --eval=...`, interleaving
+  configurations in one page and taking medians; runs a few minutes apart differ by more
+  than most changes.
+- New load-time work: the cloud weather map (1024 x 1024) and billow noise (64^3) are made on
+  the CPU in `src/sky/clouds.js`, and the atmosphere tables and the sky light on the GPU with
+  one read-back. The noise and the weather map could ship as files for the standalone build.
+- `tools/capture.mjs --bench` now times `window.__app.renderFrame()` (sky tables and clouds
+  included) when the page has one.
+

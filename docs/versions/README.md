@@ -7,8 +7,8 @@ version. A session works on its element only, and goes deep on it.
 | Version | Element | Brief | Status |
 |---|---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | [history](../gallery/history/README.md) | done, tag `v1` |
-| v2 | Light and atmosphere | [v2-light.md](v2-light.md) | next |
-| v3 | Rock | [v3-rock.md](v3-rock.md) | |
+| v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
+| v3 | Rock | [v3-rock.md](v3-rock.md) | next |
 | v4 | Water | [v4-water.md](v4-water.md) | |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
@@ -26,14 +26,14 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v2-light.md, then start v2.
+> Read docs/versions/README.md and docs/versions/v3-rock.md, then start v3.
 
 ## Rules for every version
 
 1. **One element.** Work only on what the brief covers. If you find a problem that belongs to
    another version, write it into that version's brief under "Found by other versions", do
    not fix it.
-2. **Branch.** Start from `main` with `git switch -c v2-light` (version and element). Commit at
+2. **Branch.** Start from `main` with `git switch -c v3-rock` (version and element). Commit at
    each checkpoint. Merge into `main` and tag `v2` only when Sam says the version is done.
 3. **Judge against the photos, not by eye in the browser.** Use `tools/capture.mjs`
    (side by side, outline, clips). The browser pane stops rendering when it is hidden and its
@@ -87,16 +87,27 @@ python3 -m http.server 5178                          # the page, at http://local
 node tools/capture.mjs beach --compare               # render and photo side by side
 node tools/capture.mjs viewpoint --outline           # render edges over the photo
 node tools/capture.mjs beach --clip=9                # 9 s clip (needs ffmpeg)
+node tools/capture.mjs viewpoint --clip=10 --hours=6.5:17.8   # the sun through the photo day
 node tools/capture.mjs shoreBreak --debug=5          # water debug views 1 to 5
 node tools/capture.mjs beach --clay                  # grey ground, shape only
 node tools/capture.mjs --hero --bench                # frame times
+node tools/capture.mjs viewpoint --measure           # colour per region, render against photo
+node tools/capture.mjs viewpoint --set="hour=17"     # any page switch, ; between several
+node tools/capture.mjs viewpoint --eval="expr"       # read from the page (a PNG data URL is saved)
 node tools/hero.mjs v2                               # finish a version
 node tools/preview-height.mjs 1024                   # top-down shaded height map
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
-`clay=1`, `contours=1`, `pr=1` (fixed pixel ratio). Keys: `1` to `9` shots, `O` overlay,
-`L` outline, `F` free camera, `C` contours.
+`clay=1`, `contours=1`, `pr=1` (fixed pixel ratio), and from v2 `hour=`, `sun=az,el`,
+`haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. Keys: `1` to `9`
+shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
+
+Measuring light: `--measure` renders the shot twice more (class labels, and scene light
+before the tone curve) and averages the same pixels in the render and the photo. Shots can
+carry `rois` (rectangles, or separate ones for render and photo) in `src/shots.js`. The
+`eastCove` shot is the same phone and hour as the viewpoint photo, with the sky up to 38
+degrees: use it for anything about the sky.
 
 ## Frame times at v1
 

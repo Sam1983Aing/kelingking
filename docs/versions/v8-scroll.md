@@ -38,4 +38,17 @@ debug tools.
 
 ## Found by other versions
 
-(nothing yet)
+**From v2 (light).**
+
+- Time of day is one number (`state.hour`, or `?hour=`), the sun follows the real date and
+  place, and the white balance is held at the photo's noon light, so a golden-hour ending
+  comes out golden. Clouds drift with the scene clock (6 m/s toward 290 degrees).
+- One exposure for every shot (the photo's EV100). Standing under the overhang will read dark
+  next to the open beach, as a camera would. If the descent needs the eye to adapt, add it in
+  `src/post/grade.js`.
+- Clouds are kept clear within about 4 km of the island (`clearRadius` in
+  `src/sky/clouds.js`), as on the photo day. A camera above 0.7 km is inside the cloud layer's
+  height; the march handles it, but there are no clouds that close.
+- The atmosphere tables and the cloud pass run every frame in `renderFrame()` in `main.js`.
+  Call that, not `renderer.render`, from the scroll loop.
+
