@@ -9,6 +9,7 @@
 //   node tools/capture.mjs --width=1600 --q=2048 --contours
 //   node tools/capture.mjs beach --t=20.5           freeze the sea at 20.5 s (default 12)
 //   node tools/capture.mjs beach --clip=8           8 s clip from --t, 30 fps, to captures/<shot>.mp4 (needs ffmpeg)
+//   node tools/capture.mjs viewpoint --clip=10 --hours=6.5:17.8   the sun through the day instead
 //   node tools/capture.mjs --hero                   the hero frames (src/shots.js), see tools/hero.mjs
 //   node tools/capture.mjs --out=some/dir --jpeg    write elsewhere, as JPEG
 //   node tools/capture.mjs --bench                  render time per shot (with --out, also bench.json)
@@ -192,15 +193,17 @@ try {
       const secs = +flag('clip'), fps = +flag('fps', 30), t0s = +flag('t', 12);
       const dir = mkdtempSync(join(tmpdir(), 'kelingking-clip-'));
       const n = Math.round(secs * fps);
+      const hours = flag('hours') ? String(flag('hours')).split(':').map(Number) : null;
       for (let f = 0; f < n; f++) {
+        const set = hours ? `window.__app.setHour(${hours[0] + (hours[1] - hours[0]) * f / Math.max(n - 1, 1)})` : `window.__app.setTime(${t0s + f / fps})`;
         await send('Runtime.evaluate', {
-          expression: `new Promise(r => { window.__app.setTime(${t0s + f / fps}); requestAnimationFrame(() => requestAnimationFrame(r)); })`,
+          expression: `new Promise(r => { ${set}; requestAnimationFrame(() => requestAnimationFrame(r)); })`,
           awaitPromise: true,
         }, sessionId);
         const fr = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(join(dir, `f${String(f).padStart(4, '0')}.png`), Buffer.from(fr.data, 'base64'));
       }
-      const mp4 = join(OUTDIR, `${name}.mp4`);
+      const mp4 = join(OUTDIR, `${name}${hours ? '-day' : ''}.mp4`);
       const { spawnSync } = await import('node:child_process');
       const enc = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(fps), '-i', join(dir, 'f%04d.png'),
         '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', mp4]);

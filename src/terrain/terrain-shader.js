@@ -85,9 +85,11 @@ vec3 groundBounce(vec3 P, vec3 N) {
 #ifdef SKIP_BOUNCE
   return vec3(0.0);
 #endif
-  // Faces that look down, and only near the camera: from a kilometre off it is too subtle
-  // to see, and the ground shader is the most expensive thing on screen.
-  float down = 0.5 * (1.0 - N.y) * (1.0 - smoothstep(500.0, 800.0, distance(P, cameraPosition)));
+  // Only steep faces and overhangs, and only near the camera. A gentle slope sees little of
+  // the ground below, and from a kilometre off the light is too subtle to see; the ground
+  // shader is the most expensive thing on screen.
+  float down = 0.5 * (1.0 - N.y);
+  down *= smoothstep(0.12, 0.25, down) * (1.0 - smoothstep(500.0, 800.0, distance(P, cameraPosition)));
   if (down < 0.02) return vec3(0.0);
   vec2 g = vec2(P.x, -P.z);
   vec2 hz = vec2(N.x, -N.z);

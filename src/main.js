@@ -17,7 +17,8 @@
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
 //   hour=11.96         local time on the photo's day (6 April 2025), sets the sun
 //   sun=az,el          or set the sun directly, compass heading and elevation in degrees
-//   haze=6             aerosol amount (1 = clear continental air)
+//   haze=3             background aerosol (1 = clear continental air); seaHaze=0.065 the
+//                      haze layer over the water, per km (more switches in src/sky/atmosphere.js)
 //   ev=0               exposure compensation in stops
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
 //
@@ -505,6 +506,8 @@ controls.addEventListener('change', () => { status(); outlineDirty = true; });
 window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt, atmosphere, grade, clouds,
   get plants() { return plants; },
   setTime(t) { simTime = t; },
+  // Move the sun to a local time on the photo day (for time-of-day clips).
+  setHour(h) { state.hour = h; placeSun(); },
   // Region-by-region comparison with the photo (src/measure.js, capture.mjs --measure).
   async measure(opts = {}) {
     const { measure } = await import('./measure.js');

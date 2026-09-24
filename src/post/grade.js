@@ -25,13 +25,13 @@ export const GRADE_DEFAULTS = {
 
 const CURVE = /* glsl */ `
 uniform vec4 uGrade;   // contrast, saturation, unused, unused. All zero means no grade.
-uniform vec3 uGradeTint;
+uniform vec3 uGradeTint;   // per-channel gain minus one (so a material without it gets none)
 vec3 CustomToneMapping( vec3 color ) {
-  color *= toneMappingExposure * exp2(uGradeTint);
+  color *= toneMappingExposure * (1.0 + uGradeTint);
   float l = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = max(mix(vec3(l), color, 1.0 + uGrade.y), 0.0);
   // Contrast in log space around middle grey, so black and the highlights keep their place.
-  color = 0.18 * pow(color / 0.18 + 1e-6, vec3(1.0 + uGrade.x));
+  if (uGrade.x != 0.0) color = 0.18 * pow(color / 0.18 + 1e-6, vec3(1.0 + uGrade.x));
   // Khronos PBR Neutral.
   const float startCompression = 0.8 - 0.04;
   const float desaturation = 0.15;
@@ -67,7 +67,7 @@ export function createGrade(renderer, opts = {}) {
     // Linear value per kcd/m2 for a meter reading of ev100, then compensation.
     renderer.toneMappingExposure = (0.18 * 1000) / ((12.5 * Math.pow(2, params.ev100)) / 100) * Math.pow(2, params.compensation);
     uniforms.uGrade.value.set(params.contrast, params.saturation, 0, 0);
-    uniforms.uGradeTint.value.fromArray(params.tint);
+    uniforms.uGradeTint.value.fromArray(params.tint.map((stops) => Math.pow(2, stops) - 1));
   }
   apply();
   return { params, uniforms, apply };

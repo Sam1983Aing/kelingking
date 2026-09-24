@@ -113,24 +113,28 @@ void main() {
   vec3 col = albedo / PI * (sunD + sky);
   // The waxy cuticle: a dielectric sheen (index about 1.45) that mirrors the sky and
   // catches the sun, whatever the leaf's colour. Rough, because a canopy is thousands of
-  // leaves at slightly different angles.
+  // leaves at slightly different angles. Only worked out where it can show.
   const float ROUGH = 0.45;
-  float a2 = ROUGH * ROUGH * ROUGH * ROUGH;
-  vec3 Hh = normalize(V + uSunDir);
-  float NoH = max(dot(N, Hh), 0.0);
-  float Dg = a2 / (PI * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
-  float F0 = 0.034;
-  float Fs = F0 + (1.0 - F0) * pow(1.0 - max(dot(Hh, V), 0.0), 5.0);
-  float k = ROUGH * ROUGH * 0.5;
+  const float F0 = 0.034;
   float NoLc = max(NdL, 0.0);
-  float Gs = (NoLc / (NoLc * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
-  col += uSunIrr * sh * Dg * Fs * Gs / (4.0 * NoV) * mix(0.4, 1.0, crown);
+  if (sh * NoLc > 0.0) {
+    float a2 = ROUGH * ROUGH * ROUGH * ROUGH;
+    vec3 Hh = normalize(V + uSunDir);
+    float NoH = max(dot(N, Hh), 0.0);
+    float Dg = a2 / (PI * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
+    float Fs = F0 + (1.0 - F0) * pow(1.0 - max(dot(Hh, V), 0.0), 5.0);
+    float k = ROUGH * ROUGH * 0.5;
+    float Gs = (NoLc / (NoLc * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
+    col += uSunIrr * sh * Dg * Fs * Gs / (4.0 * NoV) * mix(0.4, 1.0, crown);
+  }
   // Reflected sky only where the mirror direction points up and out of the canopy;
   // downward it sees the ground and other leaves (their light is in the diffuse terms).
-  float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
   vec3 R = reflect(-V, N);
   float open = smoothstep(-0.05, 0.3, R.y) * crown * crown * crown;
-  col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open;
+  if (open > 0.01) {
+    float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
+    col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open;
+  }
 
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, 1.0);
   #include <tonemapping_fragment>

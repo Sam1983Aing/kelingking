@@ -18,7 +18,7 @@ moving on. The plan, the rules and a brief per version are in
 | Version | Element | Status |
 |---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | done |
-| v2 | Light and atmosphere | next |
+| v2 | Light and atmosphere | ready for review |
 | v3 | Rock | |
 | v4 | Water | |
 | v5 | Sand and the waterline | |
@@ -116,6 +116,38 @@ height, distance offshore, how sandy the shore is, and how much sand hangs in th
   up the waves too small to draw, sky reflection, and the terrain's shadow on the water.
 - **Performance**: see the note under Known limits.
 
+## How the light works
+
+One physical model for the sun, the sky, the haze and the clouds (`src/sky/`), in real units
+(kilolux and kilocandela per square metre), exposed like a camera (`src/post/grade.js`).
+
+- **The sun is where it was.** The viewpoint photo's EXIF, on its Wikimedia Commons page,
+  says 6 April 2025 at 11:57 from the clifftop, on an iPhone 16 at ISO 50, f/2.2, 1/1927 s.
+  NOAA's solar position equations put the sun 73.7 degrees up, just east of north.
+  `?hour=` moves it through that day.
+- **The sky is scattering, not a gradient.** Sebastien Hillaire's 2020 method: lookup tables
+  for how much sunlight survives through the air, for light scattered many times, for the sky
+  around the camera, and for the haze in front of everything (froxels, out to 160 km). Air
+  molecules (blue), a light background of aerosol, and a dense layer of sea haze in the
+  lowest few hundred metres. The same tables give the sun's colour at the ground and the sky
+  light on every surface (spherical harmonics), so the sky you see and the light it casts
+  cannot disagree.
+- **Exposure from the photo.** The EXIF gives EV100 14.2, and a meter's calibration turns
+  that into pixel values. One exposure for every shot, as with a camera on a sunny day. With
+  nothing tuned, the render's sky matched the same-day photo within 0.3 stops from 5 to 32
+  degrees up. Then the Khronos PBR Neutral tone curve and a small saturation lift.
+- **Clouds.** Fair-weather cumulus, marched through a volume at half resolution: billow noise
+  kept where a weather map puts cloud clusters, flat bases, rounded tops, lit by the same sun
+  and sky and hazed by the same froxels. The sky over the island is kept clear, as on the
+  photo day, so their shadows drift over the open sea (and over the island too if the clear
+  radius is made smaller).
+- **Light between surfaces.** The ground takes light bounced up from what lies below and in
+  front of it (sunlit sand warms the cliff foot and the overhang, the sea cools it). Leaves
+  pass light through and have a waxy sheen.
+- **Measured, not eyeballed.** `capture.mjs --measure` compares the render and the photo
+  region by region (sky by elevation, sea by distance, sand, rock and plants in sun and shade,
+  and hand-placed rectangles per shot), before and after the tone curve.
+
 ## Matching photos
 
 Each shot in `src/shots.js` is tied to a reference photo. The capture tool renders it
@@ -129,6 +161,9 @@ node tools/capture.mjs beach --t=17            # freeze the sea at 17 s
 node tools/capture.mjs beach --clip=9          # 9 s clip to captures/beach.mp4 (needs ffmpeg)
 node tools/capture.mjs shoreBreak --debug=5    # water debug views 1 to 5
 node tools/capture.mjs --bench                 # render time per shot
+node tools/capture.mjs viewpoint --measure     # average colour per region, render and photo
+node tools/capture.mjs viewpoint --set="hour=17;haze=5"   # any page switch
+node tools/capture.mjs viewpoint --eval="window.__light"  # read something from the page
 node tools/capture.mjs beach --clay            # grey ground, to judge the shape alone
 node tools/preview-height.mjs 1024             # top-down shaded map with contours
 ```
@@ -145,6 +180,12 @@ caught.
   See `docs/gallery/v1` for the baseline.
 - **Cliff rims** still show a comb of small fins in some views, where rim triangles zigzag.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
+- **Materials after v2.** The rock, sand, sea and plant colours were set under v1's dimmer
+  light. Under the physical light the rock, sand and shallow water come out 0.3 to 0.8 stops
+  too bright and the plants about 1 stop too dark. Their versions (v3 to v7) retune them; the
+  numbers are in their briefs.
+- **No far coast.** The terrain stops 1.6 km out, so the ridges that fade into the haze in
+  the drone photos are not there to fade.
 
 ## Credits
 

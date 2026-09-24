@@ -286,8 +286,6 @@ export function createAtmosphere(renderer, opts = {}) {
     get version() { return version; },
     setSun(dir) { uniforms.uSunDir.value.copy(dir).normalize(); },
     setWhiteBalanceSun(dir) { wbSun.copy(dir).normalize(); },
-    // Irradiance on a surface facing n, from the current sky light (klux).
-    irradiance(n) { return evalIrradiance(sh.coefficients.map((v) => [v.x, v.y, v.z]), n); },
   };
 }
 

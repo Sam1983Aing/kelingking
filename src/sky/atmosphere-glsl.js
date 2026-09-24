@@ -416,11 +416,6 @@ float meanDensity(float h0, float h1, float H) {
 // gets through (per channel, straight-line optical depth through the exponential layers),
 // and what the air adds (from the froxels at this point's place on screen, uv 0..1).
 ${AERIAL_FN}
-vec3 applyAerial(vec3 col, vec3 wp) {
-  vec3 T, ins;
-  aerial(wp, gl_FragCoord.xy / uResolution, T, ins);
-  return col * T + ins;
-}
 `;
 
 // The haze changes slowly across the screen and with distance, so meshes work it out per
@@ -456,9 +451,35 @@ varying vec3 vApIns;
 // channels), for meshes that are never far away: within a couple of kilometres the air dims
 // red, green and blue within a few percent of each other. Fewer outputs from a million
 // ground vertices, and fewer inputs to an already heavy ground shader.
-export const AERIAL_VERT_PACKED = AERIAL_VERT
-  .replace('varying vec3 vApT;\nvarying vec3 vApIns;', 'varying vec4 vAp;')
-  .replace('  aerial(wp, uv, vApT, vApIns);', '  vec3 T, ins;\n  aerial(wp, uv, T, ins);\n  vAp = vec4(ins, dot(T, vec3(0.2126, 0.7152, 0.0722)));');
+// Both come straight from the froxels (their alpha is the mean transmittance along the
+// ray), so no exponentials per vertex: two texture reads and a blend.
+export const AERIAL_VERT_PACKED = /* glsl */ `
+${AP_LAYOUT}
+uniform sampler2D uAerialLUT;
+uniform vec3 uCamPos;
+uniform float uApMaxKm;
+uniform vec3 uSunE;
+varying vec4 vAp;
+vec4 aerialSliceA(float k, vec2 uv) {
+  vec2 tile = vec2(mod(k, AP_COLS), floor(k / AP_COLS));
+  vec2 px = tile * AP_RES + clamp(uv * AP_RES, 0.5, AP_RES - 0.5);
+  return texture(uAerialLUT, px / AP_ATLAS);
+}
+void aerialVertex(vec3 wp) {
+  vec2 uv = clamp(gl_Position.xy / max(gl_Position.w, 1e-6) * 0.5 + 0.5, 0.0, 1.0);
+  float dKm = distance(wp, uCamPos) * 0.001;
+  float s = sqrt(clamp(dKm / uApMaxKm, 0.0, 1.0)) * AP_SLICES - 0.5;
+  vec4 a;
+  if (s < 0.0) {
+    float w = (s + 0.5) / 0.5;
+    a = mix(vec4(0.0, 0.0, 0.0, 1.0), aerialSliceA(0.0, uv), w * w);
+  } else {
+    float k = floor(s);
+    a = mix(aerialSliceA(k, uv), aerialSliceA(min(k + 1.0, AP_SLICES - 1.0), uv), s - k);
+  }
+  vAp = vec4(a.rgb * uSunE, a.a);
+}
+`;
 export const AERIAL_FRAG_PACKED = /* glsl */ `
 varying vec4 vAp;
 `;

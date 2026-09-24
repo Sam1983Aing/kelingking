@@ -159,7 +159,7 @@ float cloudShadow(vec3 wp, vec3 sunDir) {
 
 // ---------------------------------------------------------------- the march
 
-export const CLOUD_PARS = /* glsl */ `
+const CLOUD_PARS = /* glsl */ `
 precision highp sampler3D;
 uniform sampler2D uWeather;
 uniform sampler3D uCloudNoise;
@@ -216,7 +216,6 @@ uniform vec3 uCamFwd;
 uniform vec3 uCamRight;
 uniform vec3 uCamUp;
 uniform vec3 uSkySH[9];
-uniform vec2 uCloudRes;
 ${CLOUD_PARS}
 float meanDensity(float h0, float h1, float H) {
   float dh = h1 - h0;
@@ -334,7 +333,6 @@ export function createClouds(renderer, atmosphere, opts = {}) {
     uCloudLayer: { value: new THREE.Vector4() },
     uCloudWind: { value: new THREE.Vector2() },
     uCloudSigma: { value: params.density },
-    uCloudRes: { value: new THREE.Vector2() },
     uCloudShadow: { value: 1 },
   };
   let weatherKey = '';
@@ -383,7 +381,6 @@ export function createClouds(renderer, atmosphere, opts = {}) {
       if (key === lastKey) return;
       lastKey = key;
       if (target.width !== w || target.height !== h) target.setSize(w, h);
-      uniforms.uCloudRes.value.set(w, h);
       const prev = renderer.getRenderTarget();
       renderer.setRenderTarget(target);
       renderer.render(scene, cam);
