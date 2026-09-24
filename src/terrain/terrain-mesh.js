@@ -1,95 +1,70 @@
-// Terrain mesh for stage 1: plain clay so the shape can be judged on its own.
-// Geometry comes from a grid sampled off the heightfield. Lighting detail comes from a
-// full-resolution object-space normal map, so cliffs read crisply even where the grid is coarse.
+// The ground mesh and its material. Geometry comes from the worker (mesh-builder.js),
+// already carrying normals from the smooth surface. The look is procedural (terrain-shader.js),
+// patched into three.js's standard material so it keeps the normal lighting and fog.
 
 import * as THREE from 'three';
+import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL } from './terrain-shader.js';
 
 export function createTerrain() {
   const material = new THREE.MeshStandardMaterial({
-    color: 0xbdb7ac,
-    roughness: 0.93,
+    color: 0xffffff,
+    roughness: 0.9,
     metalness: 0,
-    normalMapType: THREE.ObjectSpaceNormalMap,
+    side: THREE.DoubleSide,
   });
-  const uniforms = { uContours: { value: 0 }, uSandTint: { value: 1 } };
+  const uniforms = {
+    uData: { value: null },
+    uSunShadow: { value: null },
+    uExtent: { value: new THREE.Vector3(-700, -700, 1600) },
+    uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+    uContours: { value: 0 },
+    uClay: { value: 0 },
+    uBeachTop: { value: 4.6 },
+  };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying float vHeight;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHeight = position.y;');
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vHeight;\nuniform float uContours;\nuniform float uSandTint;')
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-        // Warm the sand and cool the seabed slightly so the beach reads in grey clay.
-        float sandBand = smoothstep(7.0, 3.5, vHeight) * smoothstep(-0.6, 0.2, vHeight);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.60, 0.48, 0.33), sandBand * uSandTint);
-        // Wet sand where the swash reaches.
-        diffuseColor.rgb *= 1.0 - 0.32 * smoothstep(0.9, 0.15, vHeight) * sandBand * uSandTint;
-        diffuseColor.rgb *= mix(1.0, 0.8, smoothstep(0.0, -6.0, vHeight) * uSandTint);
-        // Contour lines every 10 m, stronger every 50 m.
-        float q = vHeight / 10.0;
-        float line = 1.0 - min(abs(fract(q - 0.5) - 0.5) / max(fwidth(q), 1e-4), 1.0);
-        float major = step(abs(mod(floor(q + 0.5), 5.0)), 0.5);
-        diffuseColor.rgb *= 1.0 - uContours * line * mix(0.35, 0.7, major) * step(0.5, vHeight);`
-      );
+      .replace('#include <common>', '#include <common>\n' + TERRAIN_PARS)
+      .replace('#include <color_fragment>', TERRAIN_COLOR)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = tRough;')
+      // Drawn two-sided so the few folded facets on the cliffs are not holes. The bump
+      // normal is built from the outward vertex normal, so it replaces three's flipped one.
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + TERRAIN_NORMAL)
+      .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;')
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO;\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);');
   };
 
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   mesh.frustumCulled = false;
+  // Depth-only pass first, so the expensive shader runs once per pixel, only for the ground
+  // you actually see (cliffs hide a lot of plateau from most views).
+  const prepass = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
+  prepass.frustumCulled = false;
+  prepass.renderOrder = -2;
+  mesh.add(prepass);
 
-  let normalTex = null;
-
-  function update(hf, gridMax = 1024) {
-    const { N, heights: H, cell } = hf;
-    const { x0, y0, size } = hf.extent;
-    const M = Math.min(N, gridMax) + 1;
-    const step = size / (M - 1);
-    const pos = new Float32Array(M * M * 3);
-    const uv = new Float32Array(M * M * 2);
-    for (let j = 0; j < M; j++) {
-      for (let i = 0; i < M; i++) {
-        const x = x0 + i * step, y = y0 + j * step;
-        const k = j * M + i;
-        pos[k * 3] = x;
-        pos[k * 3 + 1] = sample(H, N, cell, x0, y0, x, y);
-        pos[k * 3 + 2] = -y;
-        uv[k * 2] = i / (M - 1);
-        uv[k * 2 + 1] = j / (M - 1);
-      }
-    }
-    const idx = new Uint32Array((M - 1) * (M - 1) * 6);
-    let n = 0;
-    for (let j = 0; j < M - 1; j++) {
-      for (let i = 0; i < M - 1; i++) {
-        const a = j * M + i, b = a + 1, c = a + M, d = c + 1;
-        idx[n++] = a; idx[n++] = b; idx[n++] = c;
-        idx[n++] = b; idx[n++] = d; idx[n++] = c;
-      }
-    }
+  function update(hf) {
+    const { positions, normals, index } = hf.mesh;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setIndex(new THREE.BufferAttribute(idx, 1));
-    g.computeVertexNormals();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
     mesh.geometry.dispose();
     mesh.geometry = g;
-
-    normalTex?.dispose();
-    normalTex = new THREE.DataTexture(hf.normals, N, N, THREE.RGBAFormat);
-    normalTex.generateMipmaps = true;
-    normalTex.minFilter = THREE.LinearMipmapLinearFilter;
-    normalTex.magFilter = THREE.LinearFilter;
-    normalTex.anisotropy = 8;
-    normalTex.needsUpdate = true;
-    material.normalMap = normalTex;
-    material.needsUpdate = true;
+    prepass.geometry = g;
   }
 
-  return { mesh, material, uniforms, update };
+  function setData(texture, extent, beachTop) {
+    uniforms.uData.value = texture;
+    uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
+    uniforms.uBeachTop.value = beachTop;
+  }
+
+  return { mesh, material, uniforms, update, setData };
 }
 
 // Bilinear height lookup in local metres (x east, y north).

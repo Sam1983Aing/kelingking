@@ -1,3 +1,5 @@
+import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
+
 // GLSL for the sea. Everything is computed from the terrain data texture:
 //   R = terrain height, G = metres offshore from the waterline, B = beach weight.
 // Local coordinates in here are metres with x = east, y = north (world z = -north).
@@ -191,6 +193,7 @@ void main() {
 export const WATER_FRAG = /* glsl */ `
 ${COMMON}
 ${SKY_GLSL}
+${SUN_SHADOW_GLSL}
 uniform vec3 uSkyIrr;        // irradiance from the sky dome
 uniform vec3 uAbsorb;        // extinction per metre, per channel
 uniform vec3 uScatter;       // colour of light scattered back out of the water
@@ -246,21 +249,6 @@ float caustics(vec2 p, float t) {
   return a * a + b * b * 0.7;
 }
 
-// Terrain shadow: march toward the sun through the heightfield.
-float terrainShadow(vec3 w, float offshore) {
-  if (offshore > 260.0) return 1.0;
-  float sh = 1.0;
-  float t = 1.5;
-  for (int i = 0; i < 18; i++) {
-    vec3 q = w + uSunDir * t;
-    if (q.y > 230.0) break;
-    float h = dataAt(vec2(q.x, -q.z)).r;
-    sh = min(sh, clamp((q.y - h) / (0.04 * t) + 0.5, 0.0, 1.0));
-    t = t * 1.22 + 1.2;
-  }
-  return sh;
-}
-
 void main() {
   #include <logdepthbuf_fragment>
   // Evaluate the waves where this point started, not where the lean pushed it, so shading
@@ -282,7 +270,7 @@ void main() {
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
 
-  float shadow = terrainShadow(vWorld + vec3(0.0, 0.3, 0.0), d.g);
+  float shadow = bakedShadow(vWorld, 0.05);
 
   // Light under the surface. Follow the refracted view ray down to the seabed. A ray that
   // runs nearly flat (looking through the face of a standing wave) leaves through the back

@@ -56,8 +56,12 @@ const ws = new WebSocket(wsUrl);
 await new Promise((r) => ws.addEventListener('open', r, { once: true }));
 let seq = 0;
 const pending = new Map();
+const consoleLog = [];
 ws.addEventListener('message', (e) => {
   const msg = JSON.parse(e.data);
+  if (msg.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(msg.params.type))
+    consoleLog.push(msg.params.type + ': ' + msg.params.args.map((a) => a.value ?? a.description ?? '').join(' ').slice(0, 1500));
+  if (msg.method === 'Runtime.exceptionThrown') consoleLog.push('exception: ' + (msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text));
   if (msg.id && pending.has(msg.id)) {
     const { resolve, reject } = pending.get(msg.id);
     pending.delete(msg.id);
@@ -80,6 +84,7 @@ try {
     const compare = flag('compare', false);
     const w = WIDTH, h = Math.round(WIDTH / aspect);
     const q = new URLSearchParams({ shot: name, capture: '1', q: flag('q', '2048'), t: flag('t', '12') });
+    if (flag('bench')) { q.delete('capture'); q.set('q', '1024'); q.set('pr', '1'); }
     if (compare) q.set('compare', 'side');
     if (flag('overlay')) q.set('overlay', flag('overlay'));
     if (flag('diff')) q.set('diff', '1');
@@ -87,6 +92,7 @@ try {
     if (flag('outline')) q.set('outline', '1');
     if (flag('debug')) q.set('debug', flag('debug'));
     if (flag('hide')) q.set('hide', flag('hide'));
+    if (flag('clay')) q.set('clay', '1');
 
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
@@ -98,8 +104,36 @@ try {
     for (;;) {
       const r = await send('Runtime.evaluate', { expression: 'window.__ready === true', returnByValue: true }, sessionId);
       if (r.result.value) break;
-      if (Date.now() - t0 > 120000) throw new Error(`${name}: page never became ready`);
+      if (Date.now() - t0 > 120000) throw new Error(`${name}: page never became ready\n` + consoleLog.filter((l) => !/deprecated|PCFSoft/.test(l)).join('\n'));
       await new Promise((res) => setTimeout(res, 250));
+    }
+    if (flag('bench')) {
+      // Time to render a frame to completion: render, then read back one pixel, which makes
+      // the CPU wait for the GPU. Repeated and averaged, with the ground and the sea each
+      // switched off in turn. (GPU timer queries through ANGLE on Metal return nonsense, and
+      // frame-to-frame timing in headless Chrome mostly measures the compositor.)
+      const r = await send('Runtime.evaluate', { awaitPromise: true, returnByValue: true, expression: `(async () => {
+        const A = window.__app, R = A.renderer, gl = R.getContext(), px = new Uint8Array(4);
+        const once = () => { R.render(A.scene, A.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+        const time = () => { for (let i = 0; i < 3; i++) once(); const t0 = performance.now(); for (let i = 0; i < 15; i++) once(); return (performance.now() - t0) / 15; };
+        await new Promise((r) => setTimeout(r, 500));
+        const out = { all: time() };
+        A.terrain.mesh.visible = false; out.noGround = time(); A.terrain.mesh.visible = true;
+        A.water.mesh.visible = false; out.noSea = time(); A.water.mesh.visible = true;
+        out.all = Math.min(out.all, time());
+        const mat = A.terrain.mesh.material;
+        for (const k of ${JSON.stringify(String(flag('ablate', '')).split(',').filter(Boolean))}) {
+          mat.defines = { [k]: 1 }; mat.needsUpdate = true; time(); out[k] = time();
+        }
+        mat.defines = {}; mat.needsUpdate = true;
+        const c = R.domElement; out.mp = c.width * c.height / 1e6;
+        out.reversed = R.capabilities.reversedDepthBuffer;
+        return out; })()` }, sessionId);
+      const o = r.result.value, f = (v) => v.toFixed(1).padStart(5);
+      console.log(`${name.padEnd(12)} ${f(o.all)} ms (${(1000 / o.all).toFixed(0).padStart(3)} fps) at ${o.mp.toFixed(2)} MP   no ground ${f(o.noGround)}   no sea ${f(o.noSea)}`
+        + Object.keys(o).filter((k) => k.startsWith('SKIP')).map((k) => `   ${k.slice(5).toLowerCase()} ${f(o[k])}`).join(''));
+      await send('Target.closeTarget', { targetId });
+      continue;
     }
     if (flag('clip')) {
       const secs = +flag('clip'), fps = +flag('fps', 30), t0s = +flag('t', 12);
@@ -132,7 +166,8 @@ try {
 } finally {
   ws.close();
   chrome.kill();
-  setTimeout(() => rmSync(profile, { recursive: true, force: true }), 500);
+  // Chrome can still be writing to its profile for a moment after being killed.
+  setTimeout(() => { try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch {} }, 800);
 }
 
 // Aspect ratio of a JPEG from its SOF header, without decoding it.

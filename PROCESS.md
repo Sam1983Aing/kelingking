@@ -119,3 +119,69 @@ and a resolution governor. Now 50 to 68 fps.
 - The milky plume in the east bay is patchier and dimmer than in the drone photo.
 - Open sea from 1 km up is a little smooth next to the photo's texture.
 - Cliff faces still streak, which is stage 3.
+
+## Stage 3: surfaces (2026-09-24)
+
+### Geometry first
+
+The clay renders showed the real blocker before any material could work: cliff faces drawn
+from a regular grid come out as vertical stripes and saw teeth along the waterline.
+
+- `heightAt(x, y)`: the generator now builds smooth fields and applies the sharp steps per
+  point, so the mesh can ask for the true height anywhere.
+- Vertices near a cliff slide along the slope direction to even out their spacing over the
+  ground. A few triangles fold where the face is very compressed. Two ways of removing them
+  were tried and both made it worse (a blur of the slide field washed out the cliffs;
+  halving the slide on folded triangles cascaded into combs of fins). They are left as tiny
+  facets and the ground is drawn two-sided.
+- Triangle normals zigzag across a rim, so steep vertices take their normal from
+  `heightAt` instead. Lesson: the mesh only needs to be good enough for the silhouette, the
+  shading can come straight from the smooth surface.
+
+### Materials, against the photos
+
+1. First pass: scrub only on gentle slopes. The photos show the 60 to 70 degree flanks of the
+   finger fully covered, and only the sheer faces bare. Threshold moved.
+2. Bedding drawn as dark lines read as a barcode, and as dashes on the beach close-up. The
+   dashes came from a step in the bump height, which turns into dashes once it is
+   differentiated per 2x2 pixel block. Relief must be continuous. Beds now vary in
+   thickness, show as ledges only in stretches, and crags do most of the work up close.
+3. Vegetation on the faces follows the bedding (clumps stretched sideways), which is what
+   the drone photo from the sea shows.
+4. Tree crowns 5 to 8 m across in the forest patches give the plateau its texture from 1 km.
+
+### Two bugs worth remembering
+
+- A backtick inside a comment inside a GLSL template string ends the JavaScript string. The
+  capture tool now prints the page's console errors when a page never becomes ready, which
+  turned an hour of guessing into one line.
+- A scripted text replacement matched the same line twice and put code in the wrong place.
+  `node --check` passed because it treated the file as a script, not a module. Check module
+  files by giving them a `.mjs` name.
+
+### Speed, and measuring it
+
+The new ground material took the clifftop view from about 50 fps to under 20. Measuring was
+the hard part:
+
+- The browser pane stops animating when it is hidden, so it cannot be used unattended.
+- Frame-to-frame timing in headless Chrome mostly measures the compositor.
+- GPU timer queries through ANGLE on Metal return nonsense (negative differences).
+- What worked: render, read back one pixel to force the GPU to finish, repeat, average.
+  Still about 20% noise on a machine with other apps on the GPU, so it is good for big
+  effects only.
+- Hiding the ground to measure its cost is misleading: the sea then fills the screen, and
+  the sea is expensive per pixel.
+
+What was found and fixed:
+
+- **The logarithmic depth buffer turned off early depth testing.** It writes depth from the
+  fragment shader, so every hidden layer of ground behind a cliff was fully shaded. Switched
+  to a reversed float depth buffer, which keeps the precision without that cost, and added a
+  depth-only pre-pass so the ground shader runs once per pixel.
+- Noise octaves smaller than a pixel are now skipped, not faded, and each material is only
+  worked out where it shows.
+- The per-pixel shadow march (up to 26 dependent texture reads, in both the ground and the
+  sea) became one read from a baked shadow-height texture.
+
+Still not fast enough in the overview. See the README.

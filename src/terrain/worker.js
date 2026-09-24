@@ -2,15 +2,18 @@
 // object-space normal map, so the page stays responsive while tuning.
 
 import { generateHeightfield } from './heightfield.js';
+import { buildTerrainMesh } from './mesh-builder.js';
 
 self.onmessage = (e) => {
-  const { id, layout, N } = e.data;
+  const { id, layout, N, M } = e.data;
   const hf = generateHeightfield(layout, N);
+  const mesh = buildTerrainMesh(hf, layout, M);
   const normals = normalMap(hf.heights, N, hf.cell);
   const water = waterData(hf, N);
   const shoreDir = shoreDirection(hf.shore, N);
-  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer]);
+  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir,
+    mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, M, moved: mesh.moved, ms: mesh.ms } },
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:

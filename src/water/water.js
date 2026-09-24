@@ -26,6 +26,7 @@ export function createWater() {
     {
       uData: { value: null },
       uShoreDir: { value: null },
+      uSunShadow: { value: null },
       uExtent: { value: new THREE.Vector3(-700, -700, 1600) },
       uTime: { value: 0 },
       uPeriod: { value: 9 },

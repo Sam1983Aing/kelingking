@@ -1,5 +1,5 @@
 // Builds the Kelingking heightfield from the OSM outlines (geo.js) and the hand-tuned
-// shape (layout.js). Pure data in, Float32Array out, so it runs in the page or in node.
+// shape (layout.js). Pure data in, typed arrays out, so it runs in the page or in node.
 //
 // How a land height is made:
 //   1. A top surface: the island plateau, blended into a ridge along the spine of the finger.
@@ -7,6 +7,12 @@
 //      sheer on the head and the jaw, a steep slope where the trail comes down.
 //   3. Whatever is left between the cliff foot and the water is beach.
 //   4. Right at the waterline everything is pulled down to sea level.
+//
+// The inputs to those steps are all smooth fields (distances, the top surface, zone
+// parameters), stored on the grid. The steps themselves are sharp, so the height is not:
+// heightAt(x, y) samples the smooth fields and applies the steps at any point, which is
+// what lets the mesh builder put vertices exactly on a cliff face instead of interpolating
+// between grid samples that straddle it.
 
 import { COAST, ISLANDS, CLIFFS, PEAKS } from './geo.js';
 
@@ -32,9 +38,11 @@ export function generateHeightfield(layout, N = 2048) {
 
   // Distances to a rasterised outline carry the pixel staircase with them. A light blur
   // takes it out, which matters where a sharp wave front or the swash edge follows them.
-  const dCoast = blur(signedDistance(land, N, cell).sd, N, 2);
+  const DC = blur(signedDistance(land, N, cell).sd, N, 2);
   const cliff = signedDistance(high, N, cell);
-  const dCliff = blur(cliff.sd, N, 2);
+  const DK = blur(cliff.sd, N, 2);
+  const ISLE = new Float32Array(N * N);
+  for (let k = 0; k < ISLE.length; k++) ISLE[k] = isle[k];
 
   const noise = makeNoise(layout.noise.seed);
   const spine = buildSpine(layout.spinePath, layout.spine);
@@ -43,23 +51,29 @@ export function generateHeightfield(layout, N = 2048) {
   const peaks = PEAKS.filter((p) => p.ele > 120);
   const { plateau, beach, defaults, zones, islets } = layout;
   const nz = layout.noise;
-
-  const H = new Float32Array(N * N);
-  const TOP = new Float32Array(N * N);
-  // For the water: signed distance to the waterline (positive on land, after the beach
-  // shift) and how much each spot is a sandy beach.
-  const SHORE = new Float32Array(N * N);
-  const SAND = new Float32Array(N * N);
-  const MURK = new Float32Array(N * N);
   const near = { d: 0, t: 0 };
   const probe = { d: 0, t: 0 };
 
-  // Pass 1: the top surface (plateau blended into the finger ridges) for every land pixel.
+  // Zone parameters on the grid.
+  const F = { sand: new Float32Array(N * N), murk: new Float32Array(N * N), face: new Float32Array(N * N),
+    pf: new Float32Array(N * N), D: new Float32Array(N * N), L: new Float32Array(N * N) };
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const k = j * N + i;
+      const z = blendZones(zones, defaults, X(i), Y(j));
+      F.sand[k] = smooth(0, 0.7, z.sand);
+      F.murk[k] = z.murk; F.face[k] = z.face; F.pf[k] = z.pf; F.D[k] = z.D; F.L[k] = z.L;
+    }
+  }
+
+  // The top surface (plateau blended into the finger ridges). It is needed a little way
+  // out to sea too, so that sampling it between texels on the coast is not dragged to zero.
+  const TOP = new Float32Array(N * N);
   for (let j = 0; j < N; j++) {
     const y = Y(j);
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
-      if (!land[k] || isle[k]) continue;
+      if (DC[k] < -40 || isle[k]) continue;
       const x = X(i);
       let top = plateau.base;
       for (const p of peaks) {
@@ -68,8 +82,7 @@ export function generateHeightfield(layout, N = 2048) {
       }
       top += fbm(noise, x / 160, y / 160, 3) * plateau.noise;
       for (const d of layout.dips) top += d.dh * Math.exp(-((x - d.at[0]) ** 2 + (y - d.at[1]) ** 2) / (d.r * d.r));
-      const dk0 = dCliff[k];
-      top *= lerp(plateau.shoulder, 1, smooth(0, plateau.shoulderW, dk0));
+      top *= lerp(plateau.shoulder, 1, smooth(0, plateau.shoulderW, DK[k]));
 
       if (spine.inBox(x, y)) {
         spine.nearest(x, y, near);
@@ -91,61 +104,81 @@ export function generateHeightfield(layout, N = 2048) {
     }
   }
 
-  // Pass 2: cliffs, beaches, seabed.
+  // Height of the cliff top that a beach wall hangs from: the top surface at the nearest
+  // point on the cliff-top line. Nearest-point lookups jump between neighbours, so blur it.
+  const EDGE = new Float32Array(N * N);
+  for (let k = 0; k < EDGE.length; k++) EDGE[k] = DK[k] < 0 ? TOP[cliff.nearestIn[k]] || TOP[k] : TOP[k];
+  blur(EDGE, N, 3);
+
+  const fields = { N, cell, x0, y0, DC, DK, TOP, EDGE, ISLE, ...F };
+  const heightAt = makeHeightAt(fields, layout, noise);
+
+  const H = new Float32Array(N * N);
+  const SHORE = new Float32Array(N * N);
   for (let j = 0; j < N; j++) {
-    const y = Y(j);
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
-      const x = X(i);
-      const z = blendZones(zones, defaults, x, y);
-      // In beach zones the sand runs a little past the mapped waterline.
-      const sandW = smooth(0, 0.7, z.sand);
-      const dc = dCoast[k] + beach.shift * sandW;
-      SHORE[k] = dc;
-      SAND[k] = sandW;
-      MURK[k] = z.murk;
-
-      if (dc <= 0) {
-        // Seabed. Shallow shelves in the coves, a fast drop off the cliffs.
-        const depth = z.D * (1 - Math.exp(dc / z.L)) + Math.abs(noise(x * 0.02, y * 0.02)) * Math.min(1.5, -dc * 0.05);
-        H[k] = -Math.max(depth, -dc * 0.03);
-        continue;
-      }
-
-      if (isle[k]) {
-        const islet = nearestIslet(islets, x, y);
-        const dome = 1 - (1 - Math.min(dc / 26, 1)) ** 2;
-        const h = islet.h * (0.74 * smooth(0, 5, dc) + 0.26 * dome);
-        H[k] = h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
-        continue;
-      }
-
-      const top = TOP[k];
-      const face = z.face * (1 + noise(x / 30, y / 30 + 9) * nz.faceJitter);
-
-      // Rock: the drop happens right at the waterline.
-      const v = Math.min(dc / face, 1);
-      const rock = top * (1 - (1 - v) ** (1 / z.pf));
-
-      // Beach zones: below the OSM cliff-top line the face falls from the height of the
-      // nearest cliff-top point, and whatever is left before the water is sand.
-      let cove = top;
-      const dk = dCliff[k] + noise(x / 15 + 3, y / 15) * nz.edgeJitter;
-      if (dk < 0) {
-        const edge = TOP[cliff.nearestIn[k]] || top;
-        cove = edge * (1 - Math.min(-dk / face, 1)) ** z.pf;
-      }
-      const sand = beach.top * (1 - Math.exp(-dc / beach.spread));
-      cove = Math.max(cove, sand);
-
-      let h = lerp(rock, cove, sandW);
-      h = Math.min(h, dc * 40); // meet the water
-      H[k] = h;
+      H[k] = heightAt(X(i), Y(j));
+      SHORE[k] = DC[k] + beach.shift * F.sand[k];
     }
   }
 
   const ms = Math.round(performance.now() - t0);
-  return { heights: H, shore: SHORE, sand: SAND, murk: MURK, N, cell, extent: layout.extent, land, ms };
+  return { heights: H, shore: SHORE, sand: F.sand, murk: F.murk, fields, heightAt, N, cell, extent: layout.extent, land, ms };
+}
+
+// Height at any point, from the smooth fields. Same steps as described at the top.
+export function makeHeightAt(f, layout, noise) {
+  const { N, cell, x0, y0 } = f;
+  const { beach, islets } = layout;
+  const nz = layout.noise;
+  let i0 = 0, i1 = 0, i2 = 0, i3 = 0, w0 = 0, w1 = 0, w2 = 0, w3 = 0;
+  const at = (a) => a[i0] * w0 + a[i1] * w1 + a[i2] * w2 + a[i3] * w3;
+
+  return function heightAt(x, y) {
+    const fi = (x - x0) / cell - 0.5, fj = (y - y0) / cell - 0.5;
+    const i = Math.max(0, Math.min(N - 2, Math.floor(fi)));
+    const j = Math.max(0, Math.min(N - 2, Math.floor(fj)));
+    const u = Math.min(Math.max(fi - i, 0), 1), v = Math.min(Math.max(fj - j, 0), 1);
+    i0 = j * N + i; i1 = i0 + 1; i2 = i0 + N; i3 = i2 + 1;
+    w0 = (1 - u) * (1 - v); w1 = u * (1 - v); w2 = (1 - u) * v; w3 = u * v;
+
+    const sandW = at(f.sand);
+    const dc = at(f.DC) + beach.shift * sandW;
+
+    if (dc <= 0) {
+      // Seabed. Shallow shelves in the coves, a fast drop off the cliffs.
+      const D = at(f.D), L = at(f.L);
+      const depth = D * (1 - Math.exp(dc / L)) + Math.abs(noise(x * 0.02, y * 0.02)) * Math.min(1.5, -dc * 0.05);
+      return -Math.max(depth, -dc * 0.03);
+    }
+
+    if (at(f.ISLE) > 0.5) {
+      const islet = nearestIslet(islets, x, y);
+      const dome = 1 - (1 - Math.min(dc / 26, 1)) ** 2;
+      const h = islet.h * (0.74 * smooth(0, 5, dc) + 0.26 * dome);
+      return h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
+    }
+
+    const top = at(f.TOP);
+    const face = at(f.face) * (1 + noise(x / 30, y / 30 + 9) * nz.faceJitter);
+    const pf = at(f.pf);
+
+    // Rock: the drop happens right at the waterline.
+    const vv = Math.min(dc / face, 1);
+    const rock = top * (1 - (1 - vv) ** (1 / pf));
+
+    // Beach zones: below the OSM cliff-top line the face falls from the height of the
+    // cliff top above, and whatever is left before the water is sand.
+    let cove = top;
+    const dk = at(f.DK) + noise(x / 15 + 3, y / 15) * nz.edgeJitter;
+    if (dk < 0) cove = at(f.EDGE) * (1 - Math.min(-dk / face, 1)) ** pf;
+    const sand = beach.top * (1 - Math.exp(-dc / beach.spread));
+    cove = Math.max(cove, sand);
+
+    const h = lerp(rock, cove, sandW);
+    return Math.min(h, dc * 40); // meet the water
+  };
 }
 
 // ---------------------------------------------------------------- helpers

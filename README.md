@@ -10,8 +10,8 @@ It is built in stages, each one checked against real photos before moving on.
 |---|---|---|
 | 1 | Terrain shape in grey clay, plus the photo-matching tools | done |
 | 2 | Water: depth colour, shore foam, breaking waves, sun glitter | done |
-| 3 | Surfaces: limestone cliffs, vegetation, sand | next |
-| 4 | Light, atmosphere and colour grade | |
+| 3 | Surfaces: limestone cliffs, vegetation, sand | done |
+| 4 | Light, atmosphere and colour grade | next |
 | 5 | Life: wave timing, foam drift, cloud shadows | |
 | 6 | The scroll descent from the viewpoint to the beach | |
 
@@ -48,6 +48,39 @@ tuned against photos.
 4. It runs in a web worker at 1024 or 2048 texels over 1.6 km (0.78 m per texel), and the
    page builds a mesh plus a full-resolution normal map from it.
 
+## How the cliffs and surfaces work
+
+A plain grid cannot draw these cliffs: a 100 m face that is 7 m wide on the map gets a
+handful of grid rows, crossed at an angle, and renders as stripes and teeth. So:
+
+- **The generator hands out a function, not just a grid.** Everything smooth (distances to
+  the coast and to the cliff tops, the top surface, the zone settings) is stored on the grid,
+  and `heightAt(x, y)` applies the sharp steps at any point.
+- **The mesh builder slides vertices onto the faces** (`src/terrain/mesh-builder.js`). Each
+  vertex near a cliff moves along the slope direction, so that vertices end up evenly spaced
+  over the ground instead of on the map. The flats give up vertices and the face gets them.
+  Normals come from `heightAt` too, so the lighting is smooth even where the triangles are not.
+- **A wave-cut notch** is carved into the foot of the rock, which makes the base overhang.
+
+The look is all procedural (`src/terrain/terrain-shader.js`), patched into three.js's
+standard material:
+
+- **Limestone** in beds of uneven thickness, gently warped across the island, each with its
+  own shade. Ledges come and go along the face. Vertical joints, crags, grey runoff streaks,
+  lichen, ochre staining over the beach undercut, and the dark notch and algae line at the
+  waterline.
+- **Scrub** on everything short of a sheer face, and in clumps along the ledges of the faces.
+  At field scale it varies between forest, scrub, grass and bare patches. Bushes, trees and
+  leaves appear as you get closer.
+- **Sand**, wet where the swash reaches, and smoother.
+- Everything finer than a pixel is faded out by the pixel footprint, so it holds up from 1 km
+  and at your feet without shimmering.
+
+**Sun shadows are baked.** For each map column there is one height above which a point sees
+the sun, which is exact for a heightfield, cliff faces included. It is baked on the GPU in one
+pass whenever the sun moves (`src/terrain/sun-shadow.js`), and the ground and sea each read
+it with a single texture lookup.
+
 ## How the water works
 
 One mesh follows the camera: rings packed tight within 150 m and spread out to the horizon,
@@ -69,8 +102,7 @@ height, distance offshore, how sandy the shore is, and how much sand hangs in th
   face the swell.
 - **Surface**: 14 wind wave trains as a slope field, a GGX sun glint whose roughness picks
   up the waves too small to draw, sky reflection, and the terrain's shadow on the water.
-- **Performance**: 50 to 68 fps on this Mac with a resolution governor that lowers the pixel
-  ratio when frames run long.
+- **Performance**: see the note under Known limits.
 
 ## Matching photos
 
@@ -84,12 +116,24 @@ node tools/capture.mjs --overlay=0.5           # every shot, 50% blend
 node tools/capture.mjs beach --t=17            # freeze the sea at 17 s
 node tools/capture.mjs beach --clip=9          # 9 s clip to captures/beach.mp4 (needs ffmpeg)
 node tools/capture.mjs shoreBreak --debug=5    # water debug views 1 to 5
+node tools/capture.mjs --bench                 # render time per shot
+node tools/capture.mjs beach --clay            # grey ground, to judge the shape alone
 node tools/preview-height.mjs 1024             # top-down shaded map with contours
 ```
 
 Outline mode is the one that does the work: red is where the render's land meets water or
 sky, yellow is where one landform passes in front of another. See `PROCESS.md` for what it
 caught.
+
+## Known limits
+
+- **Speed.** On an M1 Max at about 1 megapixel: the clifftop view runs at 45 fps and the
+  beach and sea views at around 30, but the 1 km overview is under 20. The ground material
+  and the sea both cost too much per pixel when they fill the screen. A resolution governor
+  hides some of it. The fix (cheaper far-away shading, baked far-field colour) is planned
+  once the scroll path says which views matter.
+- **Cliff rims** still show a comb of small fins in some views, where rim triangles zigzag.
+- **Season.** The scrub is wet-season green. Most trail photos are dry season.
 
 ## Credits
 

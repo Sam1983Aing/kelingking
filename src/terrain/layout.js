@@ -83,6 +83,13 @@ export function defaultLayout() {
     ],
 
     beach: { top: 4.6, spread: 24, shift: 8 },
+
+    // Mesh: near each cliff, vertices are redistributed along the slope over a window from
+    // `below` metres out from the foot to `above` metres back from the top, evenly by length
+    // over the ground (weight scales how much the vertical counts). See mesh-builder.js.
+    mesh: { samples: 48, below: 12, above: 45, weight: 1 },
+    // The wave-cut notch at the foot of the rock: how deep, and how high it reaches.
+    notch: { depth: 2.6, top: 5 },
     noise: { seed: 7, broad: 5, fine: 1.4, faceJitter: 0.35, edgeJitter: 2.5 },
   };
 }

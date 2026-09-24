@@ -13,6 +13,8 @@
 //   t=12               freeze the clock at this many seconds (the sea animates)
 //   debug=1..5         water debug view: sediment, see-through, foam, underwater light, normals
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
+//   clay=1             plain grey ground, to judge the shape on its own
+//   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
 //
 // Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
@@ -24,6 +26,7 @@ import { createTerrain, sample } from './terrain/terrain-mesh.js';
 import { SHOTS } from './shots.js';
 import { createWater } from './water/water.js';
 import { SKY_GLSL } from './water/water-shader.js';
+import { createSunShadow } from './terrain/sun-shadow.js';
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
@@ -38,7 +41,7 @@ const state = {
   quality: +(params.get('q') || (CAPTURE ? 2048 : 1024)),
   contours: params.get('contours') === '1',
   outline: params.get('outline') === '1',
-  sandTint: true,
+  clay: params.get('clay') === '1',
   sunAz: 345,
   sunEl: 64,
   exposure: 1.0,
@@ -59,11 +62,16 @@ const outlineCanvas = document.createElement('canvas');
 outlineCanvas.id = 'outline';
 stage.append(outlineCanvas);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: CAPTURE });
+// Reversed depth (float, 1 at the near plane) keeps precision from 0.3 m to 30 km. A
+// logarithmic depth buffer would too, but it writes depth from the fragment shader, which
+// turns off early depth testing, and then every hidden layer of ground gets fully shaded.
+const renderer = new THREE.WebGLRenderer({ antialias: true, reversedDepthBuffer: true, preserveDrawingBuffer: CAPTURE });
 renderer.setPixelRatio(CAPTURE ? 1 : Math.min(devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// No shadow map for now: the ground and the sea both march their own sun shadows through the
+// height data, which a shadow map cannot match on 100 m faces drawn from thin triangles.
+// It comes back for small objects (steps, railings) in the descent.
+renderer.shadowMap.enabled = false;
 stage.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -87,7 +95,9 @@ const sky = new THREE.Mesh(
       uSunDir: water.uniforms.uSunDir, uSunIrr: water.uniforms.uSunIrr,
       uZenith: water.uniforms.uZenith, uHorizon: water.uniforms.uHorizon,
     },
-    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    // Pass the unnormalised position: normalising per pixel then gives the exact view
+    // direction, where interpolating per-vertex directions leaves bands on a coarse sphere.
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `${SKY_GLSL}
       varying vec3 vDir;
       void main(){ gl_FragColor = vec4(skyRadiance(normalize(vDir)), 1.0);
@@ -102,16 +112,13 @@ scene.add(sky);
 const hemi = new THREE.HemisphereLight(0xcfe3f2, 0x6f6b5c, 0.55);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff3e0, 3.2);
-sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
-Object.assign(sun.shadow.camera, { left: -750, right: 750, top: 750, bottom: -750, near: 10, far: 5000 });
-sun.shadow.bias = -0.0002;
-sun.shadow.normalBias = 0.8;
 sun.target.position.set(100, 0, -100);
 scene.add(sun, sun.target);
+let shadowDirty = true;
 function placeSun() {
   const az = deg(state.sunAz), el = deg(state.sunEl), d = 2500, t = sun.target.position;
   sun.position.set(t.x + d * Math.cos(el) * Math.sin(az), d * Math.sin(el), t.z - d * Math.cos(el) * Math.cos(az));
+  shadowDirty = true;
 }
 placeSun();
 
@@ -121,6 +128,10 @@ water.uniforms.uDebug.value = +(params.get('debug') || 0);
 const terrain = createTerrain();
 scene.add(terrain.mesh);
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
+terrain.uniforms.uClay.value = state.clay ? 1 : 0;
+terrain.uniforms.uSunDirW = water.uniforms.uSunDir;   // same sun for ground and sea
+const sunShadow = createSunShadow(renderer);
+terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
 for (const name of (params.get('hide') || '').split(',')) {
   if (name === 'terrain') terrain.mesh.visible = false;
   if (name === 'water') water.mesh.visible = false;
@@ -136,7 +147,7 @@ const worker = new Worker(new URL('./terrain/worker.js', import.meta.url), { typ
 worker.onmessage = (e) => {
   if (e.data.id !== genId) return;
   hf = e.data;
-  terrain.update(hf, CAPTURE ? 2048 : 1024);
+  terrain.update(hf);
   const tex = new THREE.DataTexture(hf.water, hf.N, hf.N, THREE.RGBAFormat, THREE.HalfFloatType);
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
@@ -148,6 +159,8 @@ worker.onmessage = (e) => {
   water.uniforms.uData.value?.dispose();
   water.uniforms.uShoreDir.value?.dispose();
   water.setData(tex, dir, hf.extent);
+  terrain.setData(tex, hf.extent, layout.beach.top);
+  shadowDirty = true;
   terrainFrames = 0;
   outlineDirty = true;
   status();
@@ -155,7 +168,7 @@ worker.onmessage = (e) => {
 function regenerate() {
   genId++;
   statusEl.textContent = 'generating terrain…';
-  worker.postMessage({ id: genId, layout, N: state.quality });
+  worker.postMessage({ id: genId, layout, N: state.quality, M: state.quality >= 2048 ? 2049 : 1025 });
 }
 let regenTimer = 0;
 const regenerateSoon = () => { clearTimeout(regenTimer); regenTimer = setTimeout(regenerate, 250); };
@@ -372,7 +385,7 @@ lf.add(state, 'sunAz', 0, 360, 1).name('sun heading').onChange(placeSun);
 lf.add(state, 'sunEl', 5, 90, 1).name('sun elevation').onChange(placeSun);
 lf.add(state, 'exposure', 0.3, 2, 0.01).onChange((v) => (renderer.toneMappingExposure = v));
 lf.add(state, 'contours').name('contours (C)').onChange((v) => (terrain.uniforms.uContours.value = v ? 1 : 0)).listen();
-lf.add(state, 'sandTint').name('tint sand').onChange((v) => (terrain.uniforms.uSandTint.value = v ? 1 : 0));
+lf.add(state, 'clay').name('clay (no materials)').onChange((v) => (terrain.uniforms.uClay.value = v ? 1 : 0));
 lf.close();
 
 addEventListener('keydown', (e) => {
@@ -391,7 +404,7 @@ function status() {
   if (!hf) return;
   const p = camera.position;
   const g = groundAt(p.x, -p.z);
-  statusEl.textContent = `${SHOTS[state.shot].label}${state.free ? ' (free)' : ''}   terrain ${hf.N}² in ${hf.ms} ms   camera ${p.x.toFixed(0)}, ${(-p.z).toFixed(0)}, ${p.y.toFixed(1)} m (${(p.y - g).toFixed(1)} above ground)`;
+  statusEl.textContent = `${SHOTS[state.shot].label}${state.free ? ' (free)' : ''}   terrain ${hf.N}² in ${hf.ms} ms, mesh ${hf.mesh.M}² in ${hf.mesh.ms} ms (${hf.mesh.moved} moved)   camera ${p.x.toFixed(0)}, ${(-p.z).toFixed(0)}, ${p.y.toFixed(1)} m (${(p.y - g).toFixed(1)} above ground)`;
 }
 controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
@@ -412,8 +425,10 @@ resize();
 // Dynamic resolution: drop the pixel ratio when frames run long, raise it when there is room.
 const MAX_PR = Math.min(devicePixelRatio, 1.5);
 let pr = MAX_PR, frameAvg = 16;
+const FIXED_PR = params.has('pr') ? +params.get('pr') : null;
+if (FIXED_PR) { pr = FIXED_PR; renderer.setPixelRatio(pr); }
 function governResolution(dt) {
-  if (CAPTURE) return;
+  if (CAPTURE || FIXED_PR) return;
   frameAvg += (dt * 1000 - frameAvg) * 0.05;
   const next = frameAvg > 22 ? Math.max(0.85, pr - 0.1) : frameAvg < 13 ? Math.min(MAX_PR, pr + 0.05) : pr;
   if (Math.abs(next - pr) > 0.01) {
@@ -429,6 +444,10 @@ renderer.setAnimationLoop(() => {
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
   water.update(simTime, sun, hemi, ZENITH, HORIZON, camera);
+  if (shadowDirty && hf) {
+    shadowDirty = false;
+    water.uniforms.uSunShadow.value = sunShadow.bake(water.uniforms.uData.value, hf.extent, water.uniforms.uSunDir.value, hf.N);
+  }
   if (state.free) controls.update();
   sky.position.copy(camera.position);
   renderer.render(scene, camera);
