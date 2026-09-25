@@ -82,6 +82,9 @@ function coastData(hf, mesh, layout, N) {
   }
   const { sd, nearestIn } = signedDistance(foot.map((v) => (v ? 1 : 0)), N, cell);
 
+  // Zones that ask for more surf at the rock (layout.js, `surf`).
+  const surfZones = layout.zones.filter((z) => z.surf);
+  const surfBoost = (x, y) => surfZones.reduce((a, z) => a + z.surf * Math.exp(-((x - z.at[0]) ** 2 + (y - z.at[1]) ** 2) / (z.r * z.r)), 0);
   // Swell shelter, on a coarse grid: the share of directions around the swell's (it comes
   // from the opposite way it travels) along which the water is open for 1.5 km.
   const Nc = 256, cc = size / Nc;
@@ -130,6 +133,7 @@ function coastData(hf, mesh, layout, N) {
     // Probe the openness a little way out from the rock.
     const o = openAt(x + (gx / gl) * 12, y + (gy / gl) * 12);
     expo[k] = Math.min(1, Math.max(0, 0.15 + 0.85 * smooth01(-0.35, 0.7, facing))) * (0.2 + 0.8 * o);
+    expo[k] = Math.min(1, expo[k] + surfBoost(x, y));
   }
   // Sites for the bursts of white water (src/water/spray.js): a foot cell in every 2.5 m
   // square, with the way out to sea and the exposure.

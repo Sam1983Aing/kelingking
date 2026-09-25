@@ -132,11 +132,13 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     // ...and where a swell crest reaches the foot of the rock. The swell is the ocean's own,
     // so the bursts come with the waves, in sets, and are biggest on the exposed rock.
     float swellH = texture(uSwell0, p / uOceanL.x).y;
-    float reach = 3.0 + 12.0 * c.g + 5.0 * vnoise(p * 0.05);
-    float hit = smoothstep(0.05, 0.5, swellH + 0.35 * (vnoise(p * 0.04 + uTime * 0.05) - 0.5))
-              * mix(0.6, 1.0, c.g) * smoothstep(reach, 0.0, c.r) * c.a;
+    // (Exposed rock throws the white water further out: up to 20 m, which also covers the
+    // mouth of a notch or an arch whose foot lies deep under the rock.)
+    float reach = 3.0 + 17.0 * c.g * c.g + 5.0 * vnoise(p * 0.05);
+    float hit = smoothstep(-0.05, 0.4, swellH + 0.35 * (vnoise(p * 0.04 + uTime * 0.05) - 0.5))
+              * mix(0.5, 1.2, c.g) * smoothstep(reach, reach * 0.3, c.r) * c.a;
     // And the wash that is always running up and down the foot of the rock.
-    float wash = c.a * smoothstep(1.5 + 3.0 * c.g, 0.0, c.r) * (0.45 + 0.3 * vnoise(p * 0.3 + uTime * 0.3));
+    float wash = c.a * smoothstep(2.0 + 7.0 * c.g * c.g, 0.0, c.r) * (0.45 + 0.3 * vnoise(p * 0.3 + uTime * 0.3));
     make = max(make, max(hit, wash));
     // New foam starts its own pattern where it is made.
     travel *= 1.0 - smoothstep(foam, foam + 0.3, make);

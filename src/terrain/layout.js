@@ -68,6 +68,7 @@ export function defaultLayout() {
     //   pf    face profile (< 1 bulges and stays sheer, > 1 is a slope that flattens out)
     //   L, D  seabed: how far out it takes to get deep, and how deep
     //   murk  sand hanging in the water, which turns shallow bays milky turquoise
+    //   surf  (water only) more white water where the swell hits the rock than its exposure gives
     defaults: { sand: 0, murk: 0, face: 12, pf: 0.8, L: 18, D: 34 },
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
@@ -94,6 +95,11 @@ export function defaultLayout() {
       // viewpoint looks and strong in the east bay, which the viewpoint cannot see.
       { name: 'east bay plume', at: [420, -50], r: 150, murk: 1 },
       { name: 'plume past the islet', at: [260, -260], r: 120, murk: 0.25 },
+      // Extra white water at the rock (surf only, read by the water in worker.js): the swell
+      // wraps round the jaw and runs right into the arch under it (aerial-side-from-sea.jpg,
+      // and the white round the jaw's tip from the viewpoint).
+      { name: 'surf into the arch', at: [8, 86], r: 40, surf: 1 },
+      { name: 'surf round the jaw tip', at: [35, 105], r: 30, surf: 0.7 },
     ],
 
     beach: { top: 4.6, spread: 24, shift: 8 },
