@@ -89,8 +89,10 @@ const float LB = 0.7;
 float shorePhase(float s) { return log(1.0 + LB * max(s, 0.0) / L0) / LB; }
 
 // Wave timing on the beach: not a metronome. The clock runs a little fast and slow, so the
-// gaps between waves vary, and the heights come in sets of three or four bigger ones.
-float waveClock(float t) { return t + 1.6 * sin(t * 0.0937) + 0.9 * sin(t * 0.2167 + 1.3); }
+// gaps between waves vary, and the heights come in sets of three or four bigger ones. (The
+// 0.3 s only sets which moment of the break the hero frames, frozen at 17 s, catch: the lip
+// in mid-throw, as in wave-breaking-closeup.jpg.)
+float waveClock(float t) { t += 0.3; return t + 1.6 * sin(t * 0.0937) + 0.9 * sin(t * 0.2167 + 1.3); }
 float setSize(float idx) { return (0.78 + 0.3 * sin(idx * 0.861 + 0.7)) * mix(0.75, 1.25, hash12(vec2(idx, 3.1))); }
 
 // The shore-driven wave train, in front of the beaches.
@@ -238,15 +240,19 @@ float caustics(vec2 p, float t) {
 // x how much light gets into this spot (the crevices between lumps are dark), yz a tilt of
 // the surface in two directions, for its lumps to face toward or away from the sun. Three
 // scales of lumps, 1 m down to 15 cm, the smallest only where a pixel is small enough.
+float reliefH(vec2 q, vec2 o, float fine) {
+  // Rotated octaves so the value noise's grid does not show as blocks.
+  const mat2 R1 = mat2(0.8, -0.6, 0.6, 0.8), R2 = mat2(0.28, -0.96, 0.96, 0.28);
+  return vnoise(q * 1.1 + o) * 0.5 + vnoise(R1 * q * 2.9 + 3.1 - o) * 0.32 + vnoise(R2 * q * 7.3 + 9.2) * 0.18 * fine;
+}
 vec3 foamRelief(vec2 q, float fp, float t) {
   vec2 o = vec2(t * 0.35, -t * 0.2);
-  float e = 0.08;
+  float e = 0.12;
   float fine = smoothstep(0.08, 0.02, fp);
-  float h0 = vnoise(q * 1.1 + o) * 0.55 + vnoise(q * 2.9 + 3.1 - o) * 0.3 + vnoise(q * 7.3 + 9.2) * 0.15 * fine;
-  float hx = vnoise((q + vec2(e, 0.0)) * 1.1 + o) * 0.55 + vnoise((q + vec2(e, 0.0)) * 2.9 + 3.1 - o) * 0.3 + vnoise((q + vec2(e, 0.0)) * 7.3 + 9.2) * 0.15 * fine;
-  float hy = vnoise((q + vec2(0.0, e)) * 1.1 + o) * 0.55 + vnoise((q + vec2(0.0, e)) * 2.9 + 3.1 - o) * 0.3 + vnoise((q + vec2(0.0, e)) * 7.3 + 9.2) * 0.15 * fine;
-  vec2 g = vec2(hx - h0, hy - h0) / e;
-  return vec3(mix(0.3, 1.0, smoothstep(0.18, 0.62, h0)), g * 0.9);
+  float h0 = reliefH(q, o, fine);
+  vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine) - reliefH(q - vec2(e, 0.0), o, fine),
+                reliefH(q + vec2(0.0, e), o, fine) - reliefH(q - vec2(0.0, e), o, fine)) / (2.0 * e);
+  return vec3(mix(0.35, 1.0, smoothstep(0.2, 0.6, h0)), g * 0.6);
 }
 
 // Foam lace at a map position: two levels of warping (big swirls, then filaments bent along
@@ -264,8 +270,10 @@ vec2 lacePattern(vec2 pf, float fp) {
     float ridge3 = near > 0.0 ? 1.0 - abs(2.0 * fbm3(qq * 3.2 + 7.7 + w2 * 3.0) - 1.0) : 0.6;
     float walls = fp < 0.05 ? 1.0 - smoothstep(0.0, 0.25, cells(qq * 3.0, uTime * 0.35)) : 0.4;
     float body = fbm3(qw * 0.12 + 11.0);
-    float pattern = clamp(pow(ridge, 3.0) * 0.45 + pow(ridge2, 5.0) * 0.3 + mix(0.12, pow(ridge3, 6.0) * 0.35 + walls * 0.12, near)
-                    + (body - 0.5) * 0.9 + 0.08, 0.0, 1.0);
+    // Up close the fine threads and bubbles carry it; the big strokes would read as paint.
+    float pattern = clamp(pow(ridge, 3.0) * mix(0.45, 0.22, near) + pow(ridge2, 5.0) * 0.3
+                    + mix(0.12, pow(ridge3, 6.0) * 0.5 + walls * 0.2, near)
+                    + (body - 0.5) * mix(0.9, 0.6, near) + 0.08, 0.0, 1.0);
     return vec2(pattern, ridge);
 }
 `;
@@ -581,7 +589,9 @@ void main() {
   vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
   // In the crevices between lumps: shaded foam and the water showing through, not dirt.
   foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
-  col = mix(col, foamRad, foam * mix(0.75, 1.0, max(fresh, smoothstep(0.3, 0.8, amount))));
+  // Old foam is a thin film of bubbles: up close the water shows through it.
+  float thinFilm = mix(mix(0.55, 0.75, smoothstep(0.01, 0.08, fp)), 1.0, max(fresh, smoothstep(0.3, 0.8, amount)));
+  col = mix(col, foamRad, foam * thinFilm);
 
   // Fade out over the last few centimetres so the wet sand shows through the swash.
   float film = vWorld.y - d.r;

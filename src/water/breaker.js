@@ -159,13 +159,20 @@ void main() {
   vec2 pc = bc.pc, n = bc.n;
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
   Surf c;
-  float st = mix(0.0, tau, on);
+  // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
+  float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
+  float st = mix(0.0, clamp(tau + jit * 0.12 * smoothstep(0.1, 0.3, tau), 0.0, 1.2), on);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float xF = min(max(Lf, H * (0.02 + 0.3 * st) + H * (0.2 + 0.4 * smoothstep(0.1, 0.7, st)) + 0.7 * H), xMax);
   vec2 pm = pc - n * pr.x;
   float yRef = mix(hB, hF, clamp((pr.x + Lb) / (Lb + xF), 0.0, 1.0));
-  float yHf = hAt(pm);
+  Surf sp = surfAt(pm, dataAt(pm));
+  float yHf = sp.hRaw;
   float y = mix(yRef + pr.y, yHf, pr.w);
+  // The face's foot and the floor never dip below the sea as it is drawn there (in front the
+  // trough is not flat: the last wave's bore and the swash lift it), or the sea would cut
+  // across the bottom of the face in a straight line.
+  if (v > 0.6) y = max(y, sp.h + 0.02);
   // Collapse into the bore: the thrown water lands as a lumpy heap of white water, then
   // settles into the heightfield's own bore (so the ribbon can switch off without a jump).
   float heap = smoothstep(0.7, 0.85, tau) * (1.0 - smoothstep(0.9, 1.05, tau));
@@ -222,6 +229,17 @@ varying float vTear;
 
 void main() {
   if (vTear > 0.001) discard;
+  // The floor in front of the tube lies on the sea's own trough (tucked under it): let the
+  // sea draw it, so there is no seam where the ribbon ends.
+  if (vInfo.x > 0.86) discard;
+  // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
+  if (vInfo.y > 0.2 && vInfo.x > 0.38 && vInfo.x < 0.52) {
+    float rim = 1.0 - abs(vInfo.x - 0.455) / 0.07;
+    float holes = vnoise(vec2(vAlong * 2.3, vInfo.x * 40.0 + vInfo.y * 5.0)) * 0.65 + vnoise(vec2(vAlong * 7.9, vInfo.x * 110.0)) * 0.35;
+    if (holes < rim * 0.75 * smoothstep(0.2, 0.45, vInfo.y)) discard;
+  }
+  // And it fades into the sea over its last stretch at both ends (drawn after the sea).
+  float edgeFade = smoothstep(0.0, 0.06, vInfo.x) * (1.0 - smoothstep(0.78, 0.86, vInfo.x));
   float v = vInfo.x, tau = vInfo.y, H = vInfo.w;
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 N = normalize(vNormal);
@@ -277,7 +295,8 @@ void main() {
   vec2 lp = lacePattern(rp * 1.3 + vec2(0.0, -tau * 3.0), 0.02);
   float tear = vnoise(vec2(vAlong * 1.7, tau * 6.0)) * 0.5 + vnoise(vec2(vAlong * 5.3, v * 30.0)) * 0.5;
   float edge = smoothstep(0.36, 0.45, v + tear * 0.05) * (1.0 - smoothstep(0.5, 0.58, v - tear * 0.06)) * smoothstep(0.12, 0.45, tau);
-  float feather = smoothstep(0.2, 0.26, v) * (1.0 - smoothstep(0.3, 0.38, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.5, 0.7, tau));
+  // Feathering: a thin broken fringe along the very top as the crest starts to spill.
+  float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
   float impact = smoothstep(0.62, 0.85, tau) * (1.0 - smoothstep(0.88, 1.04, tau)) * smoothstep(0.2, 0.4, v);
@@ -287,7 +306,8 @@ void main() {
   foam = max(foam, smoothstep(0.9, 1.0, amount));
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
-  float seaFoam = clamp(sim.r * uFoam, 0.0, 1.0) * (1.0 - smoothstep(0.62, 0.8, v));
+  // Only on the back and the floor: the lip and the face are the breaker's own.
+  float seaFoam = clamp(sim.r * uFoam, 0.0, 1.0) * max(1.0 - smoothstep(0.18, 0.24, v), smoothstep(0.82, 0.9, v));
   if (seaFoam > 0.002) {
     vec2 slp = lacePattern(vMap - sim.ba, fp);
     foam = max(foam, smoothstep(1.0 - seaFoam - 0.12, 1.0 - seaFoam + 0.12, slp.x) * smoothstep(0.0, 0.06, seaFoam));
@@ -302,7 +322,7 @@ void main() {
   foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
   col = mix(col, foamRad, foam);
 
-  gl_FragColor = vec4(col * vApT + vApIns, 1.0);
+  gl_FragColor = vec4(col * vApT + vApIns, edgeFade);
   // Debug views skip the exposure and tone curve so their values read straight.
   if (uDebug == 9) { gl_FragColor = vec4(v, tau, vInfo.z / 4.0, 1.0); return; }
   #include <tonemapping_fragment>
@@ -339,10 +359,11 @@ export function createBreaker(renderer, waterUniforms) {
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: THREE.DoubleSide,
+    transparent: true,
   });
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 0;
+  mesh.renderOrder = 2;   // after the sea, over the crest it has tucked away
   mesh.visible = false;
 
   // Rows across the wave, with more of them on the lip.

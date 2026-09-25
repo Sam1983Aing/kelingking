@@ -123,7 +123,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
 
     // Fading: a solid white patch thins to lace within a few seconds (the big bubbles pop),
     // then the lace lingers and fades slowly. Sand settles.
-    foam -= uDt * uThin * max(foam - 0.22, 0.0);
+    foam -= uDt * uThin * max(foam - 0.17, 0.0);
     foam *= exp(-uDt / uLife.x);
     sand *= exp(-uDt / uLife.z);
 

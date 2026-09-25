@@ -73,7 +73,8 @@ void main() {
     float y0 = mix(bc.hB, bc.hF, 0.5) + pr.y;
     vec3 fwd = vec3(-bc.n.x, 0.0, bc.n.y);
     vec3 side = vec3(bc.n.y, 0.0, bc.n.x);
-    vec3 p0 = vec3(pm.x, y0, -pm.y) + side * (aSeed.z - 0.5) * 0.5;
+    // Scattered along the beach and across the lip, so the columns of the ribbon do not show.
+    vec3 p0 = vec3(pm.x, y0, -pm.y) + side * (fract(aSeed.z * 7.13 + aSeed.w * 3.7) - 0.5) * 1.8 + fwd * (fract(aSeed.x * 5.3) - 0.5) * 0.6;
     vec3 vel;
     float g = G;
     if (kind < 0.5) {         // flung off the lip
@@ -83,9 +84,9 @@ void main() {
       alpha = 0.95; mist = 0.15;
     } else if (kind < 1.5) {  // feathering off the crest: rises with it, the offshore wind holds it back
       vel = fwd * speed * mix(0.45, 0.85, aSeed.w) + vec3(0.0, mix(1.2, 3.5, aSeed.z), 0.0) + side * (aSeed.x - 0.5) * 1.5;
-      g = 2.5;               // fine mist: the air holds it up
-      size = mix(0.5, 1.2, aSeed.w);
-      alpha = 0.14; mist = 0.8;
+      g = 5.0;               // fine spray: the air holds it up a little
+      size = mix(0.2, 0.55, aSeed.w);
+      alpha = 0.6; mist = 0.3;
     } else {                  // thrown up where the lip lands
       vel = fwd * speed * mix(0.7, 1.2, aSeed.w) + vec3(0.0, mix(2.0, 5.5, aSeed.z) * clamp(bc.H / 1.5, 0.5, 1.4), 0.0) + side * (aSeed.x - 0.5) * 2.0;
       size = mix(0.4, 1.1, aSeed.w);
