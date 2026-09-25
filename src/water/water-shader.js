@@ -168,15 +168,20 @@ Surf surfAt(vec2 p, vec4 d) {
   float brK = uBreakAt * (0.7 + 0.35 * bigK);
   float sCrest = s - v * Lhere;
   float tau = (brK + 5.0 - sCrest) / 8.0;
-  float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.36, 0.45, v));
-  float sink = win * smoothstep(0.02, 0.12, tau) * (1.0 - smoothstep(0.95, 1.1, tau)) * beachy * uBreakerOn;
+  float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.25, 0.34, v));
+  // (Inside the stretch where the ribbon is fully up, so the sea never shows a half-tucked,
+  // flattened crest: breaker.js rises from -0.08 and stays until 1.12.)
+  float sink = win * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
   float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
   float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
   // and squeezing the front into a few grid rows turns it into a staircase of teeth.
   float lean = Ak * 0.1 * crest * smoothstep(br + 25.0, br, s) * (1.0 - broken);
 
-  float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v);
+  // (The white lip drawn on the heightfield's own crest, from before the breaker existed.
+  // Where the breaker draws the lip, this only laid a milky veil over the rising crest just
+  // before the breaker took over, so it is nearly off then.)
+  float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v) * (1.0 - 0.9 * uBreakerOn);
   // The bore: a white front a metre or two deep, then foam that thins into lace.
   float front = broken * smoothstep(-0.03, 0.0, v) * (1.0 - smoothstep(0.04, 0.12, v));
   float trail = broken * 0.8 * exp(-max(v, 0.0) / 0.3) * step(0.0, v);
@@ -345,8 +350,10 @@ Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float sha
   }
   // Coarse sand churned up in the surf (beige: the grains absorb some blue) and the fine
   // silt of the plumes (white: it only scatters).
+  // The sand stays low: a rising wave's face and crest are clear water drawn up from in front
+  // of it, the churned sand is in the bottom of the water and the white water after the break.
   float churn = mix(uTurbidity * nearSurf * smoothstep(0.2, 0.75, cloud), simSand * uTurbidity * (0.6 + 0.8 * cloud), simW)
-              * mix(0.08, 1.0, smoothstep(0.45, 0.85, N.y));
+              * mix(0.08, 1.0, smoothstep(0.45, 0.85, N.y)) * mix(1.0, 0.2, smoothstep(0.15, 0.9, world.y));
   float sed = churn + plume;
 
   // Absorption and backscattering, clear water plus sand.
@@ -369,7 +376,13 @@ Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float sha
   vec3 bedRad = bedAlbedo / PI * Ebed;
   vec3 Rout = normalize(vec3(R.x, max(R.y, 0.08), R.z));
   if (through > 0.001) {
-    vec3 behind = skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1;
+    // Out through the back of the wave. A ray that meets the back surface at a grazing angle
+    // mostly reflects back into the water (total internal reflection past about 49 degrees),
+    // so the sky only shows through where the ray leaves going up.
+    float escape = mix(0.3, 1.0, smoothstep(0.02, 0.45, R.y));
+    vec3 bb0 = uBackscatter;
+    vec3 behind = (skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1) * escape
+                + (1.0 - escape) * uGordonF * bb0 / (uAbsorb + bb0) * (uSunIrr * max(L.y, 0.0) + uSkyIrr) / PI;
     bedRad = mix(bedRad, behind, through);
   }
   // The water column: what the water itself sends back (deep water reflectance, Gordon's
@@ -379,6 +392,68 @@ Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float sha
   vec3 under = bedRad * Tv + column * (1.0 - Tv * mix(Td, vec3(1.0), through));
 
   return Under(under, depth0, sed, through, bb, K);
+}
+`;
+
+// The surface as the sea and the breaker both see it (shared so the two cannot drift apart:
+// they sit side by side at every breaking wave).
+export const SURFACE_GLSL = /* glsl */ `
+uniform sampler2D uOceanB[4];
+uniform float uOceanTail;    // slope variance of ripples too small for any cascade
+uniform float uReflSpread;   // scale on the unresolved slope spread used for the reflection
+uniform float uWaveMask;     // what a facet that would reflect below the horizon sees, as a share of the horizon sky
+// The open sea at this pixel: mean slope (xy), the spread of slopes too small to see here
+// (z, from the mipmaps: mean of the squares minus square of the mean), whitecap foam (w).
+vec4 oceanSurface(vec2 p, vec4 sw) {
+  vec4 b0 = texture(uOceanB[0], p / uOceanL.x);
+  vec4 b1 = texture(uOceanB[1], p / uOceanL.y);
+  vec4 b2 = texture(uOceanB[2], p / uOceanL.z);
+  vec4 b3 = texture(uOceanB[3], p / uOceanL.w);
+  vec2 s = sw.x * b0.xy + sw.y * b1.xy + sw.z * b2.xy + sw.w * b3.xy;
+  float v = sw.x * sw.x * max(b0.z - dot(b0.xy, b0.xy), 0.0)
+          + sw.y * sw.y * max(b1.z - dot(b1.xy, b1.xy), 0.0)
+          + sw.z * sw.z * max(b2.z - dot(b2.xy, b2.xy), 0.0)
+          + sw.w * sw.w * (max(b3.z - dot(b3.xy, b3.xy), 0.0) + uOceanTail);
+  float foam = max(b1.w * smoothstep(0.5, 1.0, sw.y), b2.w * 0.5 * smoothstep(0.6, 1.1, sw.z)) + b0.w * sw.x * 0.5;
+  return vec4(s, v, foam);
+}
+
+// Reflection of a surface whose waves are partly smaller than the pixel: the pixel sees many
+// little mirrors whose normals spread by 'sub' round the mean N0. Four of them (the corners
+// of that spread, which carry its variance), each weighted by how much of it faces the
+// camera, each with its own Fresnel and its own patch of sky. Facets tilted toward the camera
+// are seen more and reflect higher sky; ones that would reflect below the horizon see other
+// waves. Tilted in N0's own tangent plane, so it works on a wave's face as on flat sea.
+void roughReflect(vec3 N0, vec3 V, float sub, out float F, out vec3 refl) {
+  float NoV = max(dot(N0, V), 1e-3);
+  if (sub < 0.015) {
+    F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
+    vec3 Rd = reflect(-V, N0);
+    Rd.y = abs(Rd.y);
+    refl = skyRadiance(Rd);
+    return;
+  }
+  vec3 t = V - N0 * dot(V, N0);
+  t = dot(t, t) > 1e-8 ? normalize(t) : normalize(cross(N0, vec3(1.0, 0.0, 0.0)));
+  vec3 b = cross(N0, t);
+  float sa = sub * 0.7071 * uReflSpread;
+  float wsum = 0.0, fsum = 0.0;
+  vec3 lsum = vec3(0.0);
+  for (int k = 0; k < 4; k++) {
+    vec2 o = vec2(k < 2 ? -1.0 : 1.0, (k == 0 || k == 2) ? -1.0 : 1.0) * sa;
+    vec3 n = normalize(N0 + t * o.x + b * o.y);
+    float nv = dot(n, V);
+    if (nv <= 0.0) continue;
+    float w = nv / max(dot(n, N0), 1e-3);
+    float f = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
+    vec3 rd = reflect(-V, n);
+    float seen = smoothstep(-0.05, 0.03, rd.y);
+    rd.y = max(rd.y, 0.01);
+    vec3 l = mix(skyRadiance(vec3(rd.x, 0.02, rd.z)) * uWaveMask, skyRadiance(rd), seen);
+    wsum += w; fsum += w * f; lsum += w * f * l;
+  }
+  F = fsum / max(wsum, 1e-4);
+  refl = lsum / max(fsum, 1e-5);
 }
 `;
 
@@ -463,12 +538,9 @@ ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
 ${FOAM_GLSL}
 ${UNDER_GLSL}
-uniform sampler2D uOceanB[4];
-uniform float uOceanTail;    // slope variance of ripples too small for any cascade
+${SURFACE_GLSL}
 uniform float uWhitecaps;
 uniform float uFoam;
-uniform float uReflSpread;   // scale on the unresolved slope spread used for the reflection
-uniform float uWaveMask;     // what a facet that would reflect below the horizon sees, as a share of the horizon sky
 uniform sampler2D uSim;      // the foam simulation
 uniform vec3 uSimRect;       // its square on the map: x0, y0, size
 uniform float uSimOn;
@@ -479,21 +551,6 @@ varying vec2 vGrid;
 varying vec4 vSeaW;
 varying vec2 vSurfSlope;
 
-// The open sea at this pixel: mean slope (xy), the spread of slopes too small to see here
-// (z, from the mipmaps: mean of the squares minus square of the mean), whitecap foam (w).
-vec4 oceanSurface(vec2 p, vec4 sw) {
-  vec4 b0 = texture(uOceanB[0], p / uOceanL.x);
-  vec4 b1 = texture(uOceanB[1], p / uOceanL.y);
-  vec4 b2 = texture(uOceanB[2], p / uOceanL.z);
-  vec4 b3 = texture(uOceanB[3], p / uOceanL.w);
-  vec2 s = sw.x * b0.xy + sw.y * b1.xy + sw.z * b2.xy + sw.w * b3.xy;
-  float v = sw.x * sw.x * max(b0.z - dot(b0.xy, b0.xy), 0.0)
-          + sw.y * sw.y * max(b1.z - dot(b1.xy, b1.xy), 0.0)
-          + sw.z * sw.z * max(b2.z - dot(b2.xy, b2.xy), 0.0)
-          + sw.w * sw.w * (max(b3.z - dot(b3.xy, b3.xy), 0.0) + uOceanTail);
-  float foam = max(b1.w * smoothstep(0.5, 1.0, sw.y), b2.w * 0.5 * smoothstep(0.6, 1.1, sw.z)) + b0.w * sw.x * 0.5;
-  return vec4(s, v, foam);
-}
 
 void main() {
   #include <logdepthbuf_fragment>
@@ -543,39 +600,7 @@ void main() {
   float NoV = max(dot(N, V), 1e-3);
   float F;
   vec3 refl;
-  if (sub < 0.015) {
-    F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-    vec3 Rd = reflect(-V, N);
-    Rd.y = abs(Rd.y);
-    refl = skyRadiance(Rd);
-  } else {
-    // Waves smaller than the pixel: the pixel sees many little mirrors whose slopes spread
-    // by 'sub' around the mean. Four of them (the corners of that spread, which carry its
-    // variance), each weighted by how much of it faces the camera, each with its own
-    // Fresnel and its own patch of sky. Facets tilted toward the camera are seen more and
-    // reflect higher sky; ones that would reflect below the horizon see other waves.
-    vec2 hv = normalize(vec2(V.x, -V.z) + vec2(1e-5, 0.0));   // toward the camera, on the map
-    vec2 hp = vec2(-hv.y, hv.x);
-    float sa = sub * 0.7071 * uReflSpread;
-    float wsum = 0.0, fsum = 0.0;
-    vec3 lsum = vec3(0.0);
-    for (int k = 0; k < 4; k++) {
-      vec2 o = vec2(k < 2 ? -1.0 : 1.0, (k == 0 || k == 2) ? -1.0 : 1.0) * sa;
-      vec2 sl = slope + hv * o.x + hp * o.y;
-      vec3 n = normalize(vec3(-sl.x, 1.0, sl.y));
-      float nv = dot(n, V);
-      if (nv <= 0.0) continue;
-      float w = nv / n.y;
-      float f = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
-      vec3 rd = reflect(-V, n);
-      float seen = smoothstep(-0.05, 0.03, rd.y);
-      rd.y = max(rd.y, 0.01);
-      vec3 l = mix(skyRadiance(vec3(rd.x, 0.02, rd.z)) * uWaveMask, skyRadiance(rd), seen);
-      wsum += w; fsum += w * f; lsum += w * f * l;
-    }
-    F = fsum / max(wsum, 1e-4);
-    refl = lsum / max(fsum, 1e-5);
-  }
+  roughReflect(N, V, sub, F, refl);
 
   float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, 0.05, 0.6);
   float a2 = rough * rough;

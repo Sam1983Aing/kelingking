@@ -25,7 +25,7 @@
 //   floor          the trough in front, under the lip
 
 import * as THREE from 'three';
-import { COMMON, FOAM_GLSL, UNDER_GLSL } from './water-shader.js';
+import { COMMON, FOAM_GLSL, UNDER_GLSL, SURFACE_GLSL } from './water-shader.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
 import { SKY_PARS, AERIAL_VERT, AERIAL_FRAG_PARS } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
@@ -107,7 +107,7 @@ BreakCol findBreak(vec2 p0, vec2 n0) {
   c = surfAt(q, dataAt(q));
   b.n = offshoreAt(q);            // the cross-section runs square to the crest
   b.tau = c.tau;
-  b.on = step(0.02, c.tau) * step(c.tau, 1.08) * step(0.001, c.L * step(0.0, c.hRaw + 5.0));
+  b.on = step(-0.08, c.tau) * step(c.tau, 1.14) * step(0.001, c.L * step(0.0, c.hRaw + 5.0));
   b.L = c.L;
   b.Lb = 0.45 * c.L; b.Lf = 2.0 * c.wf * c.L; b.xMax = 0.12 * c.L;
   b.hB = hAt(q + b.n * b.Lb);
@@ -153,7 +153,7 @@ void main() {
   // A stretch of beach that is not breaking now costs next to nothing: its whole column goes
   // to one point a metre under the sea (the triangles to it have no area, or lie under the
   // sea where the ribbon starts or stops, and are faded out there anyway).
-  if (bc.on < 0.5 || bc.tau > 1.05) {
+  if (bc.on < 0.5) {
     vec3 w0 = vec3(aLine.x, -1.0, -aLine.y);
     vWorld = w0; vNormal = vec3(0.0, 1.0, 0.0); vMap = aLine.xy; vInfo = vec4(aProf.x, 0.0, 0.0, 0.0);
     vAlong = aProf.y; vTear = 1.0;
@@ -167,12 +167,17 @@ void main() {
   vec2 pPrev = texelFetch(uBreakCol0, ivec2(int(max(aProf.z - 1.0, 0.0) + 0.5), 0), 0).xy;
   vec2 pNext = texelFetch(uBreakCol0, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).xy;
   vTear = step(4.0, max(distance(pPrev, bc.pc), distance(pNext, bc.pc)));
+  // Next to a column that is off (collapsed under the sea), sink this one too, or the
+  // triangles between them stand up as thin slivers that catch the light.
+  float nbOn = texelFetch(uBreakCol1, ivec2(int(max(aProf.z - 1.0, 0.0) + 0.5), 0), 0).y
+             * texelFetch(uBreakCol1, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).y;
   vec2 pc = bc.pc, n = bc.n;
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
   Surf c;
   // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
   float st = mix(0.0, clamp(tau + jit * 0.12 * smoothstep(0.1, 0.3, tau), 0.0, 1.2), on);
+  float tauC = max(tau, 0.0);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float xF = min(max(Lf, H * (0.02 + 0.3 * st) + H * (0.2 + 0.4 * smoothstep(0.1, 0.7, st)) + 0.7 * H), xMax);
   vec2 pm = pc - n * pr.x;
@@ -192,8 +197,20 @@ void main() {
   // the start and end of each break: where the two are nearly the same shape, whichever is
   // higher shows, and the depth test draws the seam. (A blend or a dither there showed as a
   // band, because the two are never shaded exactly alike.)
+  // In time: up from -0.08 (before the sea starts tucking its crest at 0.02) to 1.12 (after
+  // it has put it back by 1.06). While the two have the same shape the ribbon stays 10 cm
+  // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
+  // bore at different points, and 3 cm was not enough).
   float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.78, 0.85, v))
-               * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.92, 1.03, tau)) * on;
+               * smoothstep(-0.08, -0.02, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
+  y -= 0.1 * (1.0 - smoothstep(0.02, 0.1, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
+  // As the sea puts its crest back after the collapse, everything of the ribbon behind the
+  // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
+  // flat pane over a sea that is still half tucked.
+  y -= 0.4 * smoothstep(0.84, 0.96, tau) * (1.0 - smoothstep(0.35, 0.5, v));
+  // And in space: on its back, beyond where the sea tucks its crest away (a third of a
+  // wavelength behind the crest, surfAt's window), the ribbon lies 10 cm under the sea too.
+  y -= 0.1 * smoothstep(0.25, 0.34, -pr.x / L);
   y = mix(sp.h - 0.15, y, keepUp);
 
   // Normal from the cross-section's slope and the waterline's direction.
@@ -228,7 +245,7 @@ ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
 ${FOAM_GLSL}
 ${UNDER_GLSL}
-uniform sampler2D uOceanB[4];
+${SURFACE_GLSL}
 uniform float uFoam;
 uniform sampler2D uSim;
 uniform vec3 uSimRect;
@@ -262,10 +279,14 @@ void main() {
   // along the edge), turn it to the camera.
   if (dot(N, V) < 0.0) N = -N;
   float fp = max(length(fwidth(vWorld)), 0.005);
-  // Ripples ride on the breaker too: the small cascades' slopes, tilted onto the surface.
-  vec2 rs = texture(uOceanB[2], vMap / uOceanL.z).xy * 0.6 + texture(uOceanB[3], vMap / uOceanL.w).xy * 0.6;
+  // The sea's own surface rides on the breaker: the ocean's slopes (tilted onto the ribbon),
+  // and the spread of the slopes too small to draw, for the reflection and the glint. The
+  // same as the sea beside it (SURFACE_GLSL), so where they meet they look alike: with a
+  // plain mirror the ribbon came out darker than the sea's own crest next to it.
+  vec4 d = dataAt(vMap);
+  vec4 oc = oceanSurface(vMap, seaWeights(vMap, d));
   vec3 tA = normalize(cross(N, vec3(0.0, 0.0, 1.0)) + 1e-4), tB = cross(N, tA);
-  N = normalize(N + tA * rs.x + tB * rs.y);
+  N = normalize(N + tA * oc.x + tB * oc.y);
   vec3 L = uSunDir;
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -275,23 +296,21 @@ void main() {
   // Light up out of the water, as for the sea around it (the same function). Through the thin
   // lip the camera sees the face of the wave behind it: the same light, dimmed a little by
   // the lip's own water and brightened by the sun coming through it.
-  float lip = smoothstep(0.23, 0.27, v) * (1.0 - smoothstep(0.6, 0.66, v)) * step(0.05, tau);
-  vec4 d = dataAt(vMap);
+  // (Only once a lip has been thrown and only where it is thin: before that, the top of the
+  // face is the body of the wave, and shading it as see-through made it pale.)
+  float lip = smoothstep(0.23, 0.27, v) * (1.0 - smoothstep(0.6, 0.66, v)) * smoothstep(0.12, 0.3, tau)
+            * smoothstep(0.8, 0.3, vInfo.z);
   float thick = 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1);
   Under uw = underLight(vMap, d, vWorld, N, V, fp, shadow, thick, 0.0, sim.g, uSimOn);
   vec3 Tl = exp(-uw.K * max(vInfo.z, 0.05) * 2.0);
   vec3 sunThrough = uSunIrr * shadow * pow(max(dot(-V, L) * 0.5 + 0.5, 0.0), 6.0) * uGordonF * uw.bb / uw.K / PI * 3.0;
   vec3 under = mix(uw.light, uw.light * Tl + (uGordonF * uw.bb / uw.K * (uSunIrr * max(L.y, 0.0) + uSkyIrr) / PI) * (1.0 - Tl) + sunThrough, lip);
-  // Light that came in through the top of the crest glows in the upper part of the wave.
-  float glowUp = smoothstep(0.2, 1.0, (vWorld.y + 0.3) / max(H, 0.3)) * smoothstep(0.05, 0.3, tau);
-  under += uGordonF * uw.bb / uw.K * uSunIrr * max(L.y, 0.0) * shadow * glowUp * 0.6 / PI;
 
   float NoV = max(dot(N, V), 1e-3);
-  float F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
-  vec3 Rd = reflect(-V, N);
-  Rd.y = abs(Rd.y);
-  vec3 refl = skyRadiance(Rd);
-  float rough = 0.08;
+  float F;
+  vec3 refl;
+  roughReflect(N, V, sqrt(oc.z), F, refl);
+  float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, 0.05, 0.6);
   float a2 = rough * rough;
   vec3 Hh = normalize(V + L);
   float NoH = max(dot(N, Hh), 0.0), NoL = max(dot(N, L), 0.0);
@@ -301,6 +320,10 @@ void main() {
   float G = (NoL / (NoL * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
   vec3 spec = uSunIrr * shadow * D * Fs * G / (4.0 * NoV + 1e-4);
   vec3 col = under * (1.0 - F) + refl * F + spec;
+  // Sunlight through the thin top of the wave: the same as the sea's (water-shader.js), so
+  // the ribbon and the sea look alike where they have the same shape.
+  float crestGlow = smoothstep(0.3, 1.4, vWorld.y) * pow(1.0 - NoV, 1.5);
+  col += uGordonF * uw.bb / uw.K * uSunIrr * max(L.y, 0.0) * shadow * crestGlow * 0.5;
 
   // White water: the lip's edge tears into foam as it throws; the crest feathers; on impact
   // and in the collapse everything turns white; foam from earlier waves streaks the face. The
@@ -344,6 +367,9 @@ void main() {
   gl_FragColor = vec4(col * vApT + vApIns, 1.0);
   // Debug views skip the exposure and tone curve so their values read straight.
   if (uDebug == 9) { gl_FragColor = vec4(v, tau, vInfo.z / 4.0, 1.0); return; }
+  if (uDebug == 1) { gl_FragColor = vec4(vec3(uw.sed), 1.0); return; }
+  if (uDebug == 2) { gl_FragColor = vec4(vec3(uw.through), 1.0); return; }
+  if (uDebug == 4) { gl_FragColor = vec4(under * 0.08, 1.0); return; }
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) gl_FragColor = vec4(2.0 / 255.0, log2(max(distance(vWorld, cameraPosition), 1.0)) / 20.0, 1.0, 1.0);

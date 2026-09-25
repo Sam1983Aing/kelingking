@@ -85,8 +85,8 @@ void main() {
     } else if (kind < 1.5) {  // feathering off the crest: rises with it, the offshore wind holds it back
       vel = fwd * speed * mix(0.45, 0.85, aSeed.w) + vec3(0.0, mix(1.2, 3.5, aSeed.z), 0.0) + side * (aSeed.x - 0.5) * 1.5;
       g = 5.0;               // fine spray: the air holds it up a little
-      size = mix(0.2, 0.55, aSeed.w);
-      alpha = 0.6; mist = 0.3;
+      size = mix(0.1, 0.3, aSeed.w);
+      alpha = 0.45; mist = 0.3;
     } else {                  // thrown up where the lip lands
       vel = fwd * speed * mix(0.7, 1.2, aSeed.w) + vec3(0.0, mix(2.0, 5.5, aSeed.z) * clamp(bc.H / 1.5, 0.5, 1.4), 0.0) + side * (aSeed.x - 0.5) * 2.0;
       size = mix(0.4, 1.1, aSeed.w);
@@ -188,7 +188,9 @@ void main() {
   }
   float body = exp(-r * 3.0);
   float a = vColor.y * mix(drops * smoothstep(1.0, 0.2, r), body * mix(1.0, 0.45, smoothstep(30.0, 10.0, vPx)), mist);
-  a = max(a, vColor.y * body * 0.45 * (1.0 - mist));
+  // A faint haze round the droplets. (It was 0.45: up close dozens of puffs overlap, and
+  // their haze added up to a milky sheet over the rising wave.)
+  a = max(a, vColor.y * body * 0.1 * (1.0 - mist));
   if (a < 0.003) discard;
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = bakedShadow(vWorld, 0.05);
