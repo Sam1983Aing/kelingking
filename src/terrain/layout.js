@@ -95,11 +95,13 @@ export function defaultLayout() {
     // times closer inside the focus ranges (metres east and north: the headland, the islet
     // and the beach). The faces are strips of their own, from `below` metres out from the
     // middle of the face to `above` metres in from it, with vertices faceStep metres apart
-    // up the face (in the focus, and outside it) and faceStepAlong times that along it
-    // (weight scales how much the vertical counts in the spacing). Anything entirely below
-    // `cull` metres is left out (the sea is opaque).
-    mesh: { below: 16, above: 34, weight: 1, cull: -4, faceStep: [0.55, 1.6], faceStepAlong: 1,
-      focus: { x: [-235, 330], y: [-175, 345], density: 3, soft: 60 } },
+    // up the face (in the focus, and outside it), detail.step within detail.r of detail.at
+    // (the beach and the trail, where the camera comes close), and faceStepAlong times that
+    // along it (weight scales how much the vertical counts in the spacing). Anything
+    // entirely below `cull` metres is left out (the sea is opaque).
+    mesh: { below: 16, above: 34, weight: 1, cull: -4, faceStep: [0.85, 1.6], faceStepAlong: 1,
+      detail: { at: [110, 155], r: 125, step: 0.55 },
+      focus: { x: [-235, 330], y: [-175, 345], density: 1.6, soft: 60 } },
     // The wave-cut notch at the foot of the rock: how deep, and how high it reaches.
     notch: { depth: 2.6, top: 5 },
     // Carving the faces: buttresses (metres in and out), the big beds (strata.js, as a

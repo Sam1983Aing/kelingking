@@ -238,10 +238,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   float fpz = max(abs(sdx.x), abs(sdy.x)) * STRATA_SPAN;   // pixel footprint up the stack (m)
   float wallF = 1.0 - smoothstep(0.35, 0.72, abs(up));       // how much this is a face (not a floor or a ceiling)
   vec4 SA = vec4(0.0, 0.0, 1.0, 0.5), SB = vec4(0.0, 0.5, 0.0, 0.0);
+#ifndef SKIP_STRATA
   if (wallF > 0.01) {
     SA = textureGrad(uStrataA, vec2(su, 0.5), sdx, sdy);
     SB = textureGrad(uStrataB, vec2(su, 0.5), sdx, sdy);
   }
+#endif
   vec3 w = pow(abs(N), vec3(4.0));
   w /= w.x + w.y + w.z;
   w = max(w - 0.03, 0.0);
@@ -337,14 +339,14 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float streak = tfbm(vec2(along * 0.55, h * 0.02), 3.0, fp);
     float streaky = smoothstep(0.45, 0.7, tn(vec2(along * 0.03 + 7.0, h * 0.01)));
     a.color = mix(a.color, a.color * vec3(0.62, 0.6, 0.57), smoothstep(0.55, 0.8, streak) * 0.6 * streaky * wallF);
+#ifndef SKIP_WEATHER
     // Weathering at the scale of the whole face: dark grey zones where water runs and
     // lichen grows, and creamy ochre ones where rock fell away more recently. Tens of metres
-    // across, taller than wide.
-    vec2 fq = vec2(along * 0.028, h * 0.016);
-    float dirt = tfbm(fq + 3.1, 36.0, fp);
-    float fresh = tfbm(fq * 1.3 + 17.7, 28.0, fp);
-    a.color = mix(a.color, a.color * vec3(0.56, 0.57, 0.58), smoothstep(0.55, 0.75, dirt) * 0.7 * wallF);
-    a.color = mix(a.color, a.color * vec3(1.1, 1.0, 0.8), smoothstep(0.55, 0.72, fresh) * 0.8 * wallF);
+    // across and running down the face (built from noise already worked out above: the map
+    // noise is constant down a vertical face, the streak noise changes slowly with height).
+    float dirt = n2 * 0.65 + streaky * 0.35;
+    a.color = mix(a.color, a.color * vec3(0.56, 0.57, 0.58), smoothstep(0.55, 0.72, dirt) * 0.7 * wallF);
+    a.color = mix(a.color, a.color * vec3(1.1, 1.0, 0.8), smoothstep(0.6, 0.74, n1 * 0.7 + (1.0 - streaky) * 0.3) * 0.8 * wallF);
     // Joints: near-vertical cracks every several metres, each one only in some stretches of
     // its height, a little darker and cut in.
     if (detail > 0.0) {
@@ -357,6 +359,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       a.color *= 1.0 - 0.45 * joint;
       a.ao *= 1.0 - 0.4 * joint;
     }
+#endif
     // A dirty grey band along the foot of the walls on the beach, and under the overhangs
     // the rock stained ochre and brown.
     float foot = sandZone * (1.0 - smoothstep(uBeachTop + 3.0, uBeachTop + 9.0, h + (n1 - 0.5) * 3.0)) * wallF;

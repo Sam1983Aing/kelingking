@@ -63,6 +63,8 @@ const state = {
   sunEl: 0,
 };
 const layout = defaultLayout();
+// faceStep=0.55 sets the spacing of the face strips' vertices near the headland (metres).
+if (params.has('faceStep')) layout.mesh.faceStep[0] = +params.get('faceStep');
 // cam=east,north,height,yaw,pitch[,fov] puts the camera anywhere, keeping the shot's photo
 // and frame (for close-ups while working on something).
 if (params.has('cam')) {

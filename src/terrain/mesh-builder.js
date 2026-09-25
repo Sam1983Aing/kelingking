@@ -37,7 +37,11 @@ export function buildTerrainMesh(hf, layout, M) {
   const chains = contourChains(f.PSI, f.N, f.x0, f.y0, f.cell);
   const inFocus = (x, y) => smooth(fc.x[0] - fc.soft, fc.x[0], x) * (1 - smooth(fc.x[1], fc.x[1] + fc.soft, x))
     * smooth(fc.y[0] - fc.soft, fc.y[0], y) * (1 - smooth(fc.y[1], fc.y[1] + fc.soft, y));
-  const across = (x, y) => lerp(cfg.faceStep[1], cfg.faceStep[0], inFocus(x, y)) / q;
+  // Finest where the camera comes close (the beach and the trail down to it), then the rest
+  // of the headland, then everything else. Small triangles are what the faces cost.
+  const dt = cfg.detail;
+  const near = (x, y) => 1 - smooth(dt.r - 40, dt.r, Math.hypot(x - dt.at[0], y - dt.at[1]));
+  const across = (x, y) => lerp(lerp(cfg.faceStep[1], cfg.faceStep[0], inFocus(x, y)), dt.step, near(x, y)) / q;
   const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], hor: [], strips: [], hash: new Map() };
   let nCols = 0;
   for (const chain of chains) {
