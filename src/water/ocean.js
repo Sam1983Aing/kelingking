@@ -5,7 +5,7 @@
 // the long wind waves down to a 2.2 m patch of ripples. Each one holds a band of the spectrum
 // so nothing is counted twice. Per cascade, every time the clock moves:
 //   1. evolve    the starting spectrum turns with time (deep water: omega = sqrt(g k))
-//   2. FFT       16 passes (8 across, 8 down) of a radix-2 Stockham FFT, all cascades at once
+//   2. FFT       8 passes (4 across, 4 down) of a radix-4 Stockham FFT, all cascades at once
 //   3. assemble  the fields, into two half-float textures per cascade, with mipmaps:
 //                  A  displacement east, height, displacement north, Jacobian
 //                  B  slope east, slope north, slope squared (its mipmaps give the slope
@@ -36,8 +36,9 @@ export const OCEAN_DEFAULTS = {
   swellSpread: 28,     // cos^2s spreading exponent (bigger = longer crests)
   choppy: [0.6, 0.9, 0.9, 0.8],   // horizontal displacement per cascade (sharpens crests)
   foamDecay: 2.6,      // seconds for whitecap foam to fade to a third
-  foamJ: 0.35,         // Jacobian below which a crest is breaking
+  foamJ: 0.55,         // Jacobian below which a crest is breaking
   seed: 5,
+  halfFFT: false,      // half-float FFT buffers (half the memory traffic)
 };
 
 export function createOcean(renderer, opts = {}) {
@@ -51,10 +52,11 @@ export function createOcean(renderer, opts = {}) {
 
   // ---------------------------------------------------------------- GL resources
   const W = N * C;   // the working atlas holds the cascades side by side
-  function floatTex(w, h, data = null) {
+  function floatTex(w, h, data = null, half = false) {
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data);
+    if (half) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -70,7 +72,7 @@ export function createOcean(renderer, opts = {}) {
   const spectrumTex = floatTex(W, N, h0.data);          // h0(k).re, h0(k).im, conj h0(-k).re, .im
   const kTex = floatTex(W, N, h0.kdata);                // kx, ky, omega, band weight
   // Two ping-pong pairs of two RGBA32F each: four complex fields per texel.
-  const work = [0, 1].map(() => { const t = [floatTex(W, N), floatTex(W, N)]; return { t, f: fbo(t) }; });
+  const work = [0, 1].map(() => { const t = [floatTex(W, N, null, P.halfFFT), floatTex(W, N, null, P.halfFFT)]; return { t, f: fbo(t) }; });
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
   // Outputs: per cascade two ping-pong sets (the foam carries over), each an MRT pair A, B.
@@ -133,6 +135,9 @@ export function createOcean(renderer, opts = {}) {
     o0 = vec4(c0, c1);
     o1 = vec4(c2, c3);
   }`;
+  // Radix-4 Stockham, gather form: each output reads the four inputs a quarter of the row
+  // apart, twiddles them and takes their 4-point DFT. Four passes per direction for 256
+  // (a pass costs more in fixed overhead than in arithmetic, so fewer and fatter is faster).
   const BUTTERFLY = `#version 300 es
   precision highp float;
   precision highp int;
@@ -143,24 +148,27 @@ export function createOcean(renderer, opts = {}) {
   layout(location = 0) out vec4 o0;
   layout(location = 1) out vec4 o1;
   vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+  vec4 cmul2(vec4 a, vec2 b) { return vec4(cmul(a.xy, b), cmul(a.zw, b)); }
   void main() {
     ivec2 px = ivec2(gl_FragCoord.xy);
     int c = px.x / ${N};
     int o = uVertical == 1 ? px.y : px.x - c * ${N};
-    int r = (o / uNs) & 1;
+    int r = (o / uNs) & 3;
     int jm = o % uNs;
-    int j = (o / (2 * uNs)) * uNs + jm;
-    float ang = 3.14159265358979 * float(jm) / float(uNs);
-    vec2 w = vec2(cos(ang), sin(ang));
-    ivec2 p0 = uVertical == 1 ? ivec2(px.x, j) : ivec2(c * ${N} + j, px.y);
-    ivec2 p1 = uVertical == 1 ? ivec2(px.x, j + ${N / 2}) : ivec2(c * ${N} + j + ${N / 2}, px.y);
-    vec4 a0 = texelFetch(uIn0, p0, 0), b0 = texelFetch(uIn0, p1, 0);
-    vec4 a1 = texelFetch(uIn1, p0, 0), b1 = texelFetch(uIn1, p1, 0);
-    b0 = vec4(cmul(b0.xy, w), cmul(b0.zw, w));
-    b1 = vec4(cmul(b1.xy, w), cmul(b1.zw, w));
-    float sg = r == 0 ? 1.0 : -1.0;
-    o0 = a0 + sg * b0;
-    o1 = a1 + sg * b1;
+    int j = (o / (4 * uNs)) * uNs + jm;
+    float phi = 6.28318530718 * float(jm) / float(4 * uNs) + 1.57079632679 * float(r);
+    vec2 w1 = vec2(cos(phi), sin(phi));
+    vec2 w2 = cmul(w1, w1), w3 = cmul(w2, w1);
+    ivec2 base = uVertical == 1 ? ivec2(px.x, j) : ivec2(c * ${N} + j, px.y);
+    ivec2 step = uVertical == 1 ? ivec2(0, ${N / 4}) : ivec2(${N / 4}, 0);
+    o0 = texelFetch(uIn0, base, 0)
+       + cmul2(texelFetch(uIn0, base + step, 0), w1)
+       + cmul2(texelFetch(uIn0, base + 2 * step, 0), w2)
+       + cmul2(texelFetch(uIn0, base + 3 * step, 0), w3);
+    o1 = texelFetch(uIn1, base, 0)
+       + cmul2(texelFetch(uIn1, base + step, 0), w1)
+       + cmul2(texelFetch(uIn1, base + 2 * step, 0), w2)
+       + cmul2(texelFetch(uIn1, base + 3 * step, 0), w3);
   }`;
   const ASSEMBLE = `#version 300 es
   precision highp float;
@@ -215,6 +223,7 @@ export function createOcean(renderer, opts = {}) {
   }
 
   // ---------------------------------------------------------------- one update
+  const debug = {};         // switches for timing experiments
   let current = 0;          // which output set is live
   let lastT = null;
   function step(t, dt) {
@@ -235,7 +244,7 @@ export function createOcean(renderer, opts = {}) {
     let src = 0;
     for (let dir = 0; dir < 2; dir++) {
       gl.uniform1i(butterfly.u.uVertical, dir);
-      for (let s = 0; s < LOG2N; s++) {
+      for (let s = 0; s < LOG2N; s += 2) {
         const dst = 1 - src;
         gl.bindFramebuffer(gl.FRAMEBUFFER, work[dst].f);
         gl.drawBuffers(DRAW2);
@@ -264,7 +273,7 @@ export function createOcean(renderer, opts = {}) {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    for (let c = 0; c < C; c++) {
+    for (let c = 0; c < C && !debug.noMips; c++) {
       const out = glOf(outputs[c][next]);
       for (const tex of [out.a, out.b]) {
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -289,6 +298,7 @@ export function createOcean(renderer, opts = {}) {
   return {
     params: P,
     uniforms,
+    debug,
     stats: h0.stats,
     // Advance to time t (seconds). A still clock costs nothing. A jump (the first frame, a
     // capture frozen at some time) replays the last few seconds so the whitecap foam has
@@ -306,7 +316,7 @@ export function createOcean(renderer, opts = {}) {
       }
       lastT = t;
       renderer.resetState();
-      publish();
+      if (!debug.noPublish) publish();
       return true;
     },
     // Debugging: statistics of one output texture (cascade c, 0 = A, 1 = B), read back.

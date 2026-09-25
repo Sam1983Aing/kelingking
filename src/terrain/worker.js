@@ -1,7 +1,7 @@
 // Runs the heightfield generator off the main thread and also derives the
 // object-space normal map, so the page stays responsive while tuning.
 
-import { generateHeightfield } from './heightfield.js';
+import { generateHeightfield, signedDistance, blur } from './heightfield.js';
 import { buildTerrainMesh } from './mesh-builder.js';
 import { scatterPlants } from '../veg/scatter.js';
 
@@ -12,11 +12,12 @@ self.onmessage = (e) => {
   const normals = normalMap(hf.heights, N, hf.cell);
   const water = waterData(hf, N);
   const shoreDir = shoreDirection(hf.shore, N);
+  const coast = coastData(hf, mesh, layout, N);
   const plants = scatterPlants(hf, layout, [0, 1, 2], mesh.surfaceShift);
-  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir,
+  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms,
     plants: { data: plants.data, count: plants.count, ms: plants.ms },
     mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:
@@ -32,6 +33,115 @@ function waterData(hf, N) {
   }
   return out;
 }
+
+// Half-float RGBA for the white water at the rock (src/water/):
+//   R  distance to the foot of the rock at sea level (m). Read off the carved mesh, where the
+//      face strips cross the water, so it follows the notch and the arch rather than the
+//      map's coastline (which the faces now stand back from in places).
+//   G  how exposed that bit of rock is to the swell: facing it, and not in the lee of the
+//      headland or the islet.
+//   B  how open the sea here is to the swell (the lee of the headland is calmer).
+//   A  1 where the nearest foot is rock, 0 where it is sand.
+function coastData(hf, mesh, layout, N) {
+  const t0 = performance.now();
+  const { x0, y0, size } = hf.extent;
+  const cell = size / N;
+  const foot = new Uint8Array(N * N);
+  const P = mesh.positions, I = mesh.index;
+  const mark = (x, y) => {
+    const i = Math.floor((x - x0) / cell), j = Math.floor((y - y0) / cell);
+    if (i >= 0 && j >= 0 && i < N && j < N) foot[j * N + i] = 1;
+  };
+  // Every face triangle whose edges cross sea level marks where the water meets the rock.
+  for (let t = mesh.gridTris * 3; t < I.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = I[t + e] * 3, b = I[t + (e + 1) % 3] * 3;
+      const ha = P[a + 1], hb = P[b + 1];
+      if ((ha > 0) === (hb > 0)) continue;
+      const f = ha / (ha - hb);
+      mark(P[a] + (P[b] - P[a]) * f, -(P[a + 2] + (P[b + 2] - P[a + 2]) * f));
+    }
+  }
+  // Rock coast with no face strip (low shelves): the heightfield's own waterline, away
+  // from the beaches.
+  const H = hf.heights;
+  for (let j = 1; j < N - 1; j++) for (let i = 1; i < N - 1; i++) {
+    const k = j * N + i;
+    if (H[k] <= 0 || hf.sand[k] > 0.3) continue;
+    if (H[k - 1] <= 0 || H[k + 1] <= 0 || H[k - N] <= 0 || H[k + N] <= 0) {
+      // Only if no face crossing is already close by (the carved foot wins).
+      let near = false;
+      const r = Math.ceil(3 / cell);
+      for (let dj = -r; dj <= r && !near; dj++) for (let di = -r; di <= r; di++) {
+        const q = (j + dj) * N + i + di;
+        if (q >= 0 && q < N * N && foot[q] === 1) { near = true; break; }
+      }
+      if (!near) foot[k] = 2;
+    }
+  }
+  const { sd, nearestIn } = signedDistance(foot.map((v) => (v ? 1 : 0)), N, cell);
+
+  // Swell shelter, on a coarse grid: the share of directions around the swell's (it comes
+  // from the opposite way it travels) along which the water is open for 1.5 km.
+  const Nc = 256, cc = size / Nc;
+  const land = new Uint8Array(Nc * Nc);
+  for (let j = 0; j < Nc; j++) for (let i = 0; i < Nc; i++) {
+    const k = Math.floor((j + 0.5) * N / Nc) * N + Math.floor((i + 0.5) * N / Nc);
+    land[j * Nc + i] = H[k] > 0.3 ? 1 : 0;
+  }
+  const sh = (layout.water?.swellHeading ?? 40) * Math.PI / 180;
+  const dirs = [-24, -12, 0, 12, 24].map((d) => { const a = sh + Math.PI + d * Math.PI / 180; return [Math.sin(a), Math.cos(a)]; });
+  const open = new Float32Array(Nc * Nc);
+  for (let j = 0; j < Nc; j++) for (let i = 0; i < Nc; i++) {
+    let o = 0;
+    for (const [dx, dy] of dirs) {
+      let clear = 1;
+      for (let t = 1.5; t < 1500 / cc; t += 1) {
+        const ii = Math.round(i + dx * t), jj = Math.round(j + dy * t);
+        if (ii < 0 || jj < 0 || ii >= Nc || jj >= Nc) break;
+        if (land[jj * Nc + ii]) { clear = t * cc < 40 ? 0.25 : 0; break; }
+      }
+      o += clear;
+    }
+    open[j * Nc + i] = o / dirs.length;
+  }
+  blur(open, Nc, 2);   // waves bend round into the lee (diffraction), so soften it
+  const openAt = (x, y) => {
+    const u = Math.min(Math.max((x - x0) / cc - 0.5, 0), Nc - 1.001), v = Math.min(Math.max((y - y0) / cc - 0.5, 0), Nc - 1.001);
+    const i = Math.floor(u), j = Math.floor(v), fx = u - i, fy = v - j;
+    const a = open[j * Nc + i], b = open[j * Nc + i + 1], c = open[(j + 1) * Nc + i], d = open[(j + 1) * Nc + i + 1];
+    return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+  };
+  // Exposure of each foot cell: facing the swell (the offshore direction there, from the
+  // shore distance field) and open to it.
+  const S = hf.shore;
+  const sw = [Math.sin(sh), Math.cos(sh)];
+  const out = new Uint16Array(N * N * 4);
+  const expo = new Float32Array(N * N);
+  for (let k = 0; k < N * N; k++) {
+    if (!foot[k]) continue;
+    const i = k % N, j = (k / N) | 0;
+    const r = 3, im = Math.max(0, i - r), ip = Math.min(N - 1, i + r), jm = Math.max(0, j - r), jp = Math.min(N - 1, j + r);
+    let gx = -(S[j * N + ip] - S[j * N + im]), gy = -(S[jp * N + i] - S[jm * N + i]);
+    const gl = Math.hypot(gx, gy) || 1;
+    const facing = (-(gx / gl) * sw[0] - (gy / gl) * sw[1]);
+    const x = x0 + (i + 0.5) * cell, y = y0 + (j + 0.5) * cell;
+    // Probe the openness a little way out from the rock.
+    const o = openAt(x + (gx / gl) * 12, y + (gy / gl) * 12);
+    expo[k] = Math.min(1, Math.max(0, 0.15 + 0.85 * smooth01(-0.35, 0.7, facing))) * (0.2 + 0.8 * o);
+  }
+  for (let k = 0; k < N * N; k++) {
+    const i = k % N, j = (k / N) | 0;
+    const x = x0 + (i + 0.5) * cell, y = y0 + (j + 0.5) * cell;
+    const n = foot[k] ? k : nearestIn[k];
+    out[k * 4] = toHalf(foot[k] ? 0 : Math.min(-sd[k], 200));
+    out[k * 4 + 1] = toHalf(n >= 0 ? expo[n] : 0);
+    out[k * 4 + 2] = toHalf(openAt(x, y));
+    out[k * 4 + 3] = toHalf(n >= 0 && hf.sand[n] < 0.5 ? 1 : 0);
+  }
+  return { data: out, ms: Math.round(performance.now() - t0) };
+}
+const smooth01 = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 
 // RGBA8: the unit direction pointing offshore (R, G, from -1..1 packed to 0..255), so the
 // shader knows which way each bit of coast faces without sampling around it.

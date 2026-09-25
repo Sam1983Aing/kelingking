@@ -4,8 +4,9 @@
 import * as THREE from 'three';
 import { WATER_VERT, WATER_FRAG } from './water-shader.js';
 import { createOcean } from './ocean.js';
+import { createSurfSim } from './surf-sim.js';
 
-export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}) {
+export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}, simOpts = {}) {
   const params = {
     period: 9,          // seconds between waves
     swell: 1.1,         // wave height at sea (m)
@@ -18,18 +19,18 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     murk: 1.0,
     // Water optics per metre, roughly pure sea water at 610, 550 and 465 nm plus a little
     // plankton: red is gone within a few metres, blue carries.
-    absorb: [0.30, 0.075, 0.065],
-    backscatter: [0.004, 0.005, 0.012],
-    gordonF: 0.33,
+    absorb: [0.30, 0.06, 0.04],
+    backscatter: [0.004, 0.0045, 0.0085],
+    gordonF: 0.3,
     // Suspended sand, per unit: backscatters (0.15 makes the milky turquoise of the plumes in
     // the drone photo), and the coarse sand in the surf absorbs a little blue.
     sedAbsorb: [0.02, 0.04, 0.08],
     sedBack: 0.1,
-    sandAlbedo: '#a6a293',
+    sandAlbedo: '#8f9894',
     reefAlbedo: '#2a3a2c',
     // Gusts: patch size (m), drift (m/s east, north), strength 0..1.
     gustSize: 380, gustDrift: [-3, 1.5], gust: 0.8,
-    reflLift: 1.2, reflCut: 0.6,
+    reflSpread: 0.7, waveMask: 0.5,
   };
   const ocean = createOcean(renderer, oceanOpts);
 
@@ -37,6 +38,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     {
       uData: { value: null },
       uShoreDir: { value: null },
+      uCoast: { value: null },
       uSunShadow: { value: null },
       uExtent: { value: new THREE.Vector3(-700, -700, 1600) },
       uTime: { value: 0 },
@@ -58,8 +60,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uWhitecaps: { value: 1 },
       uFoam: { value: 1 },
       uGust: { value: new THREE.Vector4() },
-      uReflLift: { value: 0.8 },
-      uReflCut: { value: 0.4 },
+      uReflSpread: { value: 1 },
+      uWaveMask: { value: 0.35 },
       uDebug: { value: 0 },
       uGridScale: { value: 1 },
       uGridK: { value: 0.0076 },
@@ -67,6 +69,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
   ]);
   // The ocean's textures are swapped every update, so share its uniform objects.
   Object.assign(uniforms, ocean.uniforms);
+  const sim = createSurfSim(renderer, uniforms, simOpts);
+  Object.assign(uniforms, sim.uniforms);
   // The sun, the sky and the haze come from the atmosphere (src/sky/), shared, not copied.
   Object.assign(uniforms, atmosphereUniforms, gradeUniforms);
 
@@ -101,8 +105,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     u.uSedAbsorb.value.fromArray(params.sedAbsorb);
     u.uSedBack.value = params.sedBack;
     u.uGordonF.value = params.gordonF;
-    u.uReflLift.value = params.reflLift;
-    u.uReflCut.value = params.reflCut;
+    u.uReflSpread.value = params.reflSpread;
+    u.uWaveMask.value = params.waveMask;
     u.uGust.value.set(1 / params.gustSize, params.gustDrift[0], params.gustDrift[1], params.gust);
     u.uSandAlbedo.value.set(params.sandAlbedo);
     u.uReefAlbedo.value.set(params.reefAlbedo);
@@ -114,11 +118,14 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     uniforms,
     params,
     ocean,
+    sim,
     applyParams,
-    setData(texture, shoreDir, extent) {
+    setData(texture, shoreDir, extent, coast) {
       uniforms.uData.value = texture;
       uniforms.uShoreDir.value = shoreDir;
+      uniforms.uCoast.value = coast;
       uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
+      sim.reset();
     },
     update(time, camera) {
       uniforms.uTime.value = time;
@@ -128,6 +135,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       mesh.geometry = h > 40 ? light : dense;
       // Vertex spacing per metre from the camera, near the camera (radial and around).
       uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0076;
+      // The foam simulation moves the ocean along with it (the rock bursts follow the swell).
+      sim.update(time, (t) => ocean.update(t));
       ocean.update(time);
     },
   };

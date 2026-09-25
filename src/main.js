@@ -130,10 +130,11 @@ const lightUniforms = { ...atmosphere.uniforms, ...clouds.shadowUniforms };
 // numbers or comma-separated lists.
 const urlParams = (prefix) => {
   const o = {};
-  for (const [k, v] of params) if (k.startsWith(prefix)) o[k.slice(prefix.length)] = v.includes(',') ? v.split(',').map(Number) : isNaN(+v) ? v : +v;
+  const parse = (v) => (v === 'true' ? true : v === 'false' ? false : v.includes(',') ? v.split(',').map(Number) : isNaN(+v) ? v : +v);
+  for (const [k, v] of params) if (k.startsWith(prefix)) o[k.slice(prefix.length)] = parse(v);
   return o;
 };
-const water = createWater(renderer, lightUniforms, grade.uniforms, urlParams('o.'));
+const water = createWater(renderer, lightUniforms, grade.uniforms, urlParams('o.'), urlParams('s.'));
 Object.assign(water.params, urlParams('w.'));
 water.applyParams();
 const skyDome = createSkyDome(atmosphere, grade.uniforms);
@@ -242,9 +243,14 @@ worker.onmessage = (e) => {
   dir.minFilter = THREE.LinearFilter;
   dir.magFilter = THREE.LinearFilter;
   dir.needsUpdate = true;
+  const coast = new THREE.DataTexture(hf.coast, hf.N, hf.N, THREE.RGBAFormat, THREE.HalfFloatType);
+  coast.minFilter = THREE.LinearFilter;
+  coast.magFilter = THREE.LinearFilter;
+  coast.needsUpdate = true;
   water.uniforms.uData.value?.dispose();
   water.uniforms.uShoreDir.value?.dispose();
-  water.setData(tex, dir, hf.extent);
+  water.uniforms.uCoast.value?.dispose();
+  water.setData(tex, dir, hf.extent, coast);
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
   shadowDirty = true;

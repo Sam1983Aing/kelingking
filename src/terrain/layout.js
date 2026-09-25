@@ -84,17 +84,16 @@ export function defaultLayout() {
       { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
-      { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.35 },
+      { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },
       { name: 'east bay shelf', at: [430, 10], r: 150, L: 260, D: 12, murk: 0.55 },
       { name: 'channel along the neck', at: [175, 25], r: 85, L: 22, D: 32 },
       // Milky plumes over deep water (murk only): sand from the east bay drifting south-west,
-      // and faint ones past the islet and off the head. The drone photo
+      // and a faint one past the islet. The drone photo
       // (aerial-high-whole-bay.jpg, 2026) has a big plume right past the islet; none of the
       // five viewpoint photos, on other days, show one there, so it stays faint where the
       // viewpoint looks and strong in the east bay, which the viewpoint cannot see.
       { name: 'east bay plume', at: [420, -50], r: 150, murk: 1 },
-      { name: 'plume past the islet', at: [260, -260], r: 120, murk: 0.35 },
-      { name: 'plume off the head', at: [-320, 110], r: 190, murk: 0.15 },
+      { name: 'plume past the islet', at: [260, -260], r: 120, murk: 0.25 },
     ],
 
     beach: { top: 4.6, spread: 24, shift: 8 },
