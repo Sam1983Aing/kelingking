@@ -8,7 +8,7 @@ version. A session works on its element only, and goes deep on it.
 |---|---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | [history](../gallery/history/README.md) | done, tag `v1` |
 | v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
-| v3 | Rock | [v3-rock.md](v3-rock.md) | in review, branch `v3-rock` |
+| v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
 | v4 | Water | [v4-water.md](v4-water.md) | next |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
@@ -33,8 +33,8 @@ Open a new chat in this folder and paste:
 1. **One element.** Work only on what the brief covers. If you find a problem that belongs to
    another version, write it into that version's brief under "Found by other versions", do
    not fix it.
-2. **Branch.** Start from `main` with `git switch -c v3-rock` (version and element). Commit at
-   each checkpoint. Merge into `main` and tag `v2` only when Sam says the version is done.
+2. **Branch.** Start from `main` with `git switch -c v4-water` (version and element). Commit at
+   each checkpoint. Merge into `main` and tag `v4` only when Sam says the version is done.
 3. **Judge against the photos, not by eye in the browser.** Use `tools/capture.mjs`
    (side by side, outline, clips). The browser pane stops rendering when it is hidden and its
    screenshots go stale. Read numbers back from the page when a picture is ambiguous.
@@ -54,9 +54,9 @@ Open a new chat in this folder and paste:
 
 ## Finishing a version
 
-1. `node tools/hero.mjs v2`: renders the hero frames into `docs/gallery/v2/`, times them
+1. `node tools/hero.mjs v4`: renders the hero frames into `docs/gallery/v4/`, times them
    against the previous version, and puts side by sides with the photos in
-   `captures/compare-v2/` (local only).
+   `captures/compare-v4/` (local only).
 2. Add a section to `PROCESS.md`: what changed, what went wrong and how it was fixed, what
    is still weak. This log is the raw material for the public write-up.
 3. Update the status table above, and the README if the way something works changed.

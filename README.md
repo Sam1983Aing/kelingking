@@ -19,7 +19,7 @@ moving on. The plan, the rules and a brief per version are in
 |---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | done |
 | v2 | Light and atmosphere | done |
-| v3 | Rock | in review |
+| v3 | Rock | done |
 | v4 | Water | next |
 | v5 | Sand and the waterline | |
 | v6 | Trail and stairs | |
