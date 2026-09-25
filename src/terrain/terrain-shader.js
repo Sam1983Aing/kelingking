@@ -28,7 +28,8 @@ varying vec3 vWorldNormal;
 // From the mesh builder: sand under an overhang, share of the sky not hidden by rock
 // overhead, how far the face is carved in (/ 32 m), and whether it stands on sand.
 varying vec4 vRock;
-varying float vHorizon;   // elevation (/ pi, from straight out) above which rock overhead hides the sky
+varying vec3 vHorizon;    // elevation (/ pi, from straight out) above which rock overhead hides
+                          // the sky, and the outward direction (world x, z) of the face
 
 #define L_LIMESTONE 0
 #define L_BEDS 1
@@ -101,15 +102,14 @@ float groundShadow(vec3 P, vec3 N) {
   // A carved face lies inside the heightfield the shadow was baked from, so: the rock that
   // hangs over it (the mesh builder's horizon, in the face's own vertical plane), and the
   // baked shadow at the face's uncarved place, for everything further off.
-  vec3 Ns = normalize(vWorldNormal);
-  vec2 o = Ns.xz / max(length(Ns.xz), 1e-3);
+  vec2 o = vHorizon.yz / max(length(vHorizon.yz), 1e-3);
   float eSun = atan(uSunDirW.y, dot(uSunDirW.xz, o)) / PI;
-  float over = smoothstep(vHorizon + 0.015, vHorizon - 0.015, eSun);
+  float over = 1.0 - smoothstep(vHorizon.x - 0.015, vHorizon.x + 0.015, eSun);
   vec3 Q = P + vec3(o.x, 0.0, o.y) * carve;
   return over * bakedShadow(Q + vec3(o.x, 0.0, o.y) * 3.0, 0.3);
 }
 
-uniform vec3 uBounceAlb[3];   // what the ground below sends back: sea, sand, land (albedo)
+uniform vec3 uBounceAlb[4];   // what the ground below sends back: sea, sand, land (albedo), and rock
 
 // Light bounced up from the ground below and in front of a surface: the sand under the
 // overhang lights its ceiling warm, the sea lights the cliff foot blue-grey. It looks down
@@ -124,12 +124,10 @@ vec3 groundBounce(vec3 P, vec3 N) {
   // drip line the point can see (vRock.w); look there for what it is and whether the sun
   // reaches it.
   if (vRock.w < 0.99) {
-    // Which way is out: the surface's own direction, not the bumped normal (whose wobble
-    // would flick the lookup between sand and sea). Two places, near and far, averaged.
-    vec3 Ns = normalize(vWorldNormal);
-    vec2 hz = vec2(Ns.x, -Ns.z);
-    float lh = length(hz);
-    vec2 dir = lh > 1e-3 ? hz / lh : vec2(0.0);
+    // Which way is out: the face's own direction from the mesh builder (a floor's normal
+    // cannot say, and the bumped normal would flick the lookup between sand and sea). Two
+    // places, near and far, averaged.
+    vec2 dir = vec2(vHorizon.y, -vHorizon.z) / max(length(vHorizon.yz), 1e-3);
     float reach = clamp(P.y * 0.8 + 2.0, 3.0, 60.0);
     vec3 sum = vec3(0.0);
     for (int i = 0; i < 2; i++) {
@@ -141,7 +139,10 @@ vec3 groundBounce(vec3 P, vec3 N) {
       float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
       sum += alb * (uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp);
     }
-    return 0.5 * sum * vRock.w;
+    // And a second bounce: the rock overhead (the part of the view the sky share leaves) is
+    // itself lit by that same ground, about half of it in view, and sends a share back down.
+    // This is what fills the floor and the back of a cave with warm light instead of sky blue.
+    return 0.5 * sum * (vRock.w + (1.0 - vRock.y) * 0.5 * uBounceAlb[3]);
   }
   // Only steep faces and overhangs, and only near the camera. A gentle slope sees little of
   // the ground below, and from a kilometre off the light is too subtle to see; the ground
@@ -408,6 +409,14 @@ export const TERRAIN_BOUNCE = /* glsl */ `
 // Labels for the measuring tool: class (sand 3, rock 4, ground cover 5) and whether the sun
 // reaches it.
 export const TERRAIN_LABEL = /* glsl */ `
+#ifdef TERRAIN_DEBUG
+  // Debug views (terrainDebug= on the page): 1 sun shadow, 2 sky share, 3 overhang horizon,
+  // 4 lit ground share, 5 carved depth / 32 m.
+  {
+    float d = TERRAIN_DEBUG == 1 ? tShadow : TERRAIN_DEBUG == 2 ? vRock.y : TERRAIN_DEBUG == 3 ? vHorizon.x : TERRAIN_DEBUG == 4 ? vRock.w : vRock.z;
+    gl_FragColor = vec4(vec3(d), 1.0);
+  }
+#endif
 #ifdef LABELS
   {
     float cls = tSandW > 0.5 ? 3.0 : (tVegW > 0.5 ? 5.0 : 4.0);

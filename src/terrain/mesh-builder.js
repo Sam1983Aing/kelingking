@@ -294,7 +294,10 @@ export function buildTerrainMesh(hf, layout, M) {
       sl[i] = slopeAt(i);
       cmax = Math.max(cmax, carve.offset(Fx, Fy, t[i], h[i], feat, a, b, sl[i]));
     }
-    for (let i = 1; i < t.length; i++) S[i] = S[i - 1] + Math.hypot(t[i] - t[i - 1], cfg.weight * (h[i] - h[i - 1]));
+    // The overhang is shared out along the profile as carved (it changes smoothly from one
+    // column to the next, unlike the notch and the beds), so its ceiling gets rows too.
+    const ov = t.map((tk, i) => carve.overhangAt(Fx, Fy, tk, h[i], feat));
+    for (let i = 1; i < t.length; i++) S[i] = S[i - 1] + Math.hypot(t[i] + ov[i] - t[i - 1] - ov[i - 1], cfg.weight * (h[i] - h[i - 1]));
     return { t, S, sl, a, b, feat, cmax };
   }
 
@@ -387,9 +390,17 @@ export function buildTerrainMesh(hf, layout, M) {
   // the face is carved in (m / 32), and the sunlit ground seen from under an overhang (1 =
   // nothing overhead, use the open-ground bounce). The plain ground: none, all, none, 1.
   const rock = new Uint8Array((positions.length / 3) * 4);
-  // And the elevation above which rock overhead hides the sky (/ pi; 1 = nothing overhead).
-  const horizon = new Uint8Array(positions.length / 3).fill(255);
-  for (let v = 0; v < nb; v++) horizon[M * M + v] = Math.round(255 * Math.min(Math.max(bands.hor[v], 0), 1));
+  // And for overhangs: the elevation above which rock overhead hides the sky (/ pi, from
+  // straight out; 1 = nothing overhead), and which way is out (x and z, packed to 0..1), which
+  // a floor's own normal cannot say.
+  const horizon = new Uint8Array((positions.length / 3) * 4);
+  for (let v = 0; v < M * M; v++) { horizon[v * 4] = 255; horizon[v * 4 + 1] = horizon[v * 4 + 2] = 128; }
+  for (const cols of bands.strips) for (const col of cols) for (let r = 0; r < col.R; r++) {
+    const v = col.first + r, o = (M * M + v) * 4;
+    horizon[o] = Math.round(255 * Math.min(Math.max(bands.hor[v], 0), 1));
+    horizon[o + 1] = Math.round(127.5 - 127.5 * col.gx);
+    horizon[o + 2] = Math.round(127.5 + 127.5 * col.gy);
+  }
   for (let v = 0; v < M * M; v++) { rock[v * 4 + 1] = 255; rock[v * 4 + 3] = 255; }
   for (let v = 0; v < nb; v++) {
     const o = (M * M + v) * 4;
@@ -572,17 +583,35 @@ export function makeCarver(hf, layout, sample) {
     return { wall, onSand, tFoot, hFoot, hRim: hMax, hEdge, maxIn };
   }
 
+  // Overhang and notch settings at a place, blended between the zones (layout.overhangs).
+  // Bulge and cave fade out with the zone's weight; the heights are weighted averages.
   function zoneAt(x, y) {
-    const out = { recess: 0, cave: 0, caveH: 0, scoop: 2.5, notch: 0, notchTop: 0, w: 0, wn: 0 };
+    const out = { bulge: 0, lipH: 0, cave: 0, caveH: 0, notch: 0, notchTop: 0, w: 0, wn: 0 };
     for (const z of zones) {
       const w = Math.exp(-((x - z.at[0]) ** 2 + (y - z.at[1]) ** 2) / (z.r * z.r));
       if (w < 1e-3) continue;
-      if (z.recess !== undefined) {
-        out.recess += w * z.recess; out.cave += w * z.cave; out.caveH += w * z.caveH; out.scoop = z.scoop ?? out.scoop; out.w += w;
+      if (z.bulge !== undefined) {
+        out.bulge += w * z.bulge; out.cave += w * z.cave; out.lipH += w * z.lipH; out.caveH += w * z.caveH; out.w += w;
       }
       if (z.notch !== undefined) { out.notch += w * z.notch; out.notchTop += w * z.notchTop; out.wn += w; }
     }
+    if (out.w > 0) { out.lipH /= out.w; out.caveH /= out.w; }
     return out;
+  }
+
+  // The overhang at the back of the beach, in section: from the rim the face bulges out
+  // over the sand, most at the lip, lipH metres up; under the lip a ceiling runs back and
+  // down into a cave `cave` metres in behind the line of the wall, whose back wall is caveH
+  // high; the sand runs in to the back. Positive is in, as for offset().
+  function overhang(z, t, h, F) {
+    if (z.w < 1e-3 || F.onSand <= 0) return 0;
+    const zz = t < F.tFoot ? 0 : Math.max(h - F.hFoot, 0);
+    const H = Math.max(F.hEdge - F.hFoot, z.lipH + 5);
+    let c;
+    if (zz >= z.lipH) c = -z.bulge * Math.pow(1 - Math.min((zz - z.lipH) / (H - z.lipH), 1), 1.3);
+    else c = lerp(z.cave, -z.bulge, Math.pow(smooth(z.caveH, z.lipH, zz), 0.8));
+    if (t < F.tFoot) c = lerp(0, c, smooth(F.tFoot - (z.cave + z.bulge) * 0.6 - 4, F.tFoot, t));
+    return c * F.wall * F.onSand;
   }
 
   function offset(Fx, Fy, t, h, F, a, b, slopeHere) {
@@ -610,15 +639,11 @@ export function makeCarver(hf, layout, sample) {
       const nv = n3(Fx / 19, Fy / 19, 11.3);
       const under = fcfg.undercut.depth * (0.4 + 1.2 * nv);
       const underH = fcfg.undercut.height * (0.7 + 0.6 * n3(Fx / 33, Fy / 33, 5.5));
-      const recess = z.recess, cave = z.cave, caveH = Math.max(z.caveH, 1);
       // Below the foot, the sand runs on in under the overhang.
       const zz = t < F.tFoot ? 0 : Math.max(h - F.hFoot, 0);
-      const hr = Math.min(zz / Math.max(F.hEdge - F.hFoot, 1), 1);
-      let cw = recess * (1 - hr) ** z.scoop;
-      cw += cave * (1 - smooth(caveH, caveH + 5, zz));
-      cw += under * (1 - smooth(underH, underH + 2.5, zz));
+      let cw = under * (1 - smooth(underH, underH + 2.5, zz)) * (1 - Math.min(z.w, 1));
       if (t < F.tFoot) cw *= smooth(F.tFoot - 10, F.tFoot, t);
-      c += cw * F.wall * F.onSand;
+      c += cw * F.wall * F.onSand + overhang(z, t, h, F);
     }
 
     if (F.wall > 0) {
@@ -634,7 +659,7 @@ export function makeCarver(hf, layout, sample) {
     return Math.min(c, F.maxIn) * taper;
   }
 
-  return { features, offset, strata };
+  return { features, offset, strata, overhangAt: (Fx, Fy, t, h, F) => overhang(zoneAt(Fx, Fy), t, h, F) };
 }
 
 // A bump that is 0 below lo, rises to 1 at peak and falls back to 0 at hi.

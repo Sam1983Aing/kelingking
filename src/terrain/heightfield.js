@@ -183,7 +183,7 @@ export function makeHeightAt(f, layout, noise) {
       const islet = nearestIslet(islets, x, y);
       const az = Math.atan2(y - islet.near[1], x - islet.near[0]);
       const sheer = Math.min(Math.max(islet.sheer + islet.sheerVar * Math.cos(az - (islet.sheerAz * Math.PI) / 180)
-        + 0.12 * noise(x / 25 + 5, y / 25), 0.12), 0.85);
+        + 0.12 * noise(x / 25 + 5, y / 25), 0.1), 0.85);
       const u = Math.min(dc / islet.R, 1);
       const crown = (1 - (1 - u) ** 1.5) * (1 + 0.06 * noise(x / 18 + 2, y / 18 - 4));
       // The sheer part leans back a little (it rises over 9 m).

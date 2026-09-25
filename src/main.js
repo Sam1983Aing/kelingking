@@ -22,6 +22,8 @@
 //   ev=0               exposure compensation in stops
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
 //   cam=e,n,h,yaw,pitch[,fov]  any camera, in the frame of the chosen shot
+//   terrainDebug=1..5  ground debug views: sun shadow, sky share, overhang horizon, lit
+//                      ground share, carved depth (terrain-shader.js)
 //
 // Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
@@ -185,6 +187,7 @@ function terrainCloudShadows() {
   }
 }
 terrainCloudShadows();
+if (params.has('terrainDebug')) terrain.mesh.material.defines = { ...terrain.mesh.material.defines, TERRAIN_DEBUG: +params.get('terrainDebug') };
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
 terrain.uniforms.uClay.value = state.clay;
 const sunShadow = createSunShadow(renderer);

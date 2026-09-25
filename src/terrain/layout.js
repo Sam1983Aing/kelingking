@@ -57,7 +57,7 @@ export function defaultLayout() {
     // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
     // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 68, sheer: 0.28, sheerVar: 0.25, sheerAz: 135, R: 29 }, // Batu Satu, the rock off the head
+      { near: [80, -100], h: 68, sheer: 0.4, sheerVar: 0.42, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
       { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 
@@ -105,12 +105,12 @@ export function defaultLayout() {
     // Carving the faces: buttresses (metres in and out), the big beds (strata.js, as a
     // fraction of their table relief), and the low undercut all along the back of the beach.
     faces: { buttress: 2.4, beds: 1, undercut: { depth: 3, height: 6 } },
-    // Overhangs. Rock standing on sand: recess = how far the foot of the wall is cut back
-    // under its rim, scoop = how the lean is spread up the wall (higher = more of it low
-    // down), cave = a further cut at the foot, caveH metres high. Rock in the sea: a deeper
-    // notch (notch metres deep, notchTop high).
+    // Overhangs. Rock standing on sand (mesh-builder.js, overhang()): the face bulges out
+    // over the sand by `bulge` metres at a lip lipH metres up, and under the lip a cave runs
+    // back `cave` metres behind the line of the wall, caveH metres high at the back. Rock in
+    // the sea: a deeper notch (notch metres deep, notchTop high).
     overhangs: [
-      { name: 'beach south end', at: [54, 63], r: 34, recess: 30, cave: 0, caveH: 8, scoop: 1.6 },
+      { name: 'beach south end', at: [54, 63], r: 34, bulge: 20, lipH: 17, cave: 10, caveH: 5 },
       { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
     ],
 
