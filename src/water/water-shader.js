@@ -75,8 +75,14 @@ vec4 seaWeights(vec2 p, vec4 d) {
   float wind = mix(smoothstep(-2.0, 14.0, s), 0.25 + 0.75 * smoothstep(uBreakAt, uBreakAt + 70.0, s), nearBeach);
   float ripple = mix(smoothstep(-3.0, 4.0, s), 0.45 + 0.55 * smoothstep(0.0, uBreakAt, s), nearBeach);
   vec2 q = p * uGust.x - uGust.yz * uTime * uGust.x;
+#ifdef GUST_FULL
   float gust = mix(1.0, 0.45 + 1.1 * fbm3(q + vec2(3.1, 7.7)), uGust.w);
   float gustS = mix(1.0, 0.55 + 0.9 * fbm3(q * 3.1 + 11.0), uGust.w);
+#else
+  // Two octaves are plenty for patches hundreds of metres across (this runs per vertex).
+  float gust = mix(1.0, 0.45 + 1.1 * (0.67 * vnoise(q + vec2(3.1, 7.7)) + 0.33 * vnoise(q * 2.03 + 20.2)), uGust.w);
+  float gustS = mix(1.0, 0.55 + 0.9 * vnoise(q * 3.1 + 11.0), uGust.w);
+#endif
   return vec4(swell, wind * mix(1.0, gust, 0.6), ripple * gust * gustS, ripple * gust * gustS);
 }
 
@@ -412,8 +418,12 @@ void main() {
   Surf sf = surfAt(p, d);
   // The surf's slope for the fragment shader, by differences over the local vertex spacing.
   float se = clamp(spacing, 0.12, 6.0);
+#ifdef NO_VSLOPE
+  vSurfSlope = vec2(0.0);
+#else
   vSurfSlope = sf.L > 0.0 ? vec2(surfAt(p + vec2(se, 0.0), dataAt(p + vec2(se, 0.0))).h - sf.h,
                                                  surfAt(p + vec2(0.0, se), dataAt(p + vec2(0.0, se))).h - sf.h) / se : vec2(0.0);
+#endif
   w.y = sf.h + D.y;
   w.x += D.x;
   w.z -= D.z;

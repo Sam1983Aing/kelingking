@@ -85,8 +85,10 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     transparent: true,
   });
 
-  // Dense grid for eye level, lighter one once the camera is up in the air.
-  const dense = radialGrid(960, 960, 0.8, 14000, 150, 0.72);
+  // Dense grid for eye level, lighter one once the camera is up in the air. (v4: 640 rings
+  // near the camera instead of 960; the vertices do more work now, and side by side at the
+  // shore break the two could not be told apart.)
+  const dense = radialGrid(640, 960, 0.8, 14000, 150, 0.72);
   const light = radialGrid(640, 720, 0.8, 14000, 150, 0.6);
   const mesh = new THREE.Mesh(dense, material);
   mesh.frustumCulled = false;
@@ -173,7 +175,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       const s0 = Math.max(0, Math.floor(segs / 2 - n / 2));
       g.setDrawRange(s0 * per, Math.min(n, segs - s0) * per);
       // Vertex spacing per metre from the camera, near the camera (radial and around).
-      uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0076;
+      uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0114;
       // The foam simulation moves the ocean along with it (the rock bursts follow the swell).
       sim.update(time, (t) => ocean.update(t));
       ocean.update(time);
@@ -187,7 +189,7 @@ const tmpV = new THREE.Vector3();
 // Polar grid centred on the origin (the shader adds the camera position). Rings are spaced
 // exponentially, with a share `nearShare` of them packed inside `rMid`, where close-up
 // waves need the detail, and the rest spread out to the horizon.
-function radialGrid(rings, segments, rMin, rMax, rMid, nearShare) {
+export function radialGrid(rings, segments, rMin, rMax, rMid, nearShare) {
   const pos = new Float32Array((rings + 1) * segments * 3);
   const nNear = Math.round((rings - 1) * nearShare);
   const radius = (i) => {
