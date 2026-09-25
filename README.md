@@ -20,8 +20,8 @@ moving on. The plan, the rules and a brief per version are in
 | v1 | Shape, sea, surfaces, first scans and trees | done |
 | v2 | Light and atmosphere | done |
 | v3 | Rock | done |
-| v4 | Water | next |
-| v5 | Sand and the waterline | |
+| v4 | Water | in review |
+| v5 | Sand and the waterline | next |
 | v6 | Trail and stairs | |
 | v7 | Plants | |
 | v8 | The scroll descent | |
@@ -113,26 +113,41 @@ Until v3 the ground never actually used it: see v3 in `PROCESS.md`.
 
 ## How the water works
 
-One mesh follows the camera: rings packed tight within 150 m and spread out to the horizon,
-so it holds up both at your feet on the sand and from 1 km up. Everything else is in one
-shader (`src/water/water-shader.js`), fed by a texture the terrain worker writes: seabed
-height, distance offshore, how sandy the shore is, and how much sand hangs in the water.
+The sea (`src/water/`) is several pieces that share one set of inputs: a texture the terrain
+worker writes (seabed height, distance offshore, how sandy the shore is, how much sand hangs
+in the water), a second one for the rock coast (distance to the rock's real foot, read off
+the carved mesh, and how exposed it is to the swell), and the light from `src/sky/`.
 
-- **Colour** comes from light travelling through water, not from a gradient. Red is absorbed
-  within a few metres and blue lasts longest, so white sand under 2 m of water reads
-  turquoise and 30 m reads navy. The view ray is refracted down to the seabed, and the
-  seabed gets moving caustics where it is shallow and calm.
-- **Milky plumes.** Sand stirred up in the surf and in the east bay is modelled as
-  scattering. The light it sends back has already lost its red, so it glows turquoise
-  instead of going brown.
-- **Waves** are driven by distance from the shore. They bunch up in shallow water, grow,
-  break at a set distance off the beach, and run up the sand as swash. Each wave has its own
-  size and breaks in sections along the shore. On rock there is no wave train: the swell
-  runs into the cliff and leaves a pulsing band of white water, wider on the coasts that
-  face the swell.
-- **Surface**: 14 wind wave trains as a slope field, a GGX sun glint whose roughness picks
-  up the waves too small to draw, sky reflection, and the terrain's shadow on the water.
-- **Performance**: see the note under Known limits.
+- **The open sea is a wave spectrum** (`ocean.js`), turned into surfaces on the GPU by an
+  inverse FFT, after Tessendorf: a 13 s swell from the south-west and the local wind sea
+  (JONSWAP, 7 m/s), in four cascades from a 757 m patch down to 2.2 m, so there are waves at
+  every scale from 1 km up to your feet. Where crests fold over they break into whitecaps,
+  and the foam fades over a few seconds. Gusts make patches of rougher and smoother water.
+- **One mesh follows the camera**: rings packed tight near it and spread out to the horizon,
+  drawn only in the wedge the camera can see. Waves smaller than a pixel are not lost: the
+  spread of their slopes (from the cascades' mipmaps) roughens the sun glint and tilts the
+  reflection, four little mirrors per pixel.
+- **Colour comes from light in water**: absorption and backscattering per metre, close to
+  pure sea water, measured against the photos region by region (`capture.mjs --measure`).
+  Red is gone within a few metres and blue lasts, so white sand under 2 m reads turquoise and
+  30 m reads navy. Sand stirred up in the surf is beige, the silt of the milky plumes in the
+  east bay only scatters, so it glows pale turquoise.
+- **The surf** forms only in front of the beaches, with physical wavelengths (one or two
+  crests in the surf zone), irregular timing and sets. Each wave breaks where it gets too
+  big for the depth, bigger waves further out.
+- **The breaking wave** (`breaker.js`) is its own mesh, because a heightfield cannot fold
+  over: a ribbon along each beach whose cross-section steepens, throws a lip, curls into a
+  tube and collapses, each half metre of beach at its own stage, so the wave peels. While a
+  wave breaks, the sea tucks its crest under the ribbon.
+- **Foam has a memory** (`surf-sim.js`): a 1024 by 1024 simulation over the bay carries foam
+  and stirred sand with the water (up the beach with each bore, out in the backwash and the
+  rips, off the rock after each hit, downwind, in slow eddies), and fades it. The lace is
+  drawn where the foam came from, so it stretches into streaks.
+- **Spray** (`spray.js`): droplets off the lip, feathering off the crest, the splash where
+  the lip lands, and bursts where the swell hits the rock, in sets. Worked out per particle
+  from the time, so a frozen frame and a running page agree.
+
+A frozen capture (`t=`) replays the last 30 s of foam, so its trails look as they would.
 
 ## How the light works
 
@@ -178,7 +193,9 @@ node tools/capture.mjs --overlay=0.5           # every shot, 50% blend
 node tools/capture.mjs beach --t=17            # freeze the sea at 17 s
 node tools/capture.mjs beach --clip=9          # 9 s clip to captures/beach.mp4 (needs ffmpeg)
 node tools/capture.mjs viewpoint --clip=10 --hours=6.5:17.8   # sunrise to sunset instead
-node tools/capture.mjs shoreBreak --debug=5    # water debug views 1 to 5
+node tools/capture.mjs shoreBreak --debug=5    # water debug views 1 to 9 (see water-shader.js)
+node tools/capture.mjs cove --set="w.murk=2;o.wind=10"   # water (w.) and wave spectrum (o.) settings
+node tools/capture.mjs viewpoint --console     # print the page's shader errors and warnings
 node tools/capture.mjs --bench                 # render time per shot
 node tools/capture.mjs viewpoint --measure     # average colour per region, render and photo
 node tools/capture.mjs viewpoint --set="hour=17;haze=5"   # any page switch
@@ -198,10 +215,10 @@ caught.
   the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
   See `docs/gallery/v1` for the baseline.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
-- **Materials after v2.** The sand, sea and plant colours were set under v1's dimmer light.
-  Under the physical light the sand and shallow water come out 0.3 to 0.8 stops too bright
-  and the plants about 1 stop too dark. Their versions (v4 to v7) retune them; the numbers
-  are in their briefs. The rock was retuned in v3.
+- **Materials after v2.** The sand and plant colours were set under v1's dimmer light. Under
+  the physical light the sand comes out 0.3 to 0.5 stops too bright and the plants about 1
+  stop too dark. Their versions (v5, v7) retune them, and the numbers are in their briefs. The
+  rock was retuned in v3 and the water in v4.
 - **No far coast.** The terrain stops 1.6 km out, so the ridges that fade into the haze in
   the drone photos are not there to fade.
 

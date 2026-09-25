@@ -826,28 +826,31 @@ What the parts said at `beach`, and what was done about it:
 The water's own share, v3 and v4 side by side, sea on and off: `beach` 1.90 against 2.18 ms,
 `trailTop` 1.02 against 1.19 ms.
 
-Whole frames, side by side (`tools/ab.mjs --hero`, 16 rounds), and the last official run:
+Whole frames. Side by side (`tools/ab.mjs --hero`, 16 rounds) twice, the second after the
+breaker came to share the sea's surface and reflection, and the official `hero.mjs` runs:
 
-| Frame | Side by side | `hero.mjs` run 4 | Runs 1 to 3 |
-|---|---|---|---|
-| overview | +6% | +14% | -5%, +9%, +2% |
-| viewpoint | +9% | -27% | -23%, -37%, -20% |
-| stairs | +2% | -15% | -11%, -18%, -19% |
-| trailTop | +22% | +13% | +2%, +9%, +33% |
-| trailLow | +13% | -21% | -24%, -25%, -1% |
-| beach | +8% | +12% | +49%, +33%, -1% |
-| shoreBreak (camera moved) | -11% | +8% | -6%, -19%, +40% |
-| sideFromSea | +16% | +31% | -16%, +36%, +6% |
+| Frame | Side by side, final | Side by side, before | `hero.mjs` final (gallery) | Earlier `hero.mjs` runs |
+|---|---|---|---|---|
+| overview | +7% | +6% | -8% | -5, +9, +2, +14% |
+| viewpoint | +16% | +9% | +5% | -23, -37, -20, -27% |
+| stairs | +19% | +2% | -4% | -11, -18, -19, -15% |
+| trailTop | +19% | +22% | +10% | +2, +9, +33, +13% |
+| trailLow | +19% | +13% | -32% | -24, -25, -1, -21% |
+| beach | +26% | +8% | -7% | +49, +33, -1, +12% |
+| shoreBreak (camera moved) | -1% | -11% | +1% | -6, -19, +40, +8% |
+| sideFromSea | 0% | +16% | -26% | -16, +36, +6, +31% |
 
-Runs 1 to 3 were before the breaker and vertex work above. The gallery holds run 4.
+The first two official runs were before the breaker and vertex work above.
 
-So by the steadier measure `trailTop`, `trailLow` and `sideFromSea` are over the 10% budget
-(+13 to +22%), and `overview` and `beach` are within it. At `trailTop` the water measured
-side by side is only 0.17 ms more than v3's, so part of that number is not the water. The
-first burst of frames in a fresh page also came out up to 60% slower than the same frame a
-minute later (the GPU warming up), which is another reason single runs disagree. The cost
-that is real is the realism this version is for: the breaking wave, the foam simulation,
-the spectrum. Logged in the v9 brief with the tool and the breakdown.
+So the official check passes in its final run, and the side-by-side tool, which agrees with
+itself better but not well (`stairs` went from +2% to +19% with no change near it), puts
+five frames at +16 to +26%. Taken together: the water now costs a few tenths of a
+millisecond to about a millisecond more than v3's, most where the camera is near the surf
+(`beach`, `trailLow`), which is the breaking wave's pixels and the surf's work per vertex.
+The first burst of frames in a fresh page also came out up to 60% slower than the same frame
+a minute later (the GPU warming up), another reason single runs disagree. That cost is the
+realism this version is for, and it is logged in the v9 brief with the tool and the
+breakdown.
 
 Moving (the clock running, which the still hero frames never pay for): the spectrum 0.3 to
 0.4 ms, a foam step 0.11 ms every fourth frame, the breaker's columns 0.1 ms. A moving frame

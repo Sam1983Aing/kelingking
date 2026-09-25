@@ -71,3 +71,26 @@ settings in `src/terrain/layout.js`, the swash parts of `src/water/water-shader.
 - The beach at the south end is narrower than the photos show from the viewpoint: in
   `viewpoint-midday-a.jpg` the sand disappears under the overhang's shadow much closer to the
   water. The overhang now covers part of it; the rest is the beach's own shape.
+
+**From v4 (water).**
+
+- The swash is still v1's: the water level surges up the sand (`surge` in `surfAt`,
+  `src/water/water-shader.js`) and a thin bright line marks its edge (`edge`, near the end of
+  the sea's fragment shader). Both are v5's. The bore that feeds the swash is now v4's
+  breaker and foam simulation: the bore front arrives as a thick white band and the foam it
+  leaves is carried up the beach and back by `surf-sim.js` (`push`, `surfZone`, the backwash
+  and the rip channels). A swash that runs up and slides back should move that foam with it,
+  so change the simulation's water motion there rather than drawing a second foam.
+- The foam simulation zeroes itself above the swash's reach (`wet` in `surf-sim.js`, from
+  `uSurge`). If the swash runs further up the sand, raise that too, or the foam will stop short
+  of the water's edge.
+- The seabed sand seen through the water is its own colour (`sandAlbedo` in
+  `src/water/water.js`, now greyer, about 0.35 reflectance under water) and does not read the
+  terrain's sand texture. Where the swash film is thin the terrain's own wet sand shows through
+  (the sea fades out over its last 12 cm). A darker wet band behind the swash would be on the
+  terrain side.
+- `shoreBreak` now stands in the water about 10 m from the break (v4 moved it). A shot for
+  the swash will want its own camera on the sand.
+- At noon the bore and the foam on the sand clip to white under the photo's exposure, as they
+  do in `beach-white-sand-surf.jpg`. Only the shadowed crevices give foam any shape.
+
