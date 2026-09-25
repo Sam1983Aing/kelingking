@@ -54,3 +54,15 @@ New `src/trail/`, the path carve in `src/terrain/heightfield.js`, the clearance 
 
 - (from stage 0) At the placeholder `stairs` camera the head looks closer and wider than in
   `trail-mid-descent-a.jpg`. That is terrain shape, logged for v3. Recheck once v3 is in.
+- (from v3) Rechecked: see "From v3" below.
+
+**From v3 (rock).**
+
+- The `trailLow` placeholder moved: v1's camera on the mapped zigzag looked past the overhang,
+  so it is now framed like its photo on the overhang at the south end of the beach, 65 m up
+  in the air at (115, 140, 70). Put it back on the path when the path exists. Frame times for
+  it are not comparable across that change.
+- The neck from the `stairs` camera: STAIRS_NOTE
+- The faces are separate strips of mesh now (`mesh-builder.js`), and the ground grid is
+  pushed back into the rock under them. A path cut into a steep slope will need to cut the
+  strips too, or be its own mesh laid over them.

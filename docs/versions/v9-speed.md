@@ -57,3 +57,14 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
 - `tools/capture.mjs --bench` now times `window.__app.renderFrame()` (sky tables and clouds
   included) when the page has one.
 
+**From v3 (rock).**
+
+- The terrain mesh is now a grid (denser over the headland) plus strips for the faces: about
+  3.6 M grid and 1.7 M face triangles at q=2048, down from 8.4 M, because cells under the sea
+  and cells a face covers are left out. Building it takes 5 to 7 s in the worker at 2048
+  (plus about 8 s for the heightfield); at q=1024, 2 to 3 s.
+- Per strip vertex the mesh carries two more RGBA8 attributes (`aRock`, `aHorizon`).
+- The ground shader reads three small textures more for the bedding (`uStrataA`, `B`, `C`,
+  4096 texels wide), only on faces.
+- `hero.mjs` times each version with its own `shots.js`, so a frame whose camera moved
+  (`trailLow` in v3) is not comparable across that version.

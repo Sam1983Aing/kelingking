@@ -1,20 +1,24 @@
-// Builds the terrain mesh from the heightfield.
+// Builds the terrain mesh from the heightfield: a ground grid plus a strip of mesh for every
+// face, carved.
 //
-// 1. A grid, denser over the headland than out on the plateau and the open sea (the rows
-//    and columns are spaced by a density that is higher inside layout.mesh.focus).
-// 2. Every vertex near a face slides along a straight line across it, so that along that
-//    line vertices end up evenly spaced over the ground instead of on the map. The line is
-//    the gradient of the face field (PSI, distance to the middle of the nearest face), so it
-//    crosses every face at right angles, rock and beach walls alike. The flats beside a face
-//    give up vertices and the face gets them.
-// 3. The faces are then carved, which a heightfield cannot do: the wave-cut notch at the
-//    waterline, the overhangs at the back of the beach, buttresses, and the big beds of the
-//    limestone standing out or cut back (strata.js). Carving moves points across the face
-//    only, sideways, so the ground keeps its height and can hang over itself.
+// A grid cannot draw these faces: it crosses a curved rim at an angle, and whatever it does
+// with its vertices it leaves teeth along the rim. So:
 //
-// The line through a vertex is sampled once per 25 cm of face (the profile cache), not per
-// vertex, and the vertex takes its place along it from that profile. Triangles entirely
-// under the sea are left out: the water is opaque there.
+// 1. The faces. The face field (PSI in heightfield.js, the distance to the middle of the
+//    nearest face) is traced at zero into chains, resampled every 55 cm near the headland.
+//    Each point is a column: a line across the face along the field's gradient, sampled from
+//    heightAt, with vertices shared out evenly along it. Neighbouring columns are zipped
+//    together into a strip.
+// 2. The carving, which a heightfield cannot do: the wave-cut notch at the waterline, the
+//    overhang at the back of the beach, buttresses, and the big beds of the limestone
+//    standing out or cut back (strata.js). It moves points across the face only, never up or
+//    down, so the ground keeps its height and can hang over itself.
+// 3. The ground: a grid, denser over the headland (layout.mesh.focus). Where a strip covers
+//    it, it is pushed back into the rock, or left out where the cover is complete, so the
+//    strip is what shows. Cells wholly under the sea are left out: the water is opaque there.
+// 4. For the shader, per strip vertex, worked out in the face's own vertical section: the
+//    sky the rock overhead leaves, the sunlit ground in view past the drip line, the angle
+//    above which rock hides the sun, and which way is out.
 
 import { buildStrata, strataWarp, strataStrength, coarseAt } from './strata.js';
 
@@ -104,7 +108,6 @@ export function buildTerrainMesh(hf, layout, M) {
       const R = Math.min(900, Math.max(4, Math.ceil(S / du) + 1));
       col.first = bands.pos.length / 3;
       col.R = R;
-      const cs = [];
       for (let r = 0; r < R; r++) {
         const s = (r / (R - 1)) * S;
         let lo = 0, hi = P.S.length - 1;
@@ -120,7 +123,6 @@ export function buildTerrainMesh(hf, layout, M) {
         // fighting.
         h -= 0.5 * (1 - smooth(0, 2.5, Math.min(t - P.a, P.b - t)));
         bands.pos.push(bx + c * col.gx, h, -(by + c * col.gy));
-        cs.push(c);
         // Sand runs on in under an overhang, where the ground texture cannot know it.
         const F = P.feat;
         const sand = F.onSand * (1 - smooth(F.hFoot + 0.4, F.hFoot + 1.6, h)) * smooth(0.5, 2, c);
@@ -128,7 +130,6 @@ export function buildTerrainMesh(hf, layout, M) {
         bands.lit.push(1);
         bands.hor.push(1);
       }
-      col.cs = cs;
       nCols++;
       const key = hashKey(col.x, col.y);
       if (!bands.hash.has(key)) bands.hash.set(key, []);
@@ -308,8 +309,7 @@ export function buildTerrainMesh(hf, layout, M) {
   const xs = axisCoords(x0, size, M, fc.x, fc.density, fc.soft);
   const ys = axisCoords(y0, size, M, fc.y, fc.density, fc.soft);
   const pos = new Float32Array(M * M * 3);
-  const gridW = new Float32Array(M * M).fill(-1);   // push weight, for debugging (-1 = not near a face)
-  const dbg = cfg.debug ? [] : null;
+  const cover = new Float32Array(M * M);   // how fully a face strip covers each grid vertex
   let pushed = 0;
   const e = f.cell;
   for (let j = 0; j < M; j++) {
@@ -337,8 +337,7 @@ export function buildTerrainMesh(hf, layout, M) {
             const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
             const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade;
             const inward = (cl + 1.2) * w;
-            gridW[v] = w;
-            if (dbg) dbg.push({ v, x, y, h, psi, w, cl, dist: col.dist, cx: col.x, cy: col.y, a: col.P.a, b: col.P.b, fade: col.fade });
+            cover[v] = w;
             px += inward * gx; py += inward * gy;
             h -= 1.2 * w * smooth(1.5, 0.4, sl);
             if (w > 0) pushed++;
@@ -377,7 +376,7 @@ export function buildTerrainMesh(hf, layout, M) {
     return { c: carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade, gx, gy };
   }
 
-  const gridIdx = gridIndex(M, pos, cfg.cull, gridW);
+  const gridIdx = gridIndex(M, pos, cfg.cull, cover);
   const gridNrm = gridNormals(pos, M);
 
   // Both into one mesh: the grid first, the strips after it.
@@ -418,7 +417,8 @@ export function buildTerrainMesh(hf, layout, M) {
   }
   const index = new Uint32Array(gridIdx.length + bandIdx.length);
   index.set(gridIdx); index.set(bandIdx, gridIdx.length);
-  return { positions, normals, index, rock, horizon, M, moved: nb, columns: nCols, pushed, gridW, dbg, hash: bands.hash, surfaceShift, strips: bands.strips, bandPos: bands.pos,
+  // (strips and bandPos are for inspecting the faces from node, see PROCESS.md.)
+  return { positions, normals, index, rock, horizon, M, moved: nb, columns: nCols, pushed, surfaceShift, strips: bands.strips, bandPos: bands.pos,
     gridTris: gridIdx.length / 3, faceTris: bandIdx.length / 3, ms: Math.round(performance.now() - t0) };
 }
 

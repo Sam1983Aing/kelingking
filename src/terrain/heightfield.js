@@ -185,9 +185,11 @@ export function makeHeightAt(f, layout, noise) {
       const sheer = Math.min(Math.max(islet.sheer + islet.sheerVar * Math.cos(az - (islet.sheerAz * Math.PI) / 180)
         + 0.12 * noise(x / 25 + 5, y / 25), 0.1), 0.85);
       const u = Math.min(dc / islet.R, 1);
-      const crown = (1 - (1 - u) ** 1.5) * (1 + 0.06 * noise(x / 18 + 2, y / 18 - 4));
-      // The sheer part leans back a little (it rises over 9 m).
-      const h = islet.h * (sheer * smooth(0, 9, dc) + (1 - sheer) * crown);
+      const crown = (1 - (1 - u) ** 2) * (1 + 0.06 * noise(x / 18 + 2, y / 18 - 4));
+      // The sheer part leans back a little and bends over into the crown (it rises over 14 m,
+      // steepest at the bottom), so the top edge is rounded, not a rim.
+      const rise = 1 - (1 - Math.min(dc / 14, 1)) ** 2;
+      const h = islet.h * (sheer * rise + (1 - sheer) * crown);
       return h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
     }
 

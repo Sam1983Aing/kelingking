@@ -57,7 +57,7 @@ export function defaultLayout() {
     // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
     // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 68, sheer: 0.4, sheerVar: 0.42, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
+      { near: [80, -100], h: 68, sheer: 0.62, sheerVar: 0.12, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
       { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 

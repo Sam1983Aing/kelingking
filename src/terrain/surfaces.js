@@ -9,7 +9,7 @@
 
 export const SURFACES = [
   { id: 'marble_cliff_05', scan: 20, tile: 16, use: 'grey-white limestone faces',
-    avg: [0.578, 0.550, 0.513], target: [0.63, 0.615, 0.575] },
+    avg: [0.578, 0.550, 0.513], target: [0.60, 0.585, 0.54] },
   { id: 'cliff_side', scan: 1.83, tile: 5.5, use: 'bedding relief on the faces, and the ochre stain',
     avg: [0.482, 0.322, 0.194], target: [0.60, 0.46, 0.30] },
   { id: 'seaside_rock', scan: 2, tile: 2.5, use: 'the dark band at the waterline and in the notch',

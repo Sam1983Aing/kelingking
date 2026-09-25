@@ -97,16 +97,17 @@ vec4 tData(vec2 g) {
 
 float groundShadow(vec3 P, vec3 N) {
   if (dot(N, uSunDirW) < -0.05) return 0.0;   // facing away, the lighting is dark anyway
-  float carve = vRock.z * 32.0;
-  if (carve < 0.3) return bakedShadow(P + N * (0.6 + 3.0 * (1.0 - abs(N.y))), 0.3);
-  // A carved face lies inside the heightfield the shadow was baked from, so: the rock that
-  // hangs over it (the mesh builder's horizon, in the face's own vertical plane), and the
-  // baked shadow at the face's uncarved place, for everything further off.
-  vec2 o = vHorizon.yz / max(length(vHorizon.yz), 1e-3);
+  float ol = length(vHorizon.yz);
+  if (ol < 0.1) return bakedShadow(P + N * (0.6 + 3.0 * (1.0 - abs(N.y))), 0.3);
+  // A face strip is carved, so it does not lie on the heightfield the shadow was baked from.
+  // The rock of its own face that sticks out above it (the mesh builder's horizon, in the
+  // face's vertical plane: ledges, bulges, the lip of an overhang), and the baked shadow
+  // just out from its uncarved place, for everything further off.
+  vec2 o = vHorizon.yz / ol;
   float eSun = atan(uSunDirW.y, dot(uSunDirW.xz, o)) / PI;
-  float over = 1.0 - smoothstep(vHorizon.x - 0.015, vHorizon.x + 0.015, eSun);
-  vec3 Q = P + vec3(o.x, 0.0, o.y) * carve;
-  return over * bakedShadow(Q + vec3(o.x, 0.0, o.y) * 3.0, 0.3);
+  float over = 1.0 - smoothstep(vHorizon.x - 0.012, vHorizon.x + 0.012, eSun);
+  vec3 Q = P + vec3(o.x, 0.0, o.y) * (vRock.z * 32.0 + 0.6 + 3.0 * (1.0 - abs(N.y)));
+  return over * bakedShadow(Q, 0.3);
 }
 
 uniform vec3 uBounceAlb[4];   // what the ground below sends back: sea, sand, land (albedo), and rock
@@ -305,6 +306,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // How strongly the beds stand out: by stretches of the island, and coming and going
     // along a face over tens of metres, so the ledges are not ruled lines.
     float m = strataStrength(g) * wallF * (0.35 + 1.1 * tn(vec2(along * 0.045 + 3.0, bc * 0.09)));
+    // And each parting comes and goes along the face (the noise changes about once a bed),
+    // so the lines are not ruled right across it.
+    m *= 0.25 + 0.75 * smoothstep(0.3, 0.7, tn(vec2(along * 0.06 + 11.0, bc * 1.2)));
     tLedgeSky = mix(1.0, SB.a, min(m * 1.2, 1.0));
     a.color *= mix(1.0, SA.b, 0.9 * wallF);
     a.color *= mix(vec3(1.0), mix(vec3(0.95, 0.985, 1.03), vec3(1.05, 1.0, 0.9), SA.a), 0.85 * wallF);
@@ -322,7 +326,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         float row = clamp(log2(K / 0.25) / 0.62, 0.0, SHADOW_ROWS - 1.0);
         float margin = textureGrad(uStrataC, vec2(su, (row + 0.5) / SHADOW_ROWS), sdx, sdy).r;
         float soft = max(0.03, 1.5 * fpz);
-        tFineShadow = mix(1.0, 1.0 - smoothstep(-soft, soft, margin), wallF);
+        // A margin of about zero is the face just below, tangent to the sun: lit. (Centring
+        // the soft edge on zero left every face half in shadow.)
+        tFineShadow = mix(1.0, 1.0 - smoothstep(0.01, 0.01 + 2.0 * soft, margin), wallF);
       }
     }
 
@@ -331,7 +337,30 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float streak = tfbm(vec2(along * 0.55, h * 0.02), 3.0, fp);
     float streaky = smoothstep(0.45, 0.7, tn(vec2(along * 0.03 + 7.0, h * 0.01)));
     a.color = mix(a.color, a.color * vec3(0.62, 0.6, 0.57), smoothstep(0.55, 0.8, streak) * 0.6 * streaky * wallF);
-    // Under the overhangs on the beach the rock is stained ochre and brown.
+    // Weathering at the scale of the whole face: dark grey zones where water runs and
+    // lichen grows, and creamy ochre ones where rock fell away more recently. Tens of metres
+    // across, taller than wide.
+    vec2 fq = vec2(along * 0.028, h * 0.016);
+    float dirt = tfbm(fq + 3.1, 36.0, fp);
+    float fresh = tfbm(fq * 1.3 + 17.7, 28.0, fp);
+    a.color = mix(a.color, a.color * vec3(0.56, 0.57, 0.58), smoothstep(0.55, 0.75, dirt) * 0.7 * wallF);
+    a.color = mix(a.color, a.color * vec3(1.1, 1.0, 0.8), smoothstep(0.55, 0.72, fresh) * 0.8 * wallF);
+    // Joints: near-vertical cracks every several metres, each one only in some stretches of
+    // its height, a little darker and cut in.
+    if (detail > 0.0) {
+      float ju = along / 7.0 + 0.6 * tn(vec2(h * 0.05, 1.3));
+      float jc = floor(ju);
+      float jx = abs(fract(ju) - 0.2 - 0.6 * th12(vec2(jc, 5.1))) * 7.0;          // metres to the crack
+      float jon = smoothstep(0.45, 0.6, tn(vec2(jc * 3.7, h * 0.08)));
+      float jw = max(0.12, 1.2 * fp);
+      float joint = (1.0 - smoothstep(0.0, jw, jx)) * jon * wallF * detail;
+      a.color *= 1.0 - 0.45 * joint;
+      a.ao *= 1.0 - 0.4 * joint;
+    }
+    // A dirty grey band along the foot of the walls on the beach, and under the overhangs
+    // the rock stained ochre and brown.
+    float foot = sandZone * (1.0 - smoothstep(uBeachTop + 3.0, uBeachTop + 9.0, h + (n1 - 0.5) * 3.0)) * wallF;
+    a.color = mix(a.color, a.color * vec3(0.66, 0.63, 0.58), foot * 0.6);
     float under = smoothstep(0.8, 5.0, carveM) * sandZone * (1.0 - smoothstep(18.0, 30.0, h));
     a.color = mix(a.color, a.color * vec3(1.02, 0.78, 0.52), under * 0.75);
     // The wave-cut notch and the dark wet band at the waterline, from the wet rock scan.

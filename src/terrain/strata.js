@@ -7,12 +7,12 @@
 // dip and bend a little, they are not perfectly level): bedCoord = h + strataWarp(x, y).
 // Everything is a function of bedCoord, sampled every 1/16 m.
 //
-// Rows of the texture the shader gets (RGBA, one texel per 1/16 m of bedCoord):
-//   0: R fine relief (m, outward), G its slope per metre up, B bed brightness, A bed warmth
-//   1: R coarse relief (the part the mesh carries), G hardness, B parting (0 inside a bed,
-//      1 on the seam between two), A how much of the sky above is not hidden by the ledges
-//      over it (1 on a plain wall, down to about 0.2 deep under a lip)
-//   2..17: shadow from the ledges above, one row per sun steepness (see shadowRows below)
+// What the shader gets (terrain-mesh.js packs it, one texel per 1/16 m of bedCoord): the
+// fine relief (m, outward) and its slope, each bed's brightness and warmth, the coarse
+// relief (the part the mesh carries), hardness, the partings between beds (0 inside a bed,
+// 1 in the slot between two), how much of the sky the ledges above leave (1 on a plain
+// wall, down to about 0.2 deep under a lip), and the shadow of the ledges above for 16 sun
+// steepnesses (shadowK below).
 
 export const STRATA = { z0: -24, span: 256, n: 4096, seed: 5 };
 export const SHADOW_ROWS = 16;
@@ -56,7 +56,7 @@ export function buildStrata() {
       const th = thin ? 0.2 + rand() * 0.5 : 0.6 + rand() * rand() * 2.6;
       const parting = (thin ? 0.05 : 0.08) + rand() * rand() * 0.28;
       beds.push({ z0: z, z1: z + th, pz: parting, pkg, pkgHard: hard, hard: clamp01(hard + (rand() - 0.5) * 0.5),
-        cut: (0.15 + 0.45 * rand()) * (1.2 - 0.6 * hard),
+        cut: (0.08 + 0.3 * rand()) * (1.2 - 0.6 * hard),
         tone: tone * (0.93 + rand() * 0.14), warm: clamp01(warm + (rand() - 0.5) * 0.3) });
       z += th + parting;
     }
@@ -65,7 +65,7 @@ export function buildStrata() {
 
   const fine = new Float32Array(n), coarse = new Float32Array(n);
   const tone = new Float32Array(n), warm = new Float32Array(n), hard = new Float32Array(n);
-  const part = new Float32Array(n), pkgId = new Float32Array(n);
+  const part = new Float32Array(n);
   const pkgRelief = new Float32Array(n);
   let b = 0;
   for (let k = 0; k < n; k++) {
@@ -91,10 +91,9 @@ export function buildStrata() {
     }
     fine[k] = r;
     part[k] = seam;
-    tone[k] = bed.tone * (1 - 0.3 * seam);
+    tone[k] = bed.tone;
     warm[k] = bed.warm;
     hard[k] = bed.hard;
-    pkgId[k] = bed.pkg % 64;
     // The package as a whole stands out or is cut back by up to about 0.9 m.
     pkgRelief[k] = (bed.pkgHard - 0.5) * 1.8;
   }
@@ -107,10 +106,10 @@ export function buildStrata() {
 
   // Shadow from the ledges above: for a point at bedCoord z and a sun steepness K, how far
   // (in metres, positive = shadowed) the highest ledge within 6 m above pokes through the
-  // line to the sun. The total relief (coarse + fine) casts it. The shader turns the margin
-  // into a soft edge.
-  const total = new Float32Array(n);
-  for (let k = 0; k < n; k++) total[k] = coarse[k] + fine[k];
+  // line to the sun. Only the fine relief casts it here: the coarse relief is carved into the
+  // mesh, whose own shadows the mesh builder works out (the horizon per vertex). The shader
+  // turns the margin into a soft edge.
+  const total = fine;
   const shadow = new Float32Array(n * SHADOW_ROWS);
   const reach = Math.round(6 / dz);
   for (let row = 0; row < SHADOW_ROWS; row++) {
@@ -138,7 +137,7 @@ export function buildStrata() {
 
   const slope = new Float32Array(n);
   for (let k = 0; k < n; k++) slope[k] = (fine[Math.min(n - 1, k + 1)] - fine[Math.max(0, k - 1)]) / (2 * dz);
-  return { beds, fine, coarse, slope, tone, warm, hard, part, pkgId, occl, shadow, dz };
+  return { beds, fine, coarse, slope, tone, warm, hard, part, occl, shadow, dz };
 }
 
 // Coarse relief at a bedCoord, linearly interpolated (for the mesh builder).
@@ -147,19 +146,6 @@ export function coarseAt(S, bc) {
   const i = Math.max(0, Math.min(STRATA.n - 2, Math.floor(f)));
   const u = Math.min(Math.max(f - i, 0), 1);
   return S.coarse[i] * (1 - u) + S.coarse[i + 1] * u;
-}
-
-// Everything the shader reads, packed into one float RGBA image (n x (2 + SHADOW_ROWS)).
-export function strataTexels(S) {
-  const { n } = STRATA;
-  const rows = 2 + SHADOW_ROWS;
-  const px = new Float32Array(n * rows * 4);
-  for (let k = 0; k < n; k++) {
-    px.set([S.fine[k], S.slope[k], S.tone[k], S.warm[k]], k * 4);
-    px.set([S.coarse[k], S.hard[k], S.part[k], S.occl[k]], (n + k) * 4);
-    for (let r = 0; r < SHADOW_ROWS; r++) px[((2 + r) * n + k) * 4] = S.shadow[r * n + k];
-  }
-  return { px, width: n, height: rows };
 }
 
 function gaussian(src, dst, sigma) {

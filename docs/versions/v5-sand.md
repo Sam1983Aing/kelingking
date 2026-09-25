@@ -59,3 +59,15 @@ settings in `src/terrain/layout.js`, the swash parts of `src/water/water-shader.
 - The sand's colour also sets the light it bounces onto the cliff foot and the overhang
   (`uBounceAlb` reads the sand target from `surfaces.js`), so changing it changes those.
 
+**From v3 (rock).**
+
+- The sand now runs on in under the overhang at the south end of the beach: the floor of the
+  cave is part of the face strip, flagged as sand per vertex (`vRock.x` in
+  `terrain-shader.js`), and it is in shadow most of the day. Its light is sky plus a second
+  bounce off the rock overhead. Check it when the sand changes.
+- The light bounced onto the rock from the sand uses the sand target from `surfaces.js`, so
+  retuning the sand (v2 suggested about 0.49 reflectance, down from 0.79) will darken the
+  overhang's ceiling and the cliff foot by the same factor. That is right; just expect it.
+- The beach at the south end is narrower than the photos show from the viewpoint: in
+  `viewpoint-midday-a.jpg` the sand disappears under the overhang's shadow much closer to the
+  water. The overhang now covers part of it; the rest is the beach's own shape.
