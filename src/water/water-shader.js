@@ -112,7 +112,7 @@ struct Surf {
 };
 
 Surf surfAt(vec2 p, vec4 d) {
-  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 30.0, 0.1, 0.0);
+  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0);   // L = 0: no surf here
   float s = d.g;
   if (s > 280.0 || s < -30.0) return o;
   float sand = d.b;
@@ -205,10 +205,18 @@ Surf surfAt(vec2 p, vec4 d) {
 float rockFoamBand(vec2 p, vec4 d, vec4 c) {
   float pulse = exp(-pow(fract(uTime / uPeriod + vnoise(p * 0.02) * 1.3) - 0.15, 2.0) / 0.06);
   float exposed = c.g;
-  float width = 3.0 + 18.0 * exposed + 8.0 * vnoise(p * 0.04);
+  float width = 4.0 + 26.0 * exposed + 10.0 * vnoise(p * 0.04);
   float band = smoothstep(width, 0.0, c.r);
   float patchy = smoothstep(0.2, 0.7, fbm3(p * 0.09 + vec2(uTime * 0.1, 0.0)));
   float rock = c.a * (0.5 + 0.5 * pulse) * (0.35 + 0.75 * exposed) * mix(band * band, band, patchy);
+  // Streaks of old foam drifting off the rock with the wind: noise stretched downwind, so
+  // they lie parallel (wind rows), as foam lines on the sea do.
+  if (c.a > 0.5 && c.r < 110.0) {
+    const vec2 wdir = vec2(-0.866, 0.5), wperp = vec2(-0.5, -0.866);   // toward 300 degrees
+    vec2 q = vec2(dot(p, wperp) * 0.09, dot(p, wdir) * 0.012 - uTime * 0.01);
+    float streak = smoothstep(0.55, 0.85, vnoise(q) * 0.7 + vnoise(q * 3.1 + 5.0) * 0.3);
+    rock = max(rock, streak * smoothstep(110.0, 15.0, c.r) * smoothstep(0.2, 0.7, exposed) * 0.45);
+  }
   return max(rock, c.a * smoothstep(1.5, 0.0, c.r) * 0.9);
 }
 `;
@@ -250,8 +258,7 @@ vec3 foamRelief(vec2 q, float fp, float t) {
   float e = 0.12;
   float fine = smoothstep(0.08, 0.02, fp);
   float h0 = reliefH(q, o, fine);
-  vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine) - reliefH(q - vec2(e, 0.0), o, fine),
-                reliefH(q + vec2(0.0, e), o, fine) - reliefH(q - vec2(0.0, e), o, fine)) / (2.0 * e);
+  vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine) - h0, reliefH(q + vec2(0.0, e), o, fine) - h0) / e;
   return vec3(mix(0.3, 1.0, smoothstep(0.34, 0.62, h0)), g * 0.6);
 }
 
@@ -260,9 +267,17 @@ vec3 foamRelief(vec2 q, float fp, float t) {
 // variation in how dense it is. Returns the pattern (x) and the big ridges (y).
 vec2 lacePattern(vec2 pf, float fp) {
     vec2 q = pf * 0.9;
+#ifdef LACE_FULL
     vec2 w1 = vec2(fbm3(q * 0.18 + vec2(0.0, uTime * 0.03)), fbm3(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
+#else
+    vec2 w1 = vec2(vnoise(q * 0.18 + vec2(0.0, uTime * 0.03)), vnoise(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
+#endif
     vec2 qw = q + (w1 - 0.5) * 6.0;
+#ifdef LACE_FULL
     vec2 w2 = vec2(fbm3(qw * 0.5 + 2.7), fbm3(qw * 0.5 + 9.1));
+#else
+    vec2 w2 = vec2(vnoise(qw * 0.5 + 2.7), vnoise(qw * 0.5 + 9.1));
+#endif
     vec2 qq = qw + (w2 - 0.5) * 2.2;
     float ridge = 1.0 - abs(2.0 * fbm3(qq * 0.45) - 1.0);
     float ridge2 = 1.0 - abs(2.0 * fbm3(qq * 1.1 + 4.4) - 1.0);
@@ -373,6 +388,7 @@ ${AERIAL_VERT}
 varying vec3 vWorld;
 varying vec2 vGrid;   // rest position on the map: every texture and wave is looked up here
 varying vec4 vSeaW;   // ocean cascade weights
+varying vec2 vSurfSlope;  // the surf's slope (map x, y)
 
 // A cascade's displacement, prefiltered to what the grid can draw here: at the mip level
 // where a texel is twice the vertex spacing, anything shorter has been averaged away.
@@ -394,6 +410,10 @@ void main() {
          + sw.y * cascadeDisp(uOceanA[1], p, uOceanL.y, spacing)
          + sw.z * cascadeDisp(uOceanA[2], p, uOceanL.z, spacing);
   Surf sf = surfAt(p, d);
+  // The surf's slope for the fragment shader, by differences over the local vertex spacing.
+  float se = clamp(spacing, 0.12, 6.0);
+  vSurfSlope = sf.L > 0.0 ? vec2(surfAt(p + vec2(se, 0.0), dataAt(p + vec2(se, 0.0))).h - sf.h,
+                                                 surfAt(p + vec2(0.0, se), dataAt(p + vec2(0.0, se))).h - sf.h) / se : vec2(0.0);
   w.y = sf.h + D.y;
   w.x += D.x;
   w.z -= D.z;
@@ -438,6 +458,7 @@ uniform int uDebug;
 varying vec3 vWorld;
 varying vec2 vGrid;
 varying vec4 vSeaW;
+varying vec2 vSurfSlope;
 
 // The open sea at this pixel: mean slope (xy), the spread of slopes too small to see here
 // (z, from the mipmaps: mean of the squares minus square of the mean), whitecap foam (w).
@@ -473,9 +494,15 @@ void main() {
 
   // Normal: the surf by finite differences, plus the open sea's slopes.
   float e = clamp(fp * 1.5, 0.12, 6.0);
+#ifdef SURF_NORMAL_PIXEL
   float hx = surfAt(p + vec2(e, 0.0), dataAt(p + vec2(e, 0.0))).h - sf.h;
   float hy = surfAt(p + vec2(0.0, e), dataAt(p + vec2(0.0, e))).h - sf.h;
   vec2 slope = vec2(hx, hy) / e + oc.xy;
+#else
+  // The surf's slope comes from the vertices (its waves are metres long; the grid near the
+  // camera is a few centimetres to a few decimetres apart).
+  vec2 slope = vSurfSlope + oc.xy;
+#endif
   vec3 N = normalize(vec3(-slope.x, 1.0, slope.y));
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
