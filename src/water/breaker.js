@@ -307,7 +307,6 @@ void main() {
   // lace is laid out on the ribbon itself (along the beach, and across the wave), so it
   // stretches with the water instead of smearing down a steep face.
   vec2 rp = vec2(vAlong, v * max(H, 0.5) * 6.0);
-  vec2 lp = lacePattern(rp * 1.3 + vec2(0.0, -tau * 3.0), 0.02);
   float tear = vnoise(vec2(vAlong * 1.7, tau * 6.0)) * 0.5 + vnoise(vec2(vAlong * 5.3, v * 30.0)) * 0.5;
   float edge = smoothstep(0.36, 0.45, v + tear * 0.05) * (1.0 - smoothstep(0.5, 0.58, v - tear * 0.06)) * smoothstep(0.12, 0.45, tau);
   // Feathering: a thin broken fringe along the very top as the crest starts to spill.
@@ -317,8 +316,12 @@ void main() {
   float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.5;
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
-  float foam = smoothstep(1.0 - amount - 0.08, 1.0 - amount + 0.08, lp.x);
-  foam = max(foam, smoothstep(0.9, 1.0, amount));
+  // (The patterns only where there is foam to draw: most of the face has none.)
+  float foam = 0.0;
+  if (amount > 0.002) {
+    vec2 lp = lacePattern(rp * 1.3 + vec2(0.0, -tau * 3.0), 0.02);
+    foam = max(smoothstep(1.0 - amount - 0.08, 1.0 - amount + 0.08, lp.x), smoothstep(0.9, 1.0, amount));
+  }
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
   // Only on the back and the floor: the lip and the face are the breaker's own.
@@ -329,7 +332,7 @@ void main() {
   }
   // White water is a heap of bubbles: its lumps shade each other and face the sun or not
   // (in the noon sun it would otherwise just be clipped white).
-  float relW = smoothstep(0.25, 0.04, fp);
+  float relW = smoothstep(0.25, 0.04, fp) * step(0.01, foam);
   vec3 rel = relW > 0.01 ? foamRelief(rp * 2.2 + vec2(0.0, tau * 2.0), fp, uTime) : vec3(1.0, 0.0, 0.0);
   vec3 Nf = normalize(N + (tA * rel.y + tB * rel.z) * relW);
   vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
