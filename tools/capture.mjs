@@ -104,7 +104,7 @@ try {
     if (flag('outline')) q.set('outline', '1');
     if (flag('debug')) q.set('debug', flag('debug'));
     if (flag('hide')) q.set('hide', flag('hide'));
-    if (flag('clay')) q.set('clay', '1');
+    if (flag('clay')) q.set('clay', flag('clay') === true ? '1' : flag('clay'));
     if (flag('set')) for (const kv of String(flag('set')).split(';')) { const [k, ...v] = kv.split('='); q.set(k, v.join('=')); }
 
     const { targetId } = await send('Target.createTarget', { url: 'about:blank' });

@@ -84,12 +84,28 @@ export function defaultLayout() {
 
     beach: { top: 4.6, spread: 24, shift: 8 },
 
-    // Mesh: near each cliff, vertices are redistributed along the slope over a window from
-    // `below` metres out from the foot to `above` metres back from the top, evenly by length
-    // over the ground (weight scales how much the vertical counts). See mesh-builder.js.
-    mesh: { samples: 48, below: 12, above: 45, weight: 1 },
+    // Mesh (mesh-builder.js). The ground is a grid whose rows and columns are `density`
+    // times closer inside the focus ranges (metres east and north: the headland, the islet
+    // and the beach). The faces are strips of their own, from `below` metres out from the
+    // middle of the face to `above` metres in from it, with vertices faceStep metres apart
+    // up the face (in the focus, and outside it) and faceStepAlong times that along it
+    // (weight scales how much the vertical counts in the spacing). Anything entirely below
+    // `cull` metres is left out (the sea is opaque).
+    mesh: { below: 16, above: 34, weight: 1, cull: -4, faceStep: [0.55, 1.6], faceStepAlong: 1,
+      focus: { x: [-235, 330], y: [-175, 345], density: 3, soft: 60 } },
     // The wave-cut notch at the foot of the rock: how deep, and how high it reaches.
     notch: { depth: 2.6, top: 5 },
+    // Carving the faces: buttresses (metres in and out), the big beds (strata.js, as a
+    // fraction of their table relief), and the low undercut all along the back of the beach.
+    faces: { buttress: 2.4, beds: 1, undercut: { depth: 3, height: 6 } },
+    // Overhangs. Rock standing on sand: recess = how far the foot of the wall is cut back
+    // under its rim, scoop = how the lean is spread up the wall (higher = more of it low
+    // down), cave = a further cut at the foot, caveH metres high. Rock in the sea: a deeper
+    // notch (notch metres deep, notchTop high).
+    overhangs: [
+      { name: 'beach south end', at: [58, 60], r: 34, recess: 14, cave: 9, caveH: 10, scoop: 2.5 },
+      { name: 'jaw arch', at: [6, 80], r: 24, notch: 9, notchTop: 13 },
+    ],
 
     // Plants (src/veg/scatter.js). Spacing and scale blend from near to far with distance
     // from focus. Scale multiplies the scanned tree (3.4 to 5 m tall), so 0.35 is a bush.

@@ -254,6 +254,8 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   vec3 col = s.color;
 
   if (uClay > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); tNormalW = N; tAO = 1.0; tRough = 0.93; }
+  // clay=2: the triangles' own normals, to see the mesh itself.
+  if (uClay > 1.5) { tNormalW = normalize(cross(triDx, triDy)); tNormalW *= sign(dot(tNormalW, cameraPosition - P)); }
 
   // Contour lines every 10 m, stronger every 50 m.
   float q = h / 10.0;
