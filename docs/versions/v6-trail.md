@@ -62,7 +62,15 @@ New `src/trail/`, the path carve in `src/terrain/heightfield.js`, the clearance 
   so it is now framed like its photo on the overhang at the south end of the beach, 65 m up
   in the air at (115, 140, 70). Put it back on the path when the path exists. Frame times for
   it are not comparable across that change.
-- The neck from the `stairs` camera: STAIRS_NOTE
+- The neck from the `stairs` camera: the brief for v3 asked whether the neck should be
+  narrower and lower with the head further away. Side by side, most of the difference is the
+  camera: `trail-mid-descent-a.jpg` is taken from higher up the steps, looking down more
+  steeply, with the head further off and smaller in the frame. The neck passes the outline
+  checks on `viewpoint` and `overview`, which are calibrated from EXIF and a registered drone
+  photo, so v3 left its shape alone. Match the `stairs` camera to its photo first; if the
+  neck still reads wide and high, the spine points at (109, 70) and (70, 38) in `layout.js`
+  (h 94 and 92, w 46 and 50) are the ones to lower and narrow, and the outline checks say
+  how far.
 - The faces are separate strips of mesh now (`mesh-builder.js`), and the ground grid is
   pushed back into the rock under them. A path cut into a steep slope will need to cut the
   strips too, or be its own mesh laid over them.

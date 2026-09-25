@@ -68,3 +68,9 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   4096 texels wide), only on faces.
 - `hero.mjs` times each version with its own `shots.js`, so a frame whose camera moved
   (`trailLow` in v3) is not comparable across that version.
+- Frame budget after v3, three `hero.mjs` runs on a busy machine: `overview` and `viewpoint`
+  6 to 28% faster than v2, `stairs`, `trailTop` and `beach` +3 to +16% (over 10% in at least
+  one run each). The cost is the fine face strips near the beach and trail (`mesh.detail`
+  in `layout.js`: 55 cm there, 85 cm on the rest of the headland) and the bedding reads on
+  faces. Levers: coarser strips farther from the camera path once v8 fixes it, or a second,
+  coarser terrain mesh for distant views.

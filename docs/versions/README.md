@@ -8,8 +8,8 @@ version. A session works on its element only, and goes deep on it.
 |---|---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | [history](../gallery/history/README.md) | done, tag `v1` |
 | v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
-| v3 | Rock | [v3-rock.md](v3-rock.md) | next |
-| v4 | Water | [v4-water.md](v4-water.md) | |
+| v3 | Rock | [v3-rock.md](v3-rock.md) | in review, branch `v3-rock` |
+| v4 | Water | [v4-water.md](v4-water.md) | next |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | |
@@ -26,7 +26,7 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v3-rock.md, then start v3.
+> Read docs/versions/README.md and docs/versions/v4-water.md, then start v4.
 
 ## Rules for every version
 
@@ -100,7 +100,10 @@ node tools/preview-height.mjs 1024                   # top-down shaded height ma
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
 `clay=1`, `contours=1`, `pr=1` (fixed pixel ratio), and from v2 `hour=`, `sun=az,el`,
-`haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. Keys: `1` to `9`
+`haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. From v3:
+`cam=e,n,h,yaw,pitch[,fov]` (any camera, in a shot's frame), `clay=2` (the bare triangles),
+`terrainDebug=1..5` (the ground's shadow, sky share, overhang horizon, lit ground, carving),
+`faceStep=` (face strip spacing). Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light

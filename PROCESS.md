@@ -413,3 +413,211 @@ is physical rather than fitted to one photo.
   sunlit beach, as a camera would. The descent (v8) may want the eye to adapt.
 - Until v3 to v7 retune the materials under this light, the hero frames look brighter than
   the photos in rock, sand and shallow water, and darker in the plants.
+
+## v3: rock (2026-09-24)
+
+### The rims: stop sliding grid vertices, build the faces as strips
+
+v1 slid grid vertices along the slope towards each cliff so the faces got more of them. Two
+neighbouring vertices could pick slightly different lines across a rim, and that left a comb
+of teeth along every rim and at the foot of the walls. Clay renders with flat triangles
+(`clay=2`) showed it was the triangulation, not the surface: the grid simply cannot follow a
+curved rim.
+
+What replaced it:
+
+- **A face field.** One signed distance to the middle of every face (where the ground is at
+  half the height of the top it falls from), for rock and beach walls alike. Its gradient
+  crosses every face at right angles.
+- **Strips.** The zero line of that field is traced (marching squares) into chains, smoothed,
+  and resampled every 55 cm where the camera comes close (the beach and the trail), 85 cm on
+  the rest of the headland. Each point is a column: a line across the face,
+  from 16 m out to 34 m in, sampled from `heightAt`, and vertices shared out evenly along it.
+  Neighbouring columns are zipped into triangles by how far up their profile each vertex is.
+- **The grid stays for the ground**, 1.6 times denser over the headland, and wherever a strip
+  covers it, it is pushed back into the rock by the carving plus a margin, or left out where
+  the cover is complete. Triangles wholly under the sea are left out too.
+- **Rounded creases.** Rims and wall feet in `heightAt` are averaged over about 2 m across the
+  face, and the rock faces follow a coastline blurred over 6 m, so a sharp corner in the
+  map does not come out as a sharp vertical edge (the jaw's tip looked extruded).
+
+Mistakes on the way, each one found with `clay=2` and a raycast from the offending pixel:
+
+1. Sliding every vertex along its own line was 56 s at 2048 and still folded. Sharing one
+   profile per 25 cm of face made it 7 s, and the strips 5 to 7 s.
+2. A plate of grid floating over the neck: the grid was pushed out by carving that was
+   negative there. Push in only, never out.
+3. A green shelf in front of the cave: the grid's big triangles cut across the bend of the
+   ceiling. Push by the deepest carving within 2.5 m above or below, and not down under a
+   ceiling (down is out into the cave there).
+4. Fins at the jaw's waterline: some columns reached the sea and some stopped short, so their
+   rows did not line up. The window ends are now smoothed along the face (lowest within 4 m,
+   then averaged). And the rows are shared out by the uncarved profile: sharing them along
+   the carved one shifted every row above a notch that was a little deeper in one column than
+   the next.
+5. A lone pillar in the cave: the limit on how deep the carving may go (so the jaw cannot be
+   cut through from both sides) came from a curvature, which is noisy. Now the lowest within
+   4 m, averaged, and taken from how far the middle of the rock is.
+
+### Carving
+
+Carving moves points across the face only, never up or down, so the ground keeps its height
+and can hang over itself.
+
+- **Bedding, one table for mesh and shader** (`strata.js`). Packages of 3 to 14 m, massive or
+  thin-bedded; beds with rounded noses; a recessed parting between every two, which from a
+  distance is the line you see. The mesh carries the packages (up to 0.9 m in or out), the
+  shader the rest. Both read the same bed coordinate (height plus a gentle warp across the
+  island, written with sines only so JavaScript and GLSL agree), so a ledge in the geometry
+  and its band of colour line up.
+- **Buttresses and bays**, 2.4 m in and out over tens of metres, changing with height.
+- **The notch** varies in depth and height along the coast, and is 11 m deep and 20 m high
+  under the jaw, which is the arch in `aerial-side-from-sea.jpg`.
+- **The overhang at the south end of the beach.** First try: cut the foot back (recess and a
+  cave). From the sand it read as a scoop, but from the viewpoint there was no dark mouth at
+  all. Projecting the photo's drip line onto the beach (a raycast through its pixels to the
+  sand's height) showed the real lip reaches 15 to 20 m further out over the sand than the
+  wall's foot. So the face now bulges out 20 m to a lip 17 m up, and under it a cave runs 10
+  m back behind the line of the wall. The rows are shared out along the bulge so the ceiling
+  gets them.
+- **The islet**: a steep thumb whose sides bend over into a rounded crown, sheerest on the
+  north-west side it shows the viewpoint. Was a flat-topped cylinder. Three tries: a low
+  sheer foot under a dome read as a mushroom; a flat sheer wall with a crown on top read as
+  a cup; bending the wall over into the crown (steepest at the bottom) matched the outline.
+- **Surface, in the shader**: each bed its own shade, grey to creamy; partings that come and
+  go along the face (ruled lines right across a face looked like a barcode from `trailTop`);
+  dark grey and ochre weathering zones tens of metres across; near-vertical joints; runoff
+  streaks in some stretches; a dirty band along the foot of the beach walls; ochre and brown
+  staining under the overhang; a ragged waterline band whose height changes along the coast,
+  olive-brown rather than black.
+
+### The ground never had cast shadows
+
+Looking into the new cave from the viewpoint, the floor under the overhang was as bright as
+the open beach. A debug view of the shadow term said it was 0 there. Switching the sun off
+made the floor dark, so the sun was reaching it anyway. The compiled shader explained it: the
+line that multiplies the sun by the shadow was patched into `getDirectionalLightInfo(...)`,
+which only exists after three.js expands its `#include`s, and `onBeforeCompile` runs before
+that. The replace matched nothing. It had been that way since v1: the ground's only shading
+was faces turned from the sun, and the baked shadow texture only ever darkened the sea (which
+has its own shader) and the measuring labels.
+
+Fixed by expanding the light loop chunk before patching it, and every patch of the ground
+material now has to match exactly once or the page throws. Worth checking in any three.js
+project that patches shaders: a `.replace()` that misses fails silently.
+
+With shadows actually on, two more things showed up:
+
+- **Every bedded face was half in shadow.** The ledge-shadow table stores how far the
+  highest ledge above pokes through the line to the sun; for a face that is simply tangent to
+  the sun that margin is about zero, and the soft edge was centred on zero. Shifted it.
+- **Double shadows.** The table included the coarse beds, which the mesh also carries and now
+  shadows itself. The table is fine relief only.
+
+### Light under the rock
+
+The baked shadow is exact for a heightfield, and a carved face is not on the heightfield. So
+the mesh builder works out, for every strip vertex, in the face's own vertical section:
+
+- the elevation above which rock of the same face hides the sun (the shader compares the sun's
+  angle against it, and uses the baked shadow just out from the uncarved face for the rest),
+- how much of the sky it sees (cuts the sky light),
+- how much sunlit ground lies in view past the drip line (the light bounced up from the
+  sand; the old bounce looked down at the map, which under an overhang is rock all the way),
+- which way is out, which a floor's own normal cannot say (the first floor lookups went in
+  random directions).
+
+A second bounce off the rock overhead (rock albedo times the light it gets from the sand)
+turned the cave's floor from sky blue to warm grey, as in `beach-under-cliff.jpg`.
+
+### Colour, measured
+
+`--measure` on `viewpoint`. The islet's rectangle had to move (the reshaped islet puts its
+bare face a little lower), and a new one sits on the head's bare north face, each placed on
+bare rock in both the render and the photo.
+
+| Region | Render sRGB | Photo sRGB | Render against photo |
+|---|---|---|---|
+| islet sunlit face | 155 159 153 | 140 139 131 | +0.40 stops |
+| head face | 120 127 114 | 132 133 126 | -0.18 stops |
+| rock in shade (class) | 130 131 123 | 117 127 113 | +0.16 stops |
+
+The limestone target is 0.60, 0.585, 0.54 sRGB, about 0.33 reflectance (v2 suggested 0.31),
+a little warmer than before. The two bare patches straddle the photo. The class average for
+sunlit rock (+0.7) is not comparable: the photo has scrub where the render has bare face,
+which is v7's.
+
+### Speed
+
+The mesh went from 8.4 M triangles (a full 2049 grid) to about 4.2 M: 3.2 M of ground grid,
+the cells under the sea and under the faces left out, and 1 M in the face strips. The strips
+are 55 cm apart within 125 m of the beach and the trail, 85 cm on the rest of the headland,
+1.6 m elsewhere. The first version had 55 cm everywhere on the headland and a grid three
+times denser there; timing faceStep 0.55 against 0.8 in one page showed the small triangles
+were what cost (1 to 2.5 ms at `beach`, `sideFromSea`, `stairs`), so the fine strips went
+only where the camera comes close.
+
+The machine was busy the whole time (ChatGPT's renderer and the window server using a lot of
+it), and medians came out at twice the minimums. Three official `hero.mjs` runs:
+
+| Frame | Run 1 | Run 2 | Run 3 |
+|---|---|---|---|
+| overview | -16% | -11% | -6% |
+| viewpoint | -28% | -19% | -25% |
+| stairs | +4% | +6% | +16% |
+| trailTop | +5% | +13% | +10% |
+| trailLow (camera moved) | +15% | +33% | +19% |
+| beach | +18% | +3% | +16% |
+| shoreBreak | -1% | -16% | -12% |
+| sideFromSea | +20% | -2% | +6% |
+
+Run 1 was the first mesh (55 cm strips everywhere on the headland, grid three times denser);
+runs 2 and 3 are what is committed. The gallery holds run 3.
+
+`trailLow` is not comparable: v3 moved its placeholder camera onto the overhang. Timed
+with v2's camera, six alternating rounds, minimums: v2 8.7 ms, v3 9.7 ms (+11%). `trailTop`
+in the same rounds: 6.3 against 7.1 ms (+13%). Both look at the ridge and the beach, the
+area with the fine face strips and the bedding.
+
+In-page ablation (one page, configurations interleaved, medians of nine) put the cost at
+those two views in the faces and the bedding textures, each about 0.3 to 0.5 ms, within the
+noise of any single measurement.
+
+So the frames seen from far off got faster (the overview and the viewpoint by 6 to 28%, from
+the lighter mesh), and the frames close to the rock are between +3 and +16% from run to run:
+`stairs`, `trailTop` and `beach` are over the 10% budget in at least one run. The cost is
+the detail near the camera, the fine face strips and the bedding, which is the point of this
+version. Per the rules this is logged in the v9 brief rather than taken back out. A clean
+rerun on a quiet machine would settle whether it is really over.
+
+### Tools added
+
+- `cam=e,n,h,yaw,pitch[,fov]` puts the camera anywhere in the frame of a shot.
+- `clay=2` draws the triangles' own normals: the mesh itself, faceted.
+- `terrainDebug=1..5`: sun shadow, sky share, overhang horizon, lit ground share, carved
+  depth.
+- `faceStep=` sets the face strips' spacing near the headland.
+- `SKIP_WEATHER` and `SKIP_STRATA` for `--bench --ablate`.
+- Every patch of the ground material must match exactly once, or the page throws.
+
+Inspecting the faces from node was the most useful habit of this version: build the mesh
+with `buildTerrainMesh` in a scratch script, find the column nearest a map point
+(`mesh.strips`), print its rows. Every one of the mesh bugs above was found that way after a
+raycast from the offending pixel gave the map point.
+
+### Still weak
+
+- The ground cover on the faces is scrub texture in bands along the ledges, which reads as
+  painted green stripes from `sideFromSea` and `viewpoint`. In the photos those ledges carry
+  real bushes, and the flanks are green at 60 to 70 degrees. That is v7's (noted there).
+- The rock is still grey next to the warm cream of `aerial-side-from-sea.jpg`. v2 found that
+  photo's warmth is its grade and a different day; the same-day photos read neutral grey, so
+  I left it grey-cream, but the overall colour is a judgement call worth a second look.
+- Up close (`beach`) the faces are right in shape but the scanned texture is stretched over
+  large areas, and there is no rubble or fallen blocks at the foot of the walls, which the
+  photos have.
+- The white water at the rock still follows the map's coastline, not the carved foot (v4).
+- Sand under the overhang meets the floor of the face strip with a visible change of shading
+  in some views (v5).
+- Frames close to the rock (`stairs`, `trailTop`, `beach`) came out +3 to +16% against v2
+  on a busy machine (see Speed). Logged in v9.
