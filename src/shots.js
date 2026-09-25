@@ -41,8 +41,10 @@ export const SHOTS = {
   trailLow: {
     label: 'Low on the trail',
     ref: 'references/03-trail/trail-low-beach-close.jpg',
-    // Placeholder, on the mapped zigzag, looking into the overhang at the back of the beach.
-    pos: [181, 158, 73.7], yaw: 245, pitch: -45, roll: 0, fov: 60,
+    // Placeholder until v6. Framed like the photo on the overhang at the south end of the
+    // beach (v3), which puts it in the air 65 m above the sand: v1's camera on the mapped
+    // zigzag looked past the overhang. The trail version puts it back on the path.
+    pos: [115, 140, 70], yaw: 225, pitch: -50, roll: 0, fov: 60,
   },
   surfTop: {
     label: 'Surf from above',

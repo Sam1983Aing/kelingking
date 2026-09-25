@@ -28,6 +28,7 @@ varying vec3 vWorldNormal;
 // From the mesh builder: sand under an overhang, share of the sky not hidden by rock
 // overhead, how far the face is carved in (/ 32 m), and whether it stands on sand.
 varying vec4 vRock;
+varying float vHorizon;   // elevation (/ pi, from straight out) above which rock overhead hides the sky
 
 #define L_LIMESTONE 0
 #define L_BEDS 1
@@ -45,6 +46,7 @@ vec3 tNormalW = vec3(0.0, 1.0, 0.0);
 float tSandW = 0.0;   // how much of this pixel is sand, and ground cover (for the labels)
 float tVegW = 0.0;
 float tFineShadow = 1.0;   // shadow of the ledges above, on a bedded face
+float tLedgeSky = 1.0;     // share of the sky the ledges above leave
 
 // ---------------------------------------------------------------- bedding (strata.js)
 // Same formulas as strata.js, sines only, so the beds here are the beds in the mesh.
@@ -94,7 +96,17 @@ vec4 tData(vec2 g) {
 
 float groundShadow(vec3 P, vec3 N) {
   if (dot(N, uSunDirW) < -0.05) return 0.0;   // facing away, the lighting is dark anyway
-  return bakedShadow(P + N * (0.6 + 3.0 * (1.0 - abs(N.y))), 0.3);
+  float carve = vRock.z * 32.0;
+  if (carve < 0.3) return bakedShadow(P + N * (0.6 + 3.0 * (1.0 - abs(N.y))), 0.3);
+  // A carved face lies inside the heightfield the shadow was baked from, so: the rock that
+  // hangs over it (the mesh builder's horizon, in the face's own vertical plane), and the
+  // baked shadow at the face's uncarved place, for everything further off.
+  vec3 Ns = normalize(vWorldNormal);
+  vec2 o = Ns.xz / max(length(Ns.xz), 1e-3);
+  float eSun = atan(uSunDirW.y, dot(uSunDirW.xz, o)) / PI;
+  float over = smoothstep(vHorizon + 0.015, vHorizon - 0.015, eSun);
+  vec3 Q = P + vec3(o.x, 0.0, o.y) * carve;
+  return over * bakedShadow(Q + vec3(o.x, 0.0, o.y) * 3.0, 0.3);
 }
 
 uniform vec3 uBounceAlb[3];   // what the ground below sends back: sea, sand, land (albedo)
@@ -112,16 +124,24 @@ vec3 groundBounce(vec3 P, vec3 N) {
   // drip line the point can see (vRock.w); look there for what it is and whether the sun
   // reaches it.
   if (vRock.w < 0.99) {
-    vec2 hz = vec2(N.x, -N.z);
+    // Which way is out: the surface's own direction, not the bumped normal (whose wobble
+    // would flick the lookup between sand and sea). Two places, near and far, averaged.
+    vec3 Ns = normalize(vWorldNormal);
+    vec2 hz = vec2(Ns.x, -Ns.z);
     float lh = length(hz);
-    vec2 q = vec2(P.x, -P.z) + (lh > 1e-3 ? hz / lh : vec2(0.0)) * (vRock.z * 32.0 + 4.0);
-    vec4 D = tData(q);
-    float sea = smoothstep(-0.5, 1.0, D.g);
-    float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
-    vec3 alb = mix(mix(uBounceAlb[2], uBounceAlb[1], sandW), uBounceAlb[0], sea);
-    float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
-    vec3 E = uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp;
-    return alb * E * vRock.w;
+    vec2 dir = lh > 1e-3 ? hz / lh : vec2(0.0);
+    float reach = clamp(P.y * 0.8 + 2.0, 3.0, 60.0);
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < 2; i++) {
+      vec2 q = vec2(P.x, -P.z) + dir * (vRock.z * 32.0 + reach * (i == 0 ? 0.5 : 1.3));
+      vec4 D = tData(q);
+      float sea = smoothstep(-0.5, 1.0, D.g);
+      float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
+      vec3 alb = mix(mix(uBounceAlb[2], uBounceAlb[1], sandW), uBounceAlb[0], sea);
+      float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
+      sum += alb * (uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp);
+    }
+    return 0.5 * sum * vRock.w;
   }
   // Only steep faces and overhangs, and only near the camera. A gentle slope sees little of
   // the ground below, and from a kilometre off the light is too subtle to see; the ground
@@ -193,25 +213,33 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   vec2 g = vec2(P.x, -P.z);
   float h = P.y;
   float up = N.y;
-  vec4 D = tData(g);
+  // Under an overhang the map is rock all the way up; what the face stands on (sand or sea)
+  // is out past the drip line, so read the map there.
+  float carveM = vRock.z * 32.0;                              // metres carved in
+  vec2 nh0 = vec2(N.x, -N.z);
+  vec4 D = tData(carveM > 0.3 && length(nh0) > 0.2 ? g + normalize(nh0) * (carveM + 2.0) : g);
   float n1 = tfbm(g * 0.07, 14.0, fp);
   float n2 = tfbm(g * 0.021 + 9.1, 48.0, fp);
 
   // Triplanar frame.
   triP = P; triDx = dFdx(P); triDy = dFdy(P);
+  // Horizontal position along a face, for things that run along it.
+  float wx = abs(N.x), wz = abs(N.z);
+  float along = (wx * P.z - wz * P.x) / max(wx + wz, 1e-3);
   // Where this point sits in the stack of beds, and how that changes across the pixel (for
-  // explicit texture gradients: the reads below sit inside branches).
-  float bc = h + strataWarp(g);
+  // explicit texture gradients: the reads below sit inside branches). The beds wander up
+  // and down a little along the face, which the mesh (whose beds are a metre across) never
+  // notices.
+  float bc = h + strataWarp(g) + 0.35 * (tn(vec2(along * 0.07, h * 0.05)) - 0.5);
   float su = (bc - STRATA_Z0) / STRATA_SPAN;
   vec2 sdx = vec2(dFdx(su), 0.0), sdy = vec2(dFdy(su), 0.0);
   float fpz = max(abs(sdx.x), abs(sdy.x)) * STRATA_SPAN;   // pixel footprint up the stack (m)
-  float wallF = 1.0 - smoothstep(0.35, 0.72, up);            // how much this is a face
+  float wallF = 1.0 - smoothstep(0.35, 0.72, abs(up));       // how much this is a face (not a floor or a ceiling)
   vec4 SA = vec4(0.0, 0.0, 1.0, 0.5), SB = vec4(0.0, 0.5, 0.0, 0.0);
   if (wallF > 0.01) {
     SA = textureGrad(uStrataA, vec2(su, 0.5), sdx, sdy);
     SB = textureGrad(uStrataB, vec2(su, 0.5), sdx, sdy);
   }
-  float carveM = vRock.z * 32.0;                              // metres carved in
   vec3 w = pow(abs(N), vec3(4.0));
   w /= w.x + w.y + w.z;
   w = max(w - 0.03, 0.0);
@@ -219,14 +247,15 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   // ---------------------------------------------------------------- where is what
   float sandZone = smoothstep(0.4, 0.75, D.b);
+  // Under an overhang, dry ground out past the drip line means the rock stands on a beach,
+  // whatever the zones say.
+  if (carveM > 0.3) sandZone = max(sandZone, smoothstep(1.0, 2.0, D.r));
   float sand = sandZone * smoothstep(0.55, 0.8, up) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
   sand = max(sand, smoothstep(0.2, -0.4, h) * sandZone);
   sand = max(sand, vRock.x);   // the floor running in under an overhang
 
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
   float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
-  float wx = abs(N.x), wz = abs(N.z);
-  float along = (wx * P.z - wz * P.x) / max(wx + wz, 1e-3);
   float clump = tfbm(vec2(along * 0.06, h * 0.32) + g * 0.02, 6.0, fp);
   // Clumps along the ledges, which are the tops of the hard beds.
   float ledges = smoothstep(0.6, 0.7, clump + (n1 - 0.5) * 0.12 + (SB.g - 0.5) * 0.25) * smoothstep(10.0, 40.0, h) * 0.95;
@@ -272,11 +301,14 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
     // The bedding: each bed its own shade, grey or creamy, the seams between them darker
     // and cut back, and the fine relief of the beds tilting the surface up and down.
-    float m = strataStrength(g) * wallF;
+    // How strongly the beds stand out: by stretches of the island, and coming and going
+    // along a face over tens of metres, so the ledges are not ruled lines.
+    float m = strataStrength(g) * wallF * (0.35 + 1.1 * tn(vec2(along * 0.045 + 3.0, bc * 0.09)));
+    tLedgeSky = mix(1.0, SB.a, min(m * 1.2, 1.0));
     a.color *= mix(1.0, SA.b, 0.9 * wallF);
     a.color *= mix(vec3(1.0), mix(vec3(0.95, 0.985, 1.03), vec3(1.05, 1.0, 0.9), SA.a), 0.85 * wallF);
     a.color *= 1.0 - 0.28 * SB.b * m;
-    a.dn += vec3(0.0, -clamp(SA.g, -3.0, 3.0) * m * 0.8, 0.0);
+    a.dn += vec3(0.0, -clamp(SA.g, -1.5, 1.5) * m * 0.5, 0.0);
     // The ledges above shade the beds below them. How steeply the sun comes down past a
     // ledge depends on how the face is turned to it; the table (strata.js) holds, for each
     // steepness, how far the highest ledge within 6 m above cuts into the sunlight.
@@ -293,17 +325,21 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       }
     }
 
-    // Runoff streaks down the faces, greyer and darker.
-    float streak = tfbm(vec2(along * 0.25, h * 0.018), 6.0, fp);
-    a.color = mix(a.color, a.color * vec3(0.7, 0.71, 0.72), smoothstep(0.5, 0.85, streak) * 0.55);
+    // Runoff streaks down the faces: narrow dark grey-brown stains below the ledges, in
+    // some stretches of face and not others.
+    float streak = tfbm(vec2(along * 0.55, h * 0.02), 3.0, fp);
+    float streaky = smoothstep(0.45, 0.7, tn(vec2(along * 0.03 + 7.0, h * 0.01)));
+    a.color = mix(a.color, a.color * vec3(0.62, 0.6, 0.57), smoothstep(0.55, 0.8, streak) * 0.6 * streaky * wallF);
     // Under the overhangs on the beach the rock is stained ochre and brown.
-    float under = smoothstep(0.8, 5.0, carveM) * vRock.w * (1.0 - smoothstep(18.0, 30.0, h));
+    float under = smoothstep(0.8, 5.0, carveM) * sandZone * (1.0 - smoothstep(18.0, 30.0, h));
     a.color = mix(a.color, a.color * vec3(1.02, 0.78, 0.52), under * 0.75);
     // The wave-cut notch and the dark wet band at the waterline, from the wet rock scan.
     if (notch > 0.0) {
       Surf wr = triplanar(L_WET, uTile[L_WET], vec2(0.0));
-      mixSurf(a, wr, max(notch * 0.6, algae));
-      a.color *= 1.0 - 0.4 * algae;
+      // The notch is dark because it is a recess (the mesh carves it); its rock is only a
+      // little stained. The band the waves wet is dark olive-brown.
+      mixSurf(a, wr, max(notch * 0.35, algae));
+      a.color *= mix(vec3(1.0), vec3(0.8, 0.72, 0.52), algae);
       a.rough = mix(a.rough, 0.35, algae);
     }
     s = a;

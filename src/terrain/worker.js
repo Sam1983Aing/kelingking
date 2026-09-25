@@ -15,8 +15,8 @@ self.onmessage = (e) => {
   const plants = scatterPlants(hf, layout, [0, 1, 2], mesh.surfaceShift);
   self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir,
     plants: { data: plants.data, count: plants.count, ms: plants.ms },
-    mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer]);
+    mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:

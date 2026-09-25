@@ -34,7 +34,7 @@ export function buildTerrainMesh(hf, layout, M) {
   const inFocus = (x, y) => smooth(fc.x[0] - fc.soft, fc.x[0], x) * (1 - smooth(fc.x[1], fc.x[1] + fc.soft, x))
     * smooth(fc.y[0] - fc.soft, fc.y[0], y) * (1 - smooth(fc.y[1], fc.y[1] + fc.soft, y));
   const across = (x, y) => lerp(cfg.faceStep[1], cfg.faceStep[0], inFocus(x, y)) / q;
-  const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], strips: [], hash: new Map() };
+  const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], hor: [], strips: [], hash: new Map() };
   let nCols = 0;
   for (const chain of chains) {
     const pts = resampleChain(chain, (x, y) => across(x, y) * cfg.faceStepAlong);
@@ -80,6 +80,21 @@ export function buildTerrainMesh(hf, layout, M) {
     // Carving fades out over the last few metres of a strip, where the plain ground takes over.
     let run = 0;
     const along = cols.map((c, k) => (run += k ? Math.hypot(c.x - cols[k - 1].x, c.y - cols[k - 1].y) : 0));
+    // The limit on carving: the lowest within 4 m, averaged over 4 m, so it cannot leave a
+    // lone fin.
+    const lim = cols.map((c) => c.P.feat.maxIn);
+    const lo = lim.map((_, k) => {
+      let m = lim[k];
+      for (let j = k - 1; j >= 0 && along[k] - along[j] <= 4; j--) m = Math.min(m, lim[j]);
+      for (let j = k + 1; j < n && along[j] - along[k] <= 4; j++) m = Math.min(m, lim[j]);
+      return Math.min(m, 1e6);
+    });
+    for (let k = 0; k < n; k++) {
+      let acc = 0, cnt = 0;
+      for (let j = k; j >= 0 && along[k] - along[j] <= 4; j--) { acc += lo[j]; cnt++; }
+      for (let j = k + 1; j < n && along[j] - along[k] <= 4; j++) { acc += lo[j]; cnt++; }
+      cols[k].P.feat = { ...cols[k].P.feat, maxIn: acc / cnt };
+    }
     const total = along[n - 1];
     for (let k = 0; k < n; k++) {
       const col = cols[k], P = col.P;
@@ -111,6 +126,7 @@ export function buildTerrainMesh(hf, layout, M) {
         const sand = F.onSand * (1 - smooth(F.hFoot + 0.4, F.hFoot + 1.6, h)) * smooth(0.5, 2, c);
         bands.rock.push(sand, 1, Math.max(c, 0));
         bands.lit.push(1);
+        bands.hor.push(1);
       }
       col.cs = cs;
       nCols++;
@@ -186,6 +202,9 @@ export function buildTerrainMesh(hf, layout, M) {
         // open wall comes out at 0.5 and an open ceiling at 1, as for open ground.
         const beta = Math.atan2(Math.max(h0 - col.P.feat.hFoot, 0.3), above[r + 1] - or0);
         bands.lit[v] = 0.5 * arc(-beta, 0);
+        // And the angle itself, for the sun: rock overhead hides everything from `lowest`
+        // (measured up from straight out) over to straight in.
+        bands.hor[v] = lowest / Math.PI;
       }
     }
   }
@@ -355,7 +374,7 @@ export function buildTerrainMesh(hf, layout, M) {
     return { c: carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade, gx, gy };
   }
 
-  const gridIdx = gridIndex(M, pos, cfg.cull);
+  const gridIdx = gridIndex(M, pos, cfg.cull, gridW);
   const gridNrm = gridNormals(pos, M);
 
   // Both into one mesh: the grid first, the strips after it.
@@ -368,6 +387,9 @@ export function buildTerrainMesh(hf, layout, M) {
   // the face is carved in (m / 32), and the sunlit ground seen from under an overhang (1 =
   // nothing overhead, use the open-ground bounce). The plain ground: none, all, none, 1.
   const rock = new Uint8Array((positions.length / 3) * 4);
+  // And the elevation above which rock overhead hides the sky (/ pi; 1 = nothing overhead).
+  const horizon = new Uint8Array(positions.length / 3).fill(255);
+  for (let v = 0; v < nb; v++) horizon[M * M + v] = Math.round(255 * Math.min(Math.max(bands.hor[v], 0), 1));
   for (let v = 0; v < M * M; v++) { rock[v * 4 + 1] = 255; rock[v * 4 + 3] = 255; }
   for (let v = 0; v < nb; v++) {
     const o = (M * M + v) * 4;
@@ -385,7 +407,7 @@ export function buildTerrainMesh(hf, layout, M) {
   }
   const index = new Uint32Array(gridIdx.length + bandIdx.length);
   index.set(gridIdx); index.set(bandIdx, gridIdx.length);
-  return { positions, normals, index, rock, M, moved: nb, columns: nCols, pushed, gridW, dbg, hash: bands.hash, surfaceShift, strips: bands.strips, bandPos: bands.pos,
+  return { positions, normals, index, rock, horizon, M, moved: nb, columns: nCols, pushed, gridW, dbg, hash: bands.hash, surfaceShift, strips: bands.strips, bandPos: bands.pos,
     gridTris: gridIdx.length / 3, faceTris: bandIdx.length / 3, ms: Math.round(performance.now() - t0) };
 }
 
@@ -529,12 +551,14 @@ export function makeCarver(hf, layout, sample) {
     // Average slope across the middle of the face.
     const q = Math.max(0.5 * face, 3);
     const wall = smooth(1.1, 2.2, (at(q) - at(-q)) / (2 * q)) * smooth(6, 14, hMax - Math.max(hMin, 0));
-    // How much the lines converge going inland (a headland seen from above): the carving
-    // must stay well short of where they meet. The Laplacian of a distance field is the
-    // curvature of its contours.
-    const e = 3;
+    // The carving must stay well short of the middle of the rock, or a thin ridge (the jaw,
+    // the neck) could be cut through from both sides: PSIMAX is how far that middle is.
+    // And round a headland the lines across the faces converge going in, so the carving
+    // must stop well short of where they meet (the Laplacian of a distance field is the
+    // curvature of its contours; noisy, so smoothed along the face in buildStrip).
+    const e = 6;
     const lap = (sample(f.PSI, Fx + e, Fy) + sample(f.PSI, Fx - e, Fy) + sample(f.PSI, Fx, Fy + e) + sample(f.PSI, Fx, Fy - e) - 4 * sample(f.PSI, Fx, Fy)) / (e * e);
-    const maxIn = lap < 0 ? 0.45 / -lap : 1e9;
+    const maxIn = Math.min(0.7 * Math.max(sample(f.PSIMAX, Fx, Fy), 4), lap < 0 ? 0.4 / -lap : 1e9);
     const level = layout.beach.top + 2;
     let k = h.findIndex((v) => v >= level);
     if (k < 1) k = 1;
@@ -655,8 +679,10 @@ function makeSampler(f) {
   };
 }
 
-// Two triangles per grid cell, leaving out cells entirely below `cull` (under the opaque sea).
-function gridIndex(M, pos, cull) {
+// Two triangles per grid cell, leaving out cells entirely below `cull` (under the opaque sea)
+// and cells a face strip fully covers (all four corners pushed back with full weight): there
+// the strip is the surface, and the grid would only poke through it here and there.
+function gridIndex(M, pos, cull, cover) {
   const idx = new Uint32Array((M - 1) * (M - 1) * 6);
   let n = 0;
   const hy = (v) => pos[v * 3 + 1];
@@ -664,6 +690,7 @@ function gridIndex(M, pos, cull) {
     for (let i = 0; i < M - 1; i++) {
       const a = j * M + i, b = a + 1, c = a + M, d = c + 1;
       if (Math.max(hy(a), hy(b), hy(c), hy(d)) < cull) continue;
+      if (Math.min(cover[a], cover[b], cover[c], cover[d]) > 0.98) continue;
       idx[n++] = a; idx[n++] = b; idx[n++] = c;
       idx[n++] = b; idx[n++] = d; idx[n++] = c;
     }

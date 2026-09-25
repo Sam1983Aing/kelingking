@@ -10,7 +10,8 @@
 // Rows of the texture the shader gets (RGBA, one texel per 1/16 m of bedCoord):
 //   0: R fine relief (m, outward), G its slope per metre up, B bed brightness, A bed warmth
 //   1: R coarse relief (the part the mesh carries), G hardness, B parting (0 inside a bed,
-//      1 on the seam between two), A package id / 64
+//      1 on the seam between two), A how much of the sky above is not hidden by the ledges
+//      over it (1 on a plain wall, down to about 0.2 deep under a lip)
 //   2..17: shadow from the ledges above, one row per sun steepness (see shadowRows below)
 
 export const STRATA = { z0: -24, span: 256, n: 4096, seed: 5 };
@@ -39,20 +40,25 @@ export function buildStrata() {
   const rand = mulberry32(seed);
 
   // Beds in packages of 3 to 14 m, each package of one character: massive hard limestone
-  // that stands out in thick beds, or thin-bedded softer rock that weathers back.
+  // that stands out in thick beds, or thin-bedded softer rock that weathers back. Between
+  // two beds a parting of softer, marly rock a few centimetres to a few decimetres thick,
+  // which the weather cuts back into a dark slot under the bed above: from a distance those
+  // slots are the lines you see across the faces.
   const beds = [];
   let z = z0, pkg = 0;
   while (z < z0 + span) {
     const top = z + 3 + rand() * 11;
     const hard = rand();
-    const thin = hard < 0.42;
+    const thin = hard < 0.4;
     const tone = 0.88 + rand() * 0.22;
     const warm = rand();
     while (z < top) {
-      const th = thin ? 0.12 + rand() * 0.45 : 0.45 + rand() * rand() * 3.2;
-      beds.push({ z0: z, z1: z + th, pkg, pkgHard: hard, hard: clamp01(hard + (rand() - 0.5) * 0.55),
+      const th = thin ? 0.2 + rand() * 0.5 : 0.6 + rand() * rand() * 2.6;
+      const parting = (thin ? 0.05 : 0.08) + rand() * rand() * 0.28;
+      beds.push({ z0: z, z1: z + th, pz: parting, pkg, pkgHard: hard, hard: clamp01(hard + (rand() - 0.5) * 0.5),
+        cut: (0.15 + 0.45 * rand()) * (1.2 - 0.6 * hard),
         tone: tone * (0.93 + rand() * 0.14), warm: clamp01(warm + (rand() - 0.5) * 0.3) });
-      z += th;
+      z += th + parting;
     }
     pkg++;
   }
@@ -64,18 +70,28 @@ export function buildStrata() {
   let b = 0;
   for (let k = 0; k < n; k++) {
     const zz = z0 + (k + 0.5) * dz;
-    while (b < beds.length - 1 && beds[b].z1 <= zz) b++;
+    while (b < beds.length - 1 && beds[b].z1 + beds[b].pz <= zz) b++;
     const bed = beds[b];
-    const edge = Math.min(zz - bed.z0, bed.z1 - zz);
     const th = bed.z1 - bed.z0;
-    const round = Math.min(0.14, th * 0.35);
-    // Each bed stands out by its hardness; its edges are rounded, and the seam between two
-    // beds is cut back.
-    const body = (bed.hard - 0.5) * 0.34 * smooth(0, round, edge);
-    const seam = 1 - smooth(0, round * 0.8 + 0.03, edge);
-    fine[k] = body - 0.09 * seam;
+    // Inside the bed: a rounded nose, fullest a little above the middle. In the parting
+    // above it: cut back, most in the middle of the parting, with a rounded lip on the bed
+    // above and the bed below.
+    let r, seam;
+    if (zz < bed.z1) {
+      const q = (zz - bed.z0) / th;
+      const nose = Math.pow(Math.max(Math.sin(Math.PI * Math.pow(q, 0.8)), 0), 0.35);
+      r = ((bed.hard - 0.5) * 0.2 + 0.05) * nose;
+      seam = 0;
+    } else {
+      const q = (zz - bed.z1) / bed.pz;
+      const next = beds[Math.min(b + 1, beds.length - 1)];
+      const slot = Math.pow(Math.sin(Math.PI * q), 0.6);
+      r = -Math.max(bed.cut, next.cut * 0.7) * slot;
+      seam = slot;
+    }
+    fine[k] = r;
     part[k] = seam;
-    tone[k] = bed.tone;
+    tone[k] = bed.tone * (1 - 0.3 * seam);
     warm[k] = bed.warm;
     hard[k] = bed.hard;
     pkgId[k] = bed.pkg % 64;
@@ -106,9 +122,23 @@ export function buildStrata() {
     }
   }
 
+  // How much of the sky above each point sees past the ledges over it, in the vertical plane
+  // (the beds run on sideways, so that plane is what matters): the lowest elevation at which
+  // a ledge within 3 m above blocks it, as the cosine-weighted share of the upper sky.
+  const occl = new Float32Array(n);
+  const reachUp = Math.round(3 / dz);
+  for (let k = 0; k < n; k++) {
+    let e0 = Math.PI / 2;
+    for (let s2 = 1; s2 <= reachUp && k + s2 < n; s2++) {
+      const d = total[k + s2] - total[k];
+      if (d > 0.005) e0 = Math.min(e0, Math.atan2(s2 * dz, d));
+    }
+    occl[k] = Math.sin(e0);
+  }
+
   const slope = new Float32Array(n);
   for (let k = 0; k < n; k++) slope[k] = (fine[Math.min(n - 1, k + 1)] - fine[Math.max(0, k - 1)]) / (2 * dz);
-  return { beds, fine, coarse, slope, tone, warm, hard, part, pkgId, shadow, dz };
+  return { beds, fine, coarse, slope, tone, warm, hard, part, pkgId, occl, shadow, dz };
 }
 
 // Coarse relief at a bedCoord, linearly interpolated (for the mesh builder).
@@ -126,7 +156,7 @@ export function strataTexels(S) {
   const px = new Float32Array(n * rows * 4);
   for (let k = 0; k < n; k++) {
     px.set([S.fine[k], S.slope[k], S.tone[k], S.warm[k]], k * 4);
-    px.set([S.coarse[k], S.hard[k], S.part[k], S.pkgId[k] / 64], (n + k) * 4);
+    px.set([S.coarse[k], S.hard[k], S.part[k], S.occl[k]], (n + k) * 4);
     for (let r = 0; r < SHADOW_ROWS; r++) px[((2 + r) * n + k) * 4] = S.shadow[r * n + k];
   }
   return { px, width: n, height: rows };

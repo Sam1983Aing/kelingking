@@ -53,9 +53,12 @@ export function defaultLayout() {
     // Near a cliff top the plateau rounds down by shoulder (fraction) over shoulderW metres.
     plateau: { base: 148, sigma: 190, noise: 6, shoulder: 0.84, shoulderW: 55 },
 
+    // near: roughly the middle. sheer: how much of the height is a sheer face, varying by
+    // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
+    // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 66 }, // Batu Satu, the rock off the head
-      { near: [706, -629], h: 24 },
+      { near: [80, -100], h: 68, sheer: 0.28, sheerVar: 0.25, sheerAz: 135, R: 29 }, // Batu Satu, the rock off the head
+      { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 
     // Cliff face and seabed parameters, blended between control points.
@@ -107,8 +110,8 @@ export function defaultLayout() {
     // down), cave = a further cut at the foot, caveH metres high. Rock in the sea: a deeper
     // notch (notch metres deep, notchTop high).
     overhangs: [
-      { name: 'beach south end', at: [54, 63], r: 34, recess: 22, cave: 10, caveH: 8, scoop: 1.8 },
-      { name: 'jaw arch', at: [6, 80], r: 24, notch: 9, notchTop: 13 },
+      { name: 'beach south end', at: [54, 63], r: 34, recess: 30, cave: 0, caveH: 8, scoop: 1.6 },
+      { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
     ],
 
     // Plants (src/veg/scatter.js). Spacing and scale blend from near to far with distance

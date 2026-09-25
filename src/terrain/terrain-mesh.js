@@ -18,7 +18,7 @@ const surfaceAlbedo = (id) => new THREE.Vector3(...SURFACES.find((s) => s.id ===
 // their mip levels made here (averaged along the stack only, so distant faces get the
 // average of the beds instead of flicker):
 //   uStrataA  fine relief (m), its slope, bed brightness, bed warmth
-//   uStrataB  coarse relief, hardness, seam, package
+//   uStrataB  coarse relief, hardness, seam, sky past the ledges above
 //   uStrataC  shadow of the ledges above, one row per sun steepness (strata.js)
 function strataTextures() {
   const S = buildStrata();
@@ -55,7 +55,7 @@ function strataTextures() {
     return tex;
   };
   const A = make(1, 4, (d) => { for (let k = 0; k < n; k++) d.set([S.fine[k], S.slope[k], S.tone[k], S.warm[k]], k * 4); }, THREE.RGBAFormat);
-  const B = make(1, 4, (d) => { for (let k = 0; k < n; k++) d.set([S.coarse[k], S.hard[k], S.part[k], S.pkgId[k] / 64], k * 4); }, THREE.RGBAFormat);
+  const B = make(1, 4, (d) => { for (let k = 0; k < n; k++) d.set([S.coarse[k], S.hard[k], S.part[k], S.occl[k]], k * 4); }, THREE.RGBAFormat);
   const C = make(SHADOW_ROWS, 1, (d) => d.set(S.shadow), THREE.RedFormat);
   return { uStrataA: { value: A }, uStrataB: { value: B }, uStrataC: { value: C } };
 }
@@ -89,7 +89,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, atmosphereUniforms, gradeUniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute vec4 aRock;\nvarying vec4 vRock;\n' + AERIAL_VERT_PACKED)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute vec4 aRock;\nvarying vec4 vRock;\nattribute float aHorizon;\nvarying float vHorizon;\n' + AERIAL_VERT_PACKED)
       // The haze per vertex. The mesh covers the whole island, so vertices well outside the
       // view skip it (the ground's triangles are small, so none spans the margin; and near
       // the camera, where one could, the haze is nothing anyway).
@@ -97,7 +97,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
         vAp = vec4(0.0, 0.0, 0.0, 1.0);
         if (gl_Position.w > 0.0 && all(lessThan(abs(gl_Position.xy), vec2(1.3 * gl_Position.w)))) aerialVertex(vWorldPos);`)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvRock = aRock;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvRock = aRock;\nvHorizon = aHorizon;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + SKY_PARS + AERIAL_FRAG_PACKED + CLOUD_SHADOW_GLSL + TERRAIN_PARS)
       .replace('#include <color_fragment>', TERRAIN_COLOR)
@@ -108,7 +108,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
       .replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;')
       // The sky light is cut by rock hanging overhead (the mesh builder's sky share, vRock.y);
       // the light bounced up from the ground below comes in under it.
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO * vRock.y;\n' + TERRAIN_BOUNCE + '\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO * vRock.y * tLedgeSky;\n' + TERRAIN_BOUNCE + '\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
       // The haze between the camera and the ground, in linear light before the tone curve.
       .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vAp.a + vAp.rgb;\n#include <tonemapping_fragment>')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + TERRAIN_LABEL);
@@ -124,11 +124,12 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
   mesh.add(prepass);
 
   function update(hf) {
-    const { positions, normals, index, rock } = hf.mesh;
+    const { positions, normals, index, rock, horizon } = hf.mesh;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
     g.setAttribute('aRock', new THREE.BufferAttribute(rock, 4, true));
+    g.setAttribute('aHorizon', new THREE.BufferAttribute(horizon, 1, true));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     g.userData.gridTris = hf.mesh.gridTris;   // the ground grid's triangles come first, then the faces
     mesh.geometry.dispose();
