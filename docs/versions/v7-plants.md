@@ -68,3 +68,15 @@ of `src/terrain/terrain-shader.js`, the `plants` settings in `src/terrain/layout
 - The `plants, shade` region of `--measure` is not comparable: the photo has scrub, not
   shaded trees, at those pixels.
 
+**From v3 (rock).**
+
+- Plants follow the carved faces: `scatterPlants` gets a `surfaceShift` from the mesh builder
+  and moves each plant in or out with the face; nothing grows where the face is cut in more
+  than 2.5 m (under the overhang).
+- The ground cover on the faces is still the scrub texture in bands along the ledges. From
+  `sideFromSea` and `viewpoint` those bands read as painted green stripes. In the photos the
+  ledges carry clumps of real bushes, and the islet's east side and the head's flanks are
+  green at 60 to 70 degrees, steeper than the cover rule allows (bare above about 72
+  degrees, `smoothstep(0.3, 0.46, up)`).
+- The ledges are the tops of the hard beds now (`uStrataB.g`, hardness, in the shader), so
+  plants on ledges can use the same table.

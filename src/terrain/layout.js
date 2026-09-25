@@ -53,9 +53,12 @@ export function defaultLayout() {
     // Near a cliff top the plateau rounds down by shoulder (fraction) over shoulderW metres.
     plateau: { base: 148, sigma: 190, noise: 6, shoulder: 0.84, shoulderW: 55 },
 
+    // near: roughly the middle. sheer: how much of the height is a sheer face, varying by
+    // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
+    // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 66 }, // Batu Satu, the rock off the head
-      { near: [706, -629], h: 24 },
+      { near: [80, -100], h: 68, sheer: 0.62, sheerVar: 0.12, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
+      { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 
     // Cliff face and seabed parameters, blended between control points.
@@ -69,11 +72,15 @@ export function defaultLayout() {
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
       { name: 'beach south crescent', at: [70, 95], r: 30, sand: 1 },
+      { name: 'beach south end', at: [60, 66], r: 20, sand: 1 },
       { name: 'emboo beach', at: [390, 205], r: 45, sand: 1 },
       { name: 'neck root south-east', at: [195, 92], r: 30, sand: 1 },
       { name: 'trail slope', at: [165, 185], r: 45, face: 62, pf: 1.5 },
       { name: 'beach back north', at: [150, 290], r: 45, face: 28, pf: 1.2 },
       { name: 'neck wall', at: [110, 85], r: 38, face: 9, pf: 0.7 },
+      // The wall at the south end of the beach drops sheer from its rim; the mesh builder
+      // then cuts it back underneath into the overhang (overhangs, below).
+      { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
       { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
@@ -84,12 +91,30 @@ export function defaultLayout() {
 
     beach: { top: 4.6, spread: 24, shift: 8 },
 
-    // Mesh: near each cliff, vertices are redistributed along the slope over a window from
-    // `below` metres out from the foot to `above` metres back from the top, evenly by length
-    // over the ground (weight scales how much the vertical counts). See mesh-builder.js.
-    mesh: { samples: 48, below: 12, above: 45, weight: 1 },
+    // Mesh (mesh-builder.js). The ground is a grid whose rows and columns are `density`
+    // times closer inside the focus ranges (metres east and north: the headland, the islet
+    // and the beach). The faces are strips of their own, from `below` metres out from the
+    // middle of the face to `above` metres in from it, with vertices faceStep metres apart
+    // up the face (in the focus, and outside it), detail.step within detail.r of detail.at
+    // (the beach and the trail, where the camera comes close), and faceStepAlong times that
+    // along it (weight scales how much the vertical counts in the spacing). Anything
+    // entirely below `cull` metres is left out (the sea is opaque).
+    mesh: { below: 16, above: 34, weight: 1, cull: -4, faceStep: [0.85, 1.6], faceStepAlong: 1,
+      detail: { at: [110, 155], r: 125, step: 0.55 },
+      focus: { x: [-235, 330], y: [-175, 345], density: 1.6, soft: 60 } },
     // The wave-cut notch at the foot of the rock: how deep, and how high it reaches.
     notch: { depth: 2.6, top: 5 },
+    // Carving the faces: buttresses (metres in and out), the big beds (strata.js, as a
+    // fraction of their table relief), and the low undercut all along the back of the beach.
+    faces: { buttress: 2.4, beds: 1, undercut: { depth: 3, height: 6 } },
+    // Overhangs. Rock standing on sand (mesh-builder.js, overhang()): the face bulges out
+    // over the sand by `bulge` metres at a lip lipH metres up, and under the lip a cave runs
+    // back `cave` metres behind the line of the wall, caveH metres high at the back. Rock in
+    // the sea: a deeper notch (notch metres deep, notchTop high).
+    overhangs: [
+      { name: 'beach south end', at: [54, 63], r: 34, bulge: 20, lipH: 17, cave: 10, caveH: 5 },
+      { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
+    ],
 
     // Plants (src/veg/scatter.js). Spacing and scale blend from near to far with distance
     // from focus. Scale multiplies the scanned tree (3.4 to 5 m tall), so 0.35 is a bush.

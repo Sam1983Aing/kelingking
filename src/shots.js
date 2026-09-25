@@ -13,7 +13,10 @@ export const SHOTS = {
       'horizon sky': [0.52, 0.042, 0.73, 0.059],
       'far sea': [0.1, 0.076, 0.36, 0.097],
       'mid sea': [0.1, 0.17, 0.31, 0.24],
-      'islet sunlit face': [0.3, 0.36, 0.33, 0.41],
+      // v3 reshaped the islet: its bare north-west face sits a little lower in the render.
+      'islet sunlit face': { photo: [0.3, 0.36, 0.33, 0.41], render: [0.29, 0.4, 0.33, 0.45] },
+      // The head's sunlit north face above the beach (the photo's is stained ochre in places).
+      'head face': { photo: [0.595, 0.3, 0.64, 0.36], render: [0.64, 0.29, 0.685, 0.35] },
       'sand': { photo: [0.515, 0.64, 0.555, 0.75], render: [0.565, 0.7, 0.61, 0.79] },
     },
   },
@@ -41,8 +44,10 @@ export const SHOTS = {
   trailLow: {
     label: 'Low on the trail',
     ref: 'references/03-trail/trail-low-beach-close.jpg',
-    // Placeholder, on the mapped zigzag, looking into the overhang at the back of the beach.
-    pos: [181, 158, 73.7], yaw: 245, pitch: -45, roll: 0, fov: 60,
+    // Placeholder until v6. Framed like the photo on the overhang at the south end of the
+    // beach (v3), which puts it in the air 65 m above the sand: v1's camera on the mapped
+    // zigzag looked past the overhang. The trail version puts it back on the path.
+    pos: [115, 140, 70], yaw: 225, pitch: -50, roll: 0, fov: 60,
   },
   surfTop: {
     label: 'Surf from above',

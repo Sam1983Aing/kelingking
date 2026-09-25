@@ -39,6 +39,11 @@ export function generateHeightfield(layout, N = 2048) {
   // Distances to a rasterised outline carry the pixel staircase with them. A light blur
   // takes it out, which matters where a sharp wave front or the swash edge follows them.
   const DC = blur(signedDistance(land, N, cell).sd, N, 2);
+  // The same, blurred over about 5 m, for the rock faces: the mapped coast has sharp
+  // corners, and a face dropped straight from a sharp corner is a sharp vertical edge (the
+  // jaw's tip looked extruded). Blurring a distance field rounds its corners. Where the face
+  // steps back from the water that leaves a little shelf at sea level, as real ones have.
+  const DCR = blur(Float32Array.from(DC), N, Math.max(2, Math.round(6 / cell)));
   const cliff = signedDistance(high, N, cell);
   const DK = blur(cliff.sd, N, 2);
   const ISLE = new Float32Array(N * N);
@@ -110,7 +115,7 @@ export function generateHeightfield(layout, N = 2048) {
   for (let k = 0; k < EDGE.length; k++) EDGE[k] = DK[k] < 0 ? TOP[cliff.nearestIn[k]] || TOP[k] : TOP[k];
   blur(EDGE, N, 3);
 
-  const fields = { N, cell, x0, y0, DC, DK, TOP, EDGE, ISLE, ...F };
+  const fields = { N, cell, x0, y0, DC, DCR, DK, TOP, EDGE, ISLE, ...F };
   const heightAt = makeHeightAt(fields, layout, noise);
 
   const H = new Float32Array(N * N);
@@ -122,6 +127,23 @@ export function generateHeightfield(layout, N = 2048) {
       SHORE[k] = DC[k] + beach.shift * F.sand[k];
     }
   }
+
+  // The face field: signed distance to the middle of every cliff face and steep slope
+  // (where the ground is at half the height of the top it falls from), positive inland.
+  // One field for rock and beach walls alike, so the mesh builder can cross every face at
+  // right angles without switching between the coast and the cliff-top line.
+  const mid = new Uint8Array(N * N);
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const k = j * N + i;
+      const ref = isle[k] ? nearestIslet(islets, X(i), Y(j)).h : TOP[k];
+      mid[k] = H[k] > 0.5 * Math.max(ref, 16) ? 1 : 0;
+    }
+  }
+  fields.PSI = blur(signedDistance(mid, N, cell).sd, N, 2);
+  // The highest the face field gets within 45 m: on a ridge, how far its crest is from the
+  // faces either side. The mesh builder stops short of it.
+  fields.PSIMAX = blur(dilate(fields.PSI, N, Math.round(45 / cell)), N, Math.round(8 / cell));
 
   const ms = Math.round(performance.now() - t0);
   return { heights: H, shore: SHORE, sand: F.sand, murk: F.murk, fields, heightAt, N, cell, extent: layout.extent, land, ms };
@@ -145,6 +167,7 @@ export function makeHeightAt(f, layout, noise) {
 
     const sandW = at(f.sand);
     const dc = at(f.DC) + beach.shift * sandW;
+    const dcr = Math.min(at(f.DCR) + beach.shift * sandW, dc);
 
     if (dc <= 0) {
       // Seabed. Shallow shelves in the coves, a fast drop off the cliffs.
@@ -154,30 +177,50 @@ export function makeHeightAt(f, layout, noise) {
     }
 
     if (at(f.ISLE) > 0.5) {
+      // A sheer foot and a rounded crown. How much of the height is sheer changes around the
+      // islet (sheer on the side facing `sheerAz`, a steep wooded dome on the far side), and
+      // the crown is lumpy rather than a flat lid.
       const islet = nearestIslet(islets, x, y);
-      const dome = 1 - (1 - Math.min(dc / 26, 1)) ** 2;
-      const h = islet.h * (0.74 * smooth(0, 5, dc) + 0.26 * dome);
+      const az = Math.atan2(y - islet.near[1], x - islet.near[0]);
+      const sheer = Math.min(Math.max(islet.sheer + islet.sheerVar * Math.cos(az - (islet.sheerAz * Math.PI) / 180)
+        + 0.12 * noise(x / 25 + 5, y / 25), 0.1), 0.85);
+      const u = Math.min(dc / islet.R, 1);
+      const crown = (1 - (1 - u) ** 2) * (1 + 0.06 * noise(x / 18 + 2, y / 18 - 4));
+      // The sheer part leans back a little and bends over into the crown (it rises over 14 m,
+      // steepest at the bottom), so the top edge is rounded, not a rim.
+      const rise = 1 - (1 - Math.min(dc / 14, 1)) ** 2;
+      const h = islet.h * (sheer * rise + (1 - sheer) * crown);
       return h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
     }
 
     const top = at(f.TOP);
     const face = at(f.face) * (1 + noise(x / 30, y / 30 + 9) * nz.faceJitter);
     const pf = at(f.pf);
-
-    // Rock: the drop happens right at the waterline.
-    const vv = Math.min(dc / face, 1);
-    const rock = top * (1 - (1 - vv) ** (1 / pf));
-
-    // Beach zones: below the OSM cliff-top line the face falls from the height of the
-    // cliff top above, and whatever is left before the water is sand.
-    let cove = top;
     const dk = at(f.DK) + noise(x / 15 + 3, y / 15) * nz.edgeJitter;
-    if (dk < 0) cove = at(f.EDGE) * (1 - Math.min(-dk / face, 1)) ** pf;
-    const sand = beach.top * (1 - Math.exp(-dc / beach.spread));
-    cove = Math.max(cove, sand);
+    const edge = at(f.EDGE);
 
-    const h = lerp(rock, cove, sandW);
-    return Math.min(h, dc * 40); // meet the water
+    // The profile across the face, at a shift s along it. Rock: the drop happens right at
+    // the waterline. Beach zones: below the OSM cliff-top line the face falls from the
+    // height of the cliff top above, and whatever is left before the water is sand.
+    const profile = (s) => {
+      const vv = Math.min(Math.max((dcr + s) / face, 0), 1);
+      const rock = top * (1 - (1 - vv) ** (1 / pf));
+      let cove = top;
+      if (dk + s < 0) cove = edge * (1 - Math.min(-(dk + s) / face, 1)) ** pf;
+      const sand = beach.top * (1 - Math.exp(-Math.max(dc + s, 0) / beach.spread));
+      cove = Math.max(cove, sand);
+      return Math.min(lerp(rock, cove, sandW), (dc + s) * 40); // meet the water
+    };
+    // Rims and the feet of the walls are creases in that profile. Averaged over a couple
+    // of metres across the face they become rounded edges, which a mesh can follow without
+    // cutting teeth into them.
+    // Not across the waterline, where the seabed takes over: faded out there instead.
+    const nearRim = dcr < face + 2.2 || (sandW > 0.01 && dk > -face - 2.2 && dk < 2.2);
+    const h0 = profile(0);
+    if (!nearRim || dc < 1.2) return h0;
+    const d = 0.55;
+    const avg = (profile(-2 * d) + 4 * profile(-d) + 6 * h0 + 4 * profile(d) + profile(2 * d)) / 16;
+    return lerp(h0, avg, smooth(1.2, 2.3, dc));
   };
 }
 
@@ -242,6 +285,31 @@ function fill(rings, N, x0, y0, cell) {
     }
   }
   return mask;
+}
+
+// Largest value within a square of radius r texels (separable running maximum).
+function dilate(src, N, r) {
+  const out = new Float32Array(N * N), tmp = new Float32Array(N * N);
+  const pass = (a, b, stride, step) => {
+    const q = new Int32Array(N);
+    for (let line = 0; line < N; line++) {
+      const base = line * stride;
+      let head = 0, tail = 0;
+      for (let i = 0, j = 0; i < N; i++) {
+        // Window [i - r, i + r]: push up to i + r, drop below i - r.
+        for (; j <= Math.min(N - 1, i + r); j++) {
+          const v = a[base + j * step];
+          while (tail > head && a[base + q[tail - 1] * step] <= v) tail--;
+          q[tail++] = j;
+        }
+        while (q[head] < i - r) head++;
+        b[base + i * step] = a[base + q[head] * step];
+      }
+    }
+  };
+  pass(src, tmp, N, 1);
+  pass(tmp, out, 1, N);
+  return out;
 }
 
 // Two passes of a separable box blur of radius r texels (close to a Gaussian).

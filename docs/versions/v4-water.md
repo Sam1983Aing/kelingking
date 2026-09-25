@@ -72,3 +72,15 @@ of `src/terrain/layout.js` (`murk`, `D`, `L`).
 - The sea surface curves with the Earth beyond 2 km from the camera (water vertex shader), so
   the horizon sits where it really is. Keep it.
 
+**From v3 (rock).**
+
+- The rock now meets the sea differently: a notch 1 to 4 m deep along the coast, 11 m deep
+  and 20 m high under the jaw (the arch in `aerial-side-from-sea.jpg`), and the jaw's tip
+  rounded with a little rock shelf at sea level where the face steps back from the map's
+  coastline. The white water where the swell hits the rock still follows the map's coastline,
+  so in places it now runs a few metres in front of the rock or over the shelf. Worth reading
+  the rock's real foot from the mesh (the strips in `mesh-builder.js`) or the coast distance
+  the faces use (`DCR` in `heightfield.js`).
+- In `aerial-side-from-sea.jpg` the surf runs right into the cave under the jaw.
+- Triangles of ground wholly below -4 m are no longer drawn (the sea is opaque there). If the
+  water ever becomes see-through deeper than that, lower `mesh.cull` in `layout.js`.

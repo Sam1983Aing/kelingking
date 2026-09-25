@@ -13,7 +13,7 @@
 //   t=12               freeze the clock at this many seconds (the sea animates)
 //   debug=1..5         water debug view: sediment, see-through, foam, underwater light, normals
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
-//   clay=1             plain grey ground, to judge the shape on its own
+//   clay=1             plain grey ground, to judge the shape on its own (2: flat triangles)
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
 //   hour=11.96         local time on the photo's day (6 April 2025), sets the sun
 //   sun=az,el          or set the sun directly, compass heading and elevation in degrees
@@ -21,6 +21,9 @@
 //                      haze layer over the water, per km (more switches in src/sky/atmosphere.js)
 //   ev=0               exposure compensation in stops
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
+//   cam=e,n,h,yaw,pitch[,fov]  any camera, in the frame of the chosen shot
+//   terrainDebug=1..5  ground debug views: sun shadow, sky share, overhang horizon, lit
+//                      ground share, carved depth (terrain-shader.js)
 //
 // Keys: O overlay, D difference, L outline, F free camera, C contours, 1-8 shots.
 
@@ -53,13 +56,21 @@ const state = {
   quality: +(params.get('q') || (CAPTURE ? 2048 : 1024)),
   contours: params.get('contours') === '1',
   outline: params.get('outline') === '1',
-  clay: params.get('clay') === '1',
+  clay: +(params.get('clay') || 0),
   // The sun where it was when the viewpoint photo was taken (src/sky/sun.js).
   hour: +(params.get('hour') ?? PHOTO_HOUR),
   sunAz: 0,
   sunEl: 0,
 };
 const layout = defaultLayout();
+// faceStep=0.55 sets the spacing of the face strips' vertices near the headland (metres).
+if (params.has('faceStep')) layout.mesh.faceStep[0] = +params.get('faceStep');
+// cam=east,north,height,yaw,pitch[,fov] puts the camera anywhere, keeping the shot's photo
+// and frame (for close-ups while working on something).
+if (params.has('cam')) {
+  const [e, n, h, yaw, pitch, fov] = params.get('cam').split(',').map(Number);
+  Object.assign(SHOTS[state.shot], { pos: [e, n, h], yaw, pitch, roll: 0 }, fov ? { fov } : {});
+}
 const FIXED_T = params.has('t') ? +params.get('t') : null;
 const clock = new THREE.Clock();
 let simTime = FIXED_T ?? 0;
@@ -178,8 +189,9 @@ function terrainCloudShadows() {
   }
 }
 terrainCloudShadows();
+if (params.has('terrainDebug')) terrain.mesh.material.defines = { ...terrain.mesh.material.defines, TERRAIN_DEBUG: +params.get('terrainDebug') };
 terrain.uniforms.uContours.value = state.contours ? 1 : 0;
-terrain.uniforms.uClay.value = state.clay ? 1 : 0;
+terrain.uniforms.uClay.value = state.clay;
 const sunShadow = createSunShadow(renderer);
 let texturesReady = false;
 let plants = null, plantsReady = false;

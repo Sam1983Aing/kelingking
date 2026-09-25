@@ -9,11 +9,11 @@
 
 export const SURFACES = [
   { id: 'marble_cliff_05', scan: 20, tile: 16, use: 'grey-white limestone faces',
-    avg: [0.578, 0.550, 0.513], target: [0.74, 0.72, 0.67] },
+    avg: [0.578, 0.550, 0.513], target: [0.60, 0.585, 0.54] },
   { id: 'cliff_side', scan: 1.83, tile: 5.5, use: 'bedding relief on the faces, and the ochre stain',
     avg: [0.482, 0.322, 0.194], target: [0.60, 0.46, 0.30] },
   { id: 'seaside_rock', scan: 2, tile: 2.5, use: 'the dark band at the waterline and in the notch',
-    avg: [0.271, 0.251, 0.215], target: [0.20, 0.19, 0.16] },
+    avg: [0.271, 0.251, 0.215], target: [0.30, 0.27, 0.21] },
   { id: 'aerial_beach_01', scan: 30, tile: 24, use: 'the beach',
     avg: [0.568, 0.523, 0.479], target: [0.90, 0.86, 0.78] },
   { id: 'aerial_grass_rock', scan: 15, tile: 12, use: 'the ground under the plants',

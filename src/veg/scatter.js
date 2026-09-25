@@ -27,7 +27,7 @@ function trailDistance(x, y) {
 
 export const STRIDE = 7;
 
-export function scatterPlants(hf, layout, species) {
+export function scatterPlants(hf, layout, species, surfaceShift = null) {
   const t0 = performance.now();
   const { heightAt, fields: f } = hf;
   const { x0, y0, size } = hf.extent;
@@ -79,7 +79,17 @@ export function scatterPlants(hf, layout, species) {
       const sp = Math.floor(rand() * species.length);
       const base = lerp(cfg.nearScale, cfg.farScale, far) * (0.7 + 0.6 * rand());
       const scale = base * (0.85 + 0.3 * up);
-      out.push(px, h - 0.15 * scale, -py, scale, rand() * Math.PI * 2, sp, rand());
+      // The mesh carves the faces (the notch, overhangs, buttresses, beds): follow the face
+      // in or out, and nothing grows in under an overhang.
+      let qx = px, qy = py;
+      if (surfaceShift) {
+        const s = surfaceShift(px, py, h);
+        if (s) {
+          if (s.c > 2.5) continue;
+          qx += s.c * s.gx; qy += s.c * s.gy;
+        }
+      }
+      out.push(qx, h - 0.15 * scale, -qy, scale, rand() * Math.PI * 2, sp, rand());
     }
     y += rowStep;
   }

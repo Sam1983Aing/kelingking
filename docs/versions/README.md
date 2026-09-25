@@ -8,8 +8,8 @@ version. A session works on its element only, and goes deep on it.
 |---|---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | [history](../gallery/history/README.md) | done, tag `v1` |
 | v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
-| v3 | Rock | [v3-rock.md](v3-rock.md) | next |
-| v4 | Water | [v4-water.md](v4-water.md) | |
+| v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
+| v4 | Water | [v4-water.md](v4-water.md) | next |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | |
@@ -26,15 +26,15 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v3-rock.md, then start v3.
+> Read docs/versions/README.md and docs/versions/v4-water.md, then start v4.
 
 ## Rules for every version
 
 1. **One element.** Work only on what the brief covers. If you find a problem that belongs to
    another version, write it into that version's brief under "Found by other versions", do
    not fix it.
-2. **Branch.** Start from `main` with `git switch -c v3-rock` (version and element). Commit at
-   each checkpoint. Merge into `main` and tag `v2` only when Sam says the version is done.
+2. **Branch.** Start from `main` with `git switch -c v4-water` (version and element). Commit at
+   each checkpoint. Merge into `main` and tag `v4` only when Sam says the version is done.
 3. **Judge against the photos, not by eye in the browser.** Use `tools/capture.mjs`
    (side by side, outline, clips). The browser pane stops rendering when it is hidden and its
    screenshots go stale. Read numbers back from the page when a picture is ambiguous.
@@ -54,9 +54,9 @@ Open a new chat in this folder and paste:
 
 ## Finishing a version
 
-1. `node tools/hero.mjs v2`: renders the hero frames into `docs/gallery/v2/`, times them
+1. `node tools/hero.mjs v4`: renders the hero frames into `docs/gallery/v4/`, times them
    against the previous version, and puts side by sides with the photos in
-   `captures/compare-v2/` (local only).
+   `captures/compare-v4/` (local only).
 2. Add a section to `PROCESS.md`: what changed, what went wrong and how it was fixed, what
    is still weak. This log is the raw material for the public write-up.
 3. Update the status table above, and the README if the way something works changed.
@@ -100,7 +100,10 @@ node tools/preview-height.mjs 1024                   # top-down shaded height ma
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
 `clay=1`, `contours=1`, `pr=1` (fixed pixel ratio), and from v2 `hour=`, `sun=az,el`,
-`haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. Keys: `1` to `9`
+`haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. From v3:
+`cam=e,n,h,yaw,pitch[,fov]` (any camera, in a shot's frame), `clay=2` (the bare triangles),
+`terrainDebug=1..5` (the ground's shadow, sky share, overhang horizon, lit ground, carving),
+`faceStep=` (face strip spacing). Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light

@@ -19,8 +19,8 @@ moving on. The plan, the rules and a brief per version are in
 |---|---|---|
 | v1 | Shape, sea, surfaces, first scans and trees | done |
 | v2 | Light and atmosphere | done |
-| v3 | Rock | next |
-| v4 | Water | |
+| v3 | Rock | done |
+| v4 | Water | next |
 | v5 | Sand and the waterline | |
 | v6 | Trail and stairs | |
 | v7 | Plants | |
@@ -67,31 +67,49 @@ handful of grid rows, crossed at an angle, and renders as stripes and teeth. So:
 
 - **The generator hands out a function, not just a grid.** Everything smooth (distances to
   the coast and to the cliff tops, the top surface, the zone settings) is stored on the grid,
-  and `heightAt(x, y)` applies the sharp steps at any point.
-- **The mesh builder slides vertices onto the faces** (`src/terrain/mesh-builder.js`). Each
-  vertex near a cliff moves along the slope direction, so that vertices end up evenly spaced
-  over the ground instead of on the map. The flats give up vertices and the face gets them.
-  Normals come from `heightAt` too, so the lighting is smooth even where the triangles are not.
-- **A wave-cut notch** is carved into the foot of the rock, which makes the base overhang.
+  and `heightAt(x, y)` applies the sharp steps at any point. Rims and the feet of walls are
+  rounded over a couple of metres, and the rock faces follow a blurred coastline, so sharp
+  corners of the map do not become sharp vertical edges.
+- **Faces are strips of their own** (`src/terrain/mesh-builder.js`). A face field gives the
+  distance to the middle of every face; its zero line is traced into chains, and along each
+  chain a column of vertices runs across the face at right angles, evenly spaced over the
+  carved surface (about 55 cm apart near the headland). Neighbouring columns are zipped
+  together. The ground is still a grid, denser over the headland, and wherever a strip covers
+  it the grid is pushed back into the rock or left out, so the strip is what you see. That is
+  what removed the comb of teeth along the rims.
+- **The faces are carved**, which a heightfield cannot do: the wave-cut notch at the
+  waterline (deeper under the jaw), buttresses and bays, the big beds of the limestone
+  standing out or cut back, a low undercut all along the back of the beach, and the overhang
+  at its south end, where the face bulges 20 m out over the sand above a cave (settings in
+  `layout.js`, `overhangs`). The islet is a rounded thumb, sheer on its north-west side.
+- **Light under the rock.** For every vertex of a strip the mesh builder works out, in the
+  face's own vertical section, how much of the sky the rock above leaves, the angle above
+  which rock hides the sun, and how much sunlit ground lies in view past the drip line. The
+  shader uses those for the sky light, the sun's shadow and the light bounced up from the
+  sand, plus a second bounce off the rock overhead, which fills a cave with warm light.
 
-The look is all procedural (`src/terrain/terrain-shader.js`), patched into three.js's
-standard material:
+The look is scanned textures (Poly Haven, CC0) plus procedural structure
+(`src/terrain/terrain-shader.js`), patched into three.js's standard material:
 
-- **Limestone** in beds of uneven thickness, gently warped across the island, each with its
-  own shade. Ledges come and go along the face. Vertical joints, crags, grey runoff streaks,
-  lichen, ochre staining over the beach undercut, and the dark notch and algae line at the
-  waterline.
+- **Limestone bedding** from one table (`src/terrain/strata.js`), shared by the mesh and the
+  shader, so a ledge in the geometry and its band of colour line up: packages of massive or
+  thin-bedded rock, beds with rounded noses, and recessed partings between them that read as
+  the dark lines on the faces from a distance. The shader adds the fine relief, each bed's
+  shade (grey to creamy), the shadow the ledges cast for the sun's angle against the face,
+  and the sky the ledges hide. Runoff streaks, ochre and brown staining under the overhangs,
+  and a ragged dark band at the waterline whose height changes along the coast.
 - **Scrub** on everything short of a sheer face, and in clumps along the ledges of the faces.
   At field scale it varies between forest, scrub, grass and bare patches. Bushes, trees and
   leaves appear as you get closer.
-- **Sand**, wet where the swash reaches, and smoother.
+- **Sand**, wet where the swash reaches, and smoother, running on in under the overhang.
 - Everything finer than a pixel is faded out by the pixel footprint, so it holds up from 1 km
   and at your feet without shimmering.
 
 **Sun shadows are baked.** For each map column there is one height above which a point sees
 the sun, which is exact for a heightfield, cliff faces included. It is baked on the GPU in one
 pass whenever the sun moves (`src/terrain/sun-shadow.js`), and the ground and sea each read
-it with a single texture lookup.
+it with a single texture lookup. Carved faces combine it with their own horizon (above).
+Until v3 the ground never actually used it: see v3 in `PROCESS.md`.
 
 ## How the water works
 
@@ -179,12 +197,11 @@ caught.
   1400 px on an M1 Max. Earlier figures in `PROCESS.md` (10 to 30 fps) were measured while
   the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
   See `docs/gallery/v1` for the baseline.
-- **Cliff rims** still show a comb of small fins in some views, where rim triangles zigzag.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
-- **Materials after v2.** The rock, sand, sea and plant colours were set under v1's dimmer
-  light. Under the physical light the rock, sand and shallow water come out 0.3 to 0.8 stops
-  too bright and the plants about 1 stop too dark. Their versions (v3 to v7) retune them; the
-  numbers are in their briefs.
+- **Materials after v2.** The sand, sea and plant colours were set under v1's dimmer light.
+  Under the physical light the sand and shallow water come out 0.3 to 0.8 stops too bright
+  and the plants about 1 stop too dark. Their versions (v4 to v7) retune them; the numbers
+  are in their briefs. The rock was retuned in v3.
 - **No far coast.** The terrain stops 1.6 km out, so the ridges that fade into the haze in
   the drone photos are not there to fade.
 
