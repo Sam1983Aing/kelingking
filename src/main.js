@@ -126,7 +126,16 @@ const clouds = createClouds(renderer, atmosphere, cloudOpts);
 if (params.get('clouds') === '0') clouds.uniforms.uCloudShadow.value = 0;
 // What every lit material shares: sun, sky light, haze, cloud shadows.
 const lightUniforms = { ...atmosphere.uniforms, ...clouds.shadowUniforms };
-const water = createWater(lightUniforms, grade.uniforms);
+// w.name=value sets a water parameter, o.name=value an ocean spectrum one (src/water/),
+// numbers or comma-separated lists.
+const urlParams = (prefix) => {
+  const o = {};
+  for (const [k, v] of params) if (k.startsWith(prefix)) o[k.slice(prefix.length)] = v.includes(',') ? v.split(',').map(Number) : isNaN(+v) ? v : +v;
+  return o;
+};
+const water = createWater(renderer, lightUniforms, grade.uniforms, urlParams('o.'));
+Object.assign(water.params, urlParams('w.'));
+water.applyParams();
 const skyDome = createSkyDome(atmosphere, grade.uniforms);
 const sky = skyDome.mesh;
 scene.add(sky);
@@ -451,14 +460,19 @@ wf.add(wp, 'swell', 0, 3, 0.01).name('swell height (m)').onChange(wa);
 wf.add(wp, 'breakAt', 4, 60, 0.5).name('break distance (m)').onChange(wa);
 wf.add(wp, 'surge', 0, 1.5, 0.01).name('swash run-up (m)').onChange(wa);
 wf.add(wp, 'swellHeading', 0, 360, 1).name('swell heading').onChange(wa);
-wf.add(wp, 'windHeading', 0, 360, 1).name('wind heading').onChange(wa);
-wf.add(wp, 'chop', 0, 3, 0.01).name('wind chop').onChange(wa);
 wf.add(wp, 'foam', 0, 2, 0.01).onChange(wa);
+wf.add(wp, 'whitecaps', 0, 3, 0.01).onChange(wa);
+wf.add(wp, 'murk', 0, 3, 0.01).name('milky plumes').onChange(wa);
+wf.add(wp, 'gust', 0, 1, 0.01).name('gusts').onChange(wa);
+wf.add(wp, 'gordonF', 0.05, 1, 0.01).name('deep water brightness').onChange(wa);
 wf.add(wp, 'turbidity', 0, 2, 0.01).name('stirred sand').onChange(wa);
 wf.add(wp.absorb, 0, 0.05, 1.5, 0.005).name('absorb red').onChange(wa);
 wf.add(wp.absorb, 1, 0.005, 0.5, 0.001).name('absorb green').onChange(wa);
 wf.add(wp.absorb, 2, 0.005, 0.5, 0.001).name('absorb blue').onChange(wa);
-wf.addColor(wp, 'scatter').name('scatter colour').onChange(wa);
+wf.add(wp.backscatter, 0, 0, 0.02, 0.0001).name('backscatter red').onChange(wa);
+wf.add(wp.backscatter, 1, 0, 0.02, 0.0001).name('backscatter green').onChange(wa);
+wf.add(wp.backscatter, 2, 0, 0.02, 0.0001).name('backscatter blue').onChange(wa);
+wf.add(wp, 'sedBack', 0, 0.3, 0.001).name('sand backscatter').onChange(wa);
 wf.addColor(wp, 'sandAlbedo').name('seabed sand').onChange(wa);
 wf.addColor(wp, 'reefAlbedo').name('seabed reef').onChange(wa);
 wf.close();

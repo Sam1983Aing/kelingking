@@ -3,23 +3,35 @@
 
 import * as THREE from 'three';
 import { WATER_VERT, WATER_FRAG } from './water-shader.js';
+import { createOcean } from './ocean.js';
 
-export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
+export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}) {
   const params = {
     period: 9,          // seconds between waves
     swell: 1.1,         // wave height at sea (m)
     breakAt: 20,        // where waves break on the beach (m offshore)
     surge: 0.55,        // swash run-up (m)
     swellHeading: 40,   // direction the swell travels, compass degrees
-    windHeading: 300,
-    chop: 1.0,
     foam: 1.0,
+    whitecaps: 1.0,
     turbidity: 0.6,
-    absorb: [0.36, 0.062, 0.046],   // per metre, red dies first
-    scatter: '#134282',
-    sandAlbedo: '#eee5d0',
+    murk: 1.0,
+    // Water optics per metre, roughly pure sea water at 610, 550 and 465 nm plus a little
+    // plankton: red is gone within a few metres, blue carries.
+    absorb: [0.30, 0.075, 0.065],
+    backscatter: [0.004, 0.005, 0.012],
+    gordonF: 0.33,
+    // Suspended sand, per unit: backscatters (0.15 makes the milky turquoise of the plumes in
+    // the drone photo), and the coarse sand in the surf absorbs a little blue.
+    sedAbsorb: [0.02, 0.04, 0.08],
+    sedBack: 0.1,
+    sandAlbedo: '#a6a293',
     reefAlbedo: '#2a3a2c',
+    // Gusts: patch size (m), drift (m/s east, north), strength 0..1.
+    gustSize: 380, gustDrift: [-3, 1.5], gust: 0.8,
+    reflLift: 1.2, reflCut: 0.6,
   };
+  const ocean = createOcean(renderer, oceanOpts);
 
   const uniforms = THREE.UniformsUtils.merge([
     {
@@ -33,19 +45,28 @@ export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
       uBreakAt: { value: 16 },
       uSurge: { value: 0.5 },
       uSwellDir: { value: new THREE.Vector2(0.64, 0.77) },
-      uWindAngle: { value: 0 },
       uSkyIrr: { value: new THREE.Color(0.5, 0.6, 0.7) },   // sky light on flat ground (klux)
       uAbsorb: { value: new THREE.Vector3() },
-      uScatter: { value: new THREE.Color() },
+      uBackscatter: { value: new THREE.Vector3() },
+      uSedAbsorb: { value: new THREE.Vector3() },
+      uSedBack: { value: 0.05 },
+      uGordonF: { value: 0.33 },
       uSandAlbedo: { value: new THREE.Color() },
       uReefAlbedo: { value: new THREE.Color() },
       uTurbidity: { value: 0.6 },
-      uChop: { value: 1 },
+      uMurk: { value: 1 },
+      uWhitecaps: { value: 1 },
       uFoam: { value: 1 },
+      uGust: { value: new THREE.Vector4() },
+      uReflLift: { value: 0.8 },
+      uReflCut: { value: 0.4 },
       uDebug: { value: 0 },
       uGridScale: { value: 1 },
+      uGridK: { value: 0.0076 },
     },
   ]);
+  // The ocean's textures are swapped every update, so share its uniform objects.
+  Object.assign(uniforms, ocean.uniforms);
   // The sun, the sky and the haze come from the atmosphere (src/sky/), shared, not copied.
   Object.assign(uniforms, atmosphereUniforms, gradeUniforms);
 
@@ -71,13 +92,18 @@ export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
     u.uSurge.value = params.surge;
     const sh = THREE.MathUtils.degToRad(params.swellHeading);
     u.uSwellDir.value.set(Math.sin(sh), Math.cos(sh));
-    const wh = THREE.MathUtils.degToRad(params.windHeading);
-    u.uWindAngle.value = Math.atan2(Math.cos(wh), Math.sin(wh));
-    u.uChop.value = params.chop;
     u.uFoam.value = params.foam;
+    u.uWhitecaps.value = params.whitecaps;
     u.uTurbidity.value = params.turbidity;
+    u.uMurk.value = params.murk;
     u.uAbsorb.value.fromArray(params.absorb);
-    u.uScatter.value.set(params.scatter);
+    u.uBackscatter.value.fromArray(params.backscatter);
+    u.uSedAbsorb.value.fromArray(params.sedAbsorb);
+    u.uSedBack.value = params.sedBack;
+    u.uGordonF.value = params.gordonF;
+    u.uReflLift.value = params.reflLift;
+    u.uReflCut.value = params.reflCut;
+    u.uGust.value.set(1 / params.gustSize, params.gustDrift[0], params.gustDrift[1], params.gust);
     u.uSandAlbedo.value.set(params.sandAlbedo);
     u.uReefAlbedo.value.set(params.reefAlbedo);
   }
@@ -87,6 +113,7 @@ export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
     mesh,
     uniforms,
     params,
+    ocean,
     applyParams,
     setData(texture, shoreDir, extent) {
       uniforms.uData.value = texture;
@@ -99,6 +126,9 @@ export function createWater(atmosphereUniforms = {}, gradeUniforms = {}) {
       const h = Math.max(camera.position.y, 1);
       uniforms.uGridScale.value = Math.max(1, h / 12);
       mesh.geometry = h > 40 ? light : dense;
+      // Vertex spacing per metre from the camera, near the camera (radial and around).
+      uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0076;
+      ocean.update(time);
     },
   };
 }

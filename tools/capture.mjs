@@ -18,6 +18,7 @@
 //        add --benchpage to load the page as the bench does (q=1024, pr=1, no capture mode)
 //                                                   (a PNG data URL comes back as <shot>-eval.png)
 //   node tools/capture.mjs viewpoint --set="hour=10;haze=4;ev=-0.5"  any page switches (see main.js)
+//   node tools/capture.mjs viewpoint --console      print the page's warnings and errors
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
 // `python3 -m http.server 5178`). Output goes to captures/<shot>[-compare].png
@@ -119,6 +120,13 @@ try {
       if (r.result.value) break;
       if (Date.now() - t0 > 120000) throw new Error(`${name}: page never became ready\n` + consoleLog.filter((l) => !/deprecated|PCFSoft/.test(l)).join('\n'));
       await new Promise((res) => setTimeout(res, 250));
+    }
+    // --console: print the page's warnings and errors (a shader that fails to compile does
+    // not stop the page, it just draws nothing).
+    if (flag('console')) {
+      const lines = consoleLog.splice(0).filter((l) => !/deprecated|PCFSoft|UNSUPPORTED/.test(l));
+      console.log(`${name}: ${lines.length} console message(s)`);
+      lines.forEach((l) => console.log('  ' + l.slice(0, 3000)));
     }
     if (flag('bench')) {
       // Time to render a frame to completion: render, then read back one pixel, which makes
