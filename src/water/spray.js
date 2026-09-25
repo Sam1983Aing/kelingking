@@ -31,10 +31,11 @@ uniform float uSwellPeriod;
 uniform int uSprayDebug;
 attribute vec4 aSite;         // beach: waterline point, offshore direction. rock: foot, outward direction
 attribute vec4 aSeed;         // random numbers
-attribute vec2 aKind;         // kind (0 lip, 1 mist, 2 splash, 3 rock), rock exposure
+attribute vec2 aKind;         // kind (0 lip, 1 mist, 2 splash, 3 rock), and the breaker column (beach) or exposure (rock)
 varying vec4 vColor;          // x brightness, y alpha, z how much it is fine mist, w age share
 varying vec3 vWorld;
 varying vec3 vDbg;
+varying float vPx;
 
 const float G = 9.81;
 
@@ -50,7 +51,7 @@ void main() {
     gl_PointSize = 12.0; vColor = vec4(1.0, 1.0, 0.0, 0.0); vWorld = pos; return;
   }
   if (kind < 2.5) {
-    BreakCol bc = findBreak(aSite.xy, aSite.zw);
+    BreakCol bc = readBreak(aKind.y);
     if (uSprayDebug == 1) {   // every beach particle at its column's crest, big
       pos = vec3(bc.pc.x, 2.0 + bc.on * 2.0, -bc.pc.y);
       vec4 mvd = viewMatrix * vec4(pos, 1.0); gl_Position = projectionMatrix * mvd;
@@ -148,6 +149,9 @@ void main() {
   // Fades in quickly, thins out as it goes.
   if (uSprayDebug != 3) alpha *= smoothstep(0.0, 0.08, ageShare) * (1.0 - smoothstep(0.55, 1.0, ageShare));
   vColor = vec4(aSeed.x * 97.0 + aSeed.y * 13.0, alpha, mist, ageShare);
+  // Small on screen, the droplets would only be noise: draw it as a soft puff instead, and
+  // fainter (a far puff covers less of what is behind it than its disc suggests).
+  vPx = px;
 }
 `;
 
@@ -160,13 +164,14 @@ uniform vec3 uSkyIrr;
 varying vec4 vColor;
 varying vec3 vWorld;
 varying vec3 vDbg;
+varying float vPx;
 uniform int uSprayDebug;
 void main() {
   if (uSprayDebug == 4 || uSprayDebug == 3) { gl_FragColor = vec4(vDbg, 1.0); return; }
   vec2 q = gl_PointCoord * 2.0 - 1.0;
   float r = dot(q, q);
   if (r > 1.0) discard;
-  float mist = vColor.z;
+  float mist = max(vColor.z, smoothstep(30.0, 10.0, vPx));
   // A puff: droplets scattered in it (denser in the middle, thinning as it ages), in a haze
   // of fine mist.
   float seed = vColor.x;
@@ -181,7 +186,7 @@ void main() {
     drops = max(drops, keep * smoothstep(rad, rad * 0.4, length(vec2(float(i), float(j)) + h - f)));
   }
   float body = exp(-r * 3.0);
-  float a = vColor.y * mix(drops * smoothstep(1.0, 0.2, r), body, mist);
+  float a = vColor.y * mix(drops * smoothstep(1.0, 0.2, r), body * mix(1.0, 0.45, smoothstep(30.0, 10.0, vPx)), mist);
   a = max(a, vColor.y * body * 0.45 * (1.0 - mist));
   if (a < 0.003) discard;
   vec3 V = normalize(cameraPosition - vWorld);
@@ -219,9 +224,8 @@ export function createSpray(waterUniforms) {
   function rebuild() {
     const rows = [];
     // Beach: per column of the breaker (every other one, 1 m apart), a few of each kind.
-    if (beach) for (let k = 0; k < beach.length; k += 10) {
-      if (Number.isNaN(beach[k])) continue;
-      for (const [kind, n] of [[0, 22], [1, 12], [2, 12]]) for (let i = 0; i < n; i++) rows.push([beach[k], beach[k + 1], beach[k + 2], beach[k + 3], kind, 0]);
+    if (beach) for (let c = 0; c < beach.length / 4; c += 2) {
+      for (const [kind, n] of [[0, 22], [1, 12], [2, 12]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
     }
     // Rock: sites every 2.5 m of coast, a dozen particles each.
     if (rock) for (let k = 0; k < rock.length; k += 5) for (let i = 0; i < 14; i++) rows.push([rock[k], rock[k + 1], rock[k + 2], rock[k + 3], 3, rock[k + 4]]);
@@ -245,7 +249,7 @@ export function createSpray(waterUniforms) {
   return {
     points,
     uniforms,
-    setBeach(lines) { beach = lines; return rebuild(); },
+    setBeach(columns) { beach = columns; return rebuild(); },
     setRock(sites) { rock = sites; return rebuild(); },
     update(camera, renderer) {
       const h = renderer.getDrawingBufferSize(new THREE.Vector2()).y;

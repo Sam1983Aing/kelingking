@@ -302,15 +302,18 @@ Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float sha
 
   // Suspended sand: stirred up where waves break, and hanging in the bays as milky plumes.
   float nearSurf = bd.b * smoothstep(70.0, 4.0, bd.g);
-  float cloud = fbm3(bedP * 0.03 + vec2(uTime * 0.02, -uTime * 0.015));
+  float cloud = nearSurf > 0.0 || simSand > 0.0 ? fbm3(bedP * 0.03 + vec2(uTime * 0.02, -uTime * 0.015)) : 0.5;
   // The plumes: where the map says there is sand in the water, cut by drifting, warped noise
   // into clouds with billowing edges, thicker in their middles.
-  vec2 pq = p * 0.0055 + vec2(uTime * 0.0006, -uTime * 0.0004);
-  vec2 pw = vec2(fbm3(pq * 1.7 + 3.3), fbm3(pq * 1.7 + 8.1));
-  float pBig = fbm3(pq + pw * 1.4);
-  float pFine = fbm3(p * 0.045 + pw * 3.0 + uTime * 0.003);
-  float pEdge = d.a * 1.15 + (pBig - 0.5) * 1.1 + (pFine - 0.5) * 0.35 - 0.12;
-  float plume = uMurk * smoothstep(0.25, 0.75, pEdge) * (0.55 + 0.6 * pBig) * step(0.001, d.a);
+  float plume = 0.0;
+  if (d.a > 0.001) {
+    vec2 pq = p * 0.0055 + vec2(uTime * 0.0006, -uTime * 0.0004);
+    vec2 pw = vec2(fbm3(pq * 1.7 + 3.3), fbm3(pq * 1.7 + 8.1));
+    float pBig = fbm3(pq + pw * 1.4);
+    float pFine = fbm3(p * 0.045 + pw * 3.0 + uTime * 0.003);
+    float pEdge = d.a * 1.15 + (pBig - 0.5) * 1.1 + (pFine - 0.5) * 0.35 - 0.12;
+    plume = uMurk * smoothstep(0.25, 0.75, pEdge) * (0.55 + 0.6 * pBig);
+  }
   // Coarse sand churned up in the surf (beige: the grains absorb some blue) and the fine
   // silt of the plumes (white: it only scatters).
   float churn = mix(uTurbidity * nearSurf * smoothstep(0.2, 0.75, cloud), simSand * uTurbidity * (0.6 + 0.8 * cloud), simW)
@@ -328,8 +331,8 @@ Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float sha
   vec3 Tv = exp(-K * tRay);
 
   // Reef and weed: along the foot of the rock, and patches on the sand in the bays.
-  float reef = max((1.0 - bd.b) * smoothstep(40.0, 2.0, bd.g) * 0.85,
-                   smoothstep(0.52, 0.7, fbm3(bedP * 0.018 + 4.0)) * smoothstep(3.0, 9.0, depth) * smoothstep(22.0, 12.0, depth));
+  float reef = (1.0 - bd.b) * smoothstep(40.0, 2.0, bd.g) * 0.85;
+  if (depth > 3.0 && depth < 22.0) reef = max(reef, smoothstep(0.52, 0.7, fbm3(bedP * 0.018 + 4.0)) * smoothstep(3.0, 9.0, depth) * smoothstep(22.0, 12.0, depth));
   vec3 bedAlbedo = mix(uSandAlbedo, uReefAlbedo, reef);
   float causFade = exp(-depth / 4.0) * (1.0 - reef * 0.6) * smoothstep(0.5, 0.08, fp) * (1.0 - clamp(sed * 3.0, 0.0, 1.0));
   float caus = causFade > 0.01 ? mix(1.0, 0.85 + 0.4 * caustics(bedP, uTime * 1.3), causFade) : 1.0;
@@ -354,6 +357,7 @@ export const WATER_VERT = /* glsl */ `
 ${COMMON}
 uniform sampler2D uOceanA[4];
 uniform float uGridScale;   // spreads the rings out when the camera is high
+uniform vec2 uGridRot;      // cos, sin of the grid's turn (its middle segment faces the way the camera looks)
 uniform float uGridK;       // ring spacing per metre of distance from the camera
 ${AERIAL_VERT}
 #include <common>
@@ -371,7 +375,7 @@ vec3 cascadeDisp(sampler2D tex, vec2 p, float L, float spacing) {
 
 void main() {
   vec3 w = position;
-  w.xz = w.xz * uGridScale + cameraPosition.xz;
+  w.xz = vec2(uGridRot.x * w.x - uGridRot.y * w.z, uGridRot.y * w.x + uGridRot.x * w.z) * uGridScale + cameraPosition.xz;
   vec2 p = vec2(w.x, -w.z);
   vGrid = p;
   vec4 d = dataAt(p);
@@ -542,7 +546,7 @@ void main() {
   // warped so no two cells match, and a slower variation in how dense it is.
   float pattern = 0.0, ridge = 0.0;
   vec2 travel = sim.ba * simW;
-  if (amount > 0.002 || caps > 0.002 || d.b > 0.01) {
+  if (amount > 0.002 || caps > 0.002) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp);
     pattern = lp.x; ridge = lp.y;
@@ -564,15 +568,19 @@ void main() {
   // The swash leaves a thin, bright line where its edge runs up the sand.
   float film0 = vWorld.y - d.r;
   float edge = smoothstep(0.0, 0.012, film0) * (1.0 - smoothstep(0.02, 0.08, film0)) * d.b;
-  foam = max(foam, edge * 0.85 * (0.6 + 0.4 * ridge));
+  foam = max(foam, edge * 0.85 * (0.6 + 0.4 * (edge > 0.0 ? vnoise(p * 1.7) : 0.0)));
   // Thin old foam lets the water show through; sand in the break stains it beige.
   vec3 foamAlb = mix(vec3(0.8), vec3(0.7, 0.66, 0.56), clamp(sim.g * simW * 0.5, 0.0, 0.4));
   // Thick fresh foam is a heap of lumps that shade each other and face the sun or not;
   // old foam is a flat film with a little texture.
-  vec3 rel = fresh > 0.01 ? foamRelief(p - travel, fp, uTime) : vec3(1.0, 0.0, 0.0);
-  vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * fresh);
-  float heap = mix(1.0, rel.x, fresh) * mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
-  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr * mix(1.0, rel.x, fresh));
+  // (Relief only where a pixel is small enough to show it: further off it is just noise.)
+  float relW = fresh * smoothstep(0.25, 0.04, fp);
+  vec3 rel = relW > 0.01 ? foamRelief(p - travel, fp, uTime) : vec3(1.0, 0.0, 0.0);
+  vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * relW);
+  float heap = mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
+  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
+  // In the crevices between lumps: shaded foam and the water showing through, not dirt.
+  foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
   col = mix(col, foamRad, foam * mix(0.75, 1.0, max(fresh, smoothstep(0.3, 0.8, amount))));
 
   // Fade out over the last few centimetres so the wet sand shows through the swash.

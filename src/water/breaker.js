@@ -116,6 +116,21 @@ BreakCol findBreak(vec2 p0, vec2 n0) {
   b.H = max(c.hRaw - mix(b.hB, b.hF, 0.5), 0.05);
   return b;
 }
+// The same, worked out once per column per frame by the column pass (createBreaker) and read
+// back here by the ribbon's vertices and the spray.
+uniform sampler2D uBreakCol0;   // crest x, y, direction out to sea x, y
+uniform sampler2D uBreakCol1;   // stage, on, wavelength, height
+uniform sampler2D uBreakCol2;   // height behind, height in front, unbroken front width
+BreakCol readBreak(float col) {
+  ivec2 t = ivec2(int(col + 0.5), 0);
+  vec4 a = texelFetch(uBreakCol0, t, 0), b = texelFetch(uBreakCol1, t, 0), d = texelFetch(uBreakCol2, t, 0);
+  BreakCol r;
+  r.pc = a.xy; r.n = a.zw;
+  r.tau = b.x; r.on = b.y; r.L = b.z; r.H = b.w;
+  r.hB = d.x; r.hF = d.y; r.Lf = d.z;
+  r.Lb = 0.45 * r.L; r.xMax = 0.12 * r.L;
+  return r;
+}
 `;
 
 const VERT = /* glsl */ `
@@ -124,16 +139,23 @@ ${BREAK_GLSL}
 ${AERIAL_VERT}
 #include <common>
 attribute vec4 aLine;      // waterline x, y (map), offshore direction x, y
-attribute vec2 aProf;      // v across the wave, distance along the beach
+attribute vec3 aProf;      // v across the wave, distance along the beach, column
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec2 vMap;
 varying vec4 vInfo;        // v, stage, water thickness behind, wave height
 varying float vAlong;      // distance along the beach (m)
+varying float vTear;
 
 void main() {
   float v = aProf.x;
-  BreakCol bc = findBreak(aLine.xy, aLine.zw);
+  BreakCol bc = readBreak(aProf.z);
+  // Where neighbouring columns found different waves (their crests far apart), the triangles
+  // between them would stretch across the gap: those are dropped (vTear, in the fragment).
+  float cMax = float(textureSize(uBreakCol0, 0).x) - 1.0;
+  vec2 pPrev = texelFetch(uBreakCol0, ivec2(int(max(aProf.z - 1.0, 0.0) + 0.5), 0), 0).xy;
+  vec2 pNext = texelFetch(uBreakCol0, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).xy;
+  vTear = step(4.0, max(distance(pPrev, bc.pc), distance(pNext, bc.pc)));
   vec2 pc = bc.pc, n = bc.n;
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
   Surf c;
@@ -196,8 +218,10 @@ varying vec3 vNormal;
 varying vec2 vMap;
 varying vec4 vInfo;
 varying float vAlong;
+varying float vTear;
 
 void main() {
+  if (vTear > 0.001) discard;
   float v = vInfo.x, tau = vInfo.y, H = vInfo.w;
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 N = normalize(vNormal);
@@ -254,16 +278,28 @@ void main() {
   float tear = vnoise(vec2(vAlong * 1.7, tau * 6.0)) * 0.5 + vnoise(vec2(vAlong * 5.3, v * 30.0)) * 0.5;
   float edge = smoothstep(0.36, 0.45, v + tear * 0.05) * (1.0 - smoothstep(0.5, 0.58, v - tear * 0.06)) * smoothstep(0.12, 0.45, tau);
   float feather = smoothstep(0.2, 0.26, v) * (1.0 - smoothstep(0.3, 0.38, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.5, 0.7, tau));
-  float impact = smoothstep(0.62, 0.95, tau) * smoothstep(0.2, 0.4, v);
+  // (The collapse hands its white water over to the sea's own bore: it fades out before the
+  // ribbon switches off, so no section of it ends in a hard edge.)
+  float impact = smoothstep(0.62, 0.85, tau) * (1.0 - smoothstep(0.88, 1.04, tau)) * smoothstep(0.2, 0.4, v);
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.5;
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   float foam = smoothstep(1.0 - amount - 0.08, 1.0 - amount + 0.08, lp.x);
   foam = max(foam, smoothstep(0.9, 1.0, amount));
+  // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
+  // coordinates, so the lace lines up where the ribbon meets the sea).
+  float seaFoam = clamp(sim.r * uFoam, 0.0, 1.0) * (1.0 - smoothstep(0.62, 0.8, v));
+  if (seaFoam > 0.002) {
+    vec2 slp = lacePattern(vMap - sim.ba, fp);
+    foam = max(foam, smoothstep(1.0 - seaFoam - 0.12, 1.0 - seaFoam + 0.12, slp.x) * smoothstep(0.0, 0.06, seaFoam));
+  }
   // White water is a heap of bubbles: its lumps shade each other and face the sun or not
   // (in the noon sun it would otherwise just be clipped white).
-  vec3 rel = foamRelief(rp * 0.8 + vec2(0.0, tau * 2.0), fp, uTime);
-  vec3 Nf = normalize(N + tA * rel.y + tB * rel.z);
-  vec3 foamRad = vec3(0.78) * rel.x / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr * rel.x);
+  float relW = smoothstep(0.25, 0.04, fp);
+  vec3 rel = relW > 0.01 ? foamRelief(rp * 2.2 + vec2(0.0, tau * 2.0), fp, uTime) : vec3(1.0, 0.0, 0.0);
+  vec3 Nf = normalize(N + (tA * rel.y + tB * rel.z) * relW);
+  vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
+  // In the crevices: shaded foam and the water showing through.
+  foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
   col = mix(col, foamRad, foam);
 
   gl_FragColor = vec4(col * vApT + vApIns, 1.0);
@@ -275,9 +311,31 @@ void main() {
 }
 `;
 
-export function createBreaker(waterUniforms) {
+// The column pass: one texel per column, findBreak once, three float outputs.
+const COLUMN_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+#define texture2D texture
+${COMMON}
+${BREAK_GLSL}
+uniform sampler2D uColLine;     // waterline x, y, direction out to sea x, y
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+layout(location = 2) out vec4 o2;
+void main() {
+  vec4 l = texelFetch(uColLine, ivec2(gl_FragCoord.xy), 0);
+  BreakCol b = findBreak(l.xy, l.zw);
+  o0 = vec4(b.pc, b.n);
+  o1 = vec4(b.tau, b.on, b.L, b.H);
+  o2 = vec4(b.hB, b.hF, b.Lf, 0.0);
+}`;
+
+export function createBreaker(renderer, waterUniforms) {
+  const U = waterUniforms;
+  U.uBreakCol0 = { value: null };
+  U.uBreakCol1 = { value: null };
+  U.uBreakCol2 = { value: null };
   const material = new THREE.ShaderMaterial({
-    uniforms: waterUniforms,
+    uniforms: U,
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: THREE.DoubleSide,
@@ -291,12 +349,67 @@ export function createBreaker(waterUniforms) {
   const NV = 96;
   const vs = Array.from({ length: NV }, (_, i) => i / (NV - 1));
 
+  // ---------------------------------------------------------------- the column pass
+  const gl = renderer.getContext();
+  const VERT_FS = `#version 300 es
+  void main() { vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+  const prog = (() => {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, VERT_FS], [gl.FRAGMENT_SHADER, COLUMN_FRAG]]) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error('breaker column shader: ' + gl.getShaderInfoLog(sh));
+      gl.attachShader(p, sh);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('breaker column program: ' + gl.getProgramInfoLog(p));
+    const u = {};
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+    return { p, u };
+  })();
+  const vao = gl.createVertexArray();
+  let nCols = 0, lineTex = null, target = null, lastT = null;
+  const texOf = (t) => { if (!renderer.properties.get(t).__webglTexture) renderer.initTexture(t); return renderer.properties.get(t).__webglTexture; };
+  function runColumns() {
+    if (!nCols || !U.uData.value || !U.uShoreDir.value) return;
+    const u = prog.u;
+    gl.bindVertexArray(vao);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE); gl.disable(gl.SCISSOR_TEST);
+    gl.colorMask(true, true, true, true);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderer.properties.get(target).__webglFramebuffer);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2]);
+    gl.viewport(0, 0, nCols, 1);
+    gl.useProgram(prog.p);
+    [['uColLine', texOf(lineTex)], ['uData', texOf(U.uData.value)], ['uShoreDir', texOf(U.uShoreDir.value)]]
+      .forEach(([name, t], i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(u[name], i); });
+    const e = U.uExtent.value;
+    gl.uniform3f(u.uExtent, e.x, e.y, e.z);
+    gl.uniform1f(u.uTime, U.uTime.value);
+    gl.uniform1f(u.uPeriod, U.uPeriod.value);
+    gl.uniform1f(u.uSwell, U.uSwell.value);
+    gl.uniform1f(u.uBreakAt, U.uBreakAt.value);
+    if (u.uSurge) gl.uniform1f(u.uSurge, U.uSurge.value);
+    if (u.uBreakerOn) gl.uniform1f(u.uBreakerOn, 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    renderer.resetState();
+  }
+
   return {
     mesh,
     material,
+    get columns() { return nCols; },
+    // Work out every column's wave for the current time (once per frame, when it moves).
+    update(time, force = false) {
+      if (!force && time === lastT) return;
+      lastT = time;
+      runColumns();
+    },
     // Build the ribbon along the waterlines from the worker (x, y, nx, ny, along; NaN ends a run).
+    // Returns the columns in order (x, y, nx, ny), for the spray.
     setLines(lines) {
-      const cols = [];
       const runs = [];
       let run = [];
       for (let k = 0; k < lines.length; k += 5) {
@@ -304,17 +417,19 @@ export function createBreaker(waterUniforms) {
         run.push(k);
       }
       if (run.length > 1) runs.push(run);
-      let nCols = 0;
+      nCols = 0;
       for (const r of runs) nCols += r.length;
-      const line = new Float32Array(nCols * NV * 4), prof = new Float32Array(nCols * NV * 2);
+      const cols = new Float32Array(nCols * 4);
+      const line = new Float32Array(nCols * NV * 4), prof = new Float32Array(nCols * NV * 3);
       const index = [];
       let base = 0;
       for (const r of runs) {
         r.forEach((k, c) => {
+          cols.set([lines[k], lines[k + 1], lines[k + 2], lines[k + 3]], (base + c) * 4);
           for (let j = 0; j < NV; j++) {
             const o = (base + c) * NV + j;
             line.set([lines[k], lines[k + 1], lines[k + 2], lines[k + 3]], o * 4);
-            prof[o * 2] = vs[j]; prof[o * 2 + 1] = lines[k + 4];
+            prof[o * 3] = vs[j]; prof[o * 3 + 1] = lines[k + 4]; prof[o * 3 + 2] = base + c;
           }
           if (c > 0) for (let j = 0; j < NV - 1; j++) {
             const a = (base + c - 1) * NV + j, b = a + 1, d = (base + c) * NV + j, e = d + 1;
@@ -327,12 +442,26 @@ export function createBreaker(waterUniforms) {
       // The shader places every vertex; position only has to exist.
       g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nCols * NV * 3), 3));
       g.setAttribute('aLine', new THREE.BufferAttribute(line, 4));
-      g.setAttribute('aProf', new THREE.BufferAttribute(prof, 2));
+      g.setAttribute('aProf', new THREE.BufferAttribute(prof, 3));
       g.setIndex(index);
       mesh.geometry.dispose();
       mesh.geometry = g;
       mesh.visible = nCols > 0;
-      return { runs: runs.length, columns: nCols };
+      // The column pass: its input (the waterline) and its three outputs.
+      lineTex?.dispose();
+      target?.dispose();
+      if (nCols > 0) {
+        lineTex = new THREE.DataTexture(cols, nCols, 1, THREE.RGBAFormat, THREE.FloatType);
+        lineTex.needsUpdate = true;
+        target = new THREE.WebGLRenderTarget(nCols, 1, { count: 3, type: THREE.FloatType, format: THREE.RGBAFormat,
+          minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false });
+        renderer.initRenderTarget(target);
+        U.uBreakCol0.value = target.textures[0];
+        U.uBreakCol1.value = target.textures[1];
+        U.uBreakCol2.value = target.textures[2];
+        lastT = null;
+      }
+      return { runs: runs.length, columns: nCols, cols };
     },
   };
 }

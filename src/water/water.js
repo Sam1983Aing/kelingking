@@ -67,6 +67,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uDebug: { value: 0 },
       uGridScale: { value: 1 },
       uGridK: { value: 0.0076 },
+      uGridRot: { value: new THREE.Vector2(1, 0) },
       uBreakerOn: { value: 0 },
     },
   ]);
@@ -91,7 +92,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
   // The breaking lip on the beaches (its own mesh; the sea tucks its breaking crests under it).
-  const breaker = createBreaker(uniforms);
+  const breaker = createBreaker(renderer, uniforms);
   mesh.add(breaker.mesh);
   // Spray off the breakers and bursts of white water at the rock.
   const spray = createSpray(uniforms);
@@ -133,7 +134,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     applyParams,
     setBreakers(lines, rockSites) {
       const r = breaker.setLines(lines);
-      spray.setBeach(lines);
+      spray.setBeach(r.cols);
       if (rockSites) spray.setRock(rockSites);
       uniforms.uBreakerOn.value = r.columns > 0 ? 1 : 0;
       return r;
@@ -152,14 +153,36 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       const h = Math.max(camera.position.y, 1);
       uniforms.uGridScale.value = Math.max(1, h / 12);
       mesh.geometry = h > 40 ? light : dense;
+      // Only the wedge of the rings the camera can see (the vertex shader is not cheap and
+      // runs for every vertex, seen or not). The grid is turned so its middle segment faces
+      // the way the camera looks, and drawn from there out to both sides.
+      const g = mesh.geometry, segs = g.userData.segments, per = g.userData.perSegment;
+      const fwd = camera.getWorldDirection(tmpV);
+      const yaw = Math.atan2(fwd.z, fwd.x);
+      const a = yaw - Math.PI;   // segment 0 at a, so segment segs/2 faces the camera's heading
+      uniforms.uGridRot.value.set(Math.cos(a), Math.sin(a));
+      const pitch = Math.asin(THREE.MathUtils.clamp(fwd.y, -1, 1));
+      const vHalf = THREE.MathUtils.degToRad(camera.fov) / 2;
+      const hHalf = Math.atan(Math.tan(vHalf) * camera.aspect);
+      // A ray at the frame's edge reaches out horizontally by cos(pitch) - tan(vHalf)|sin(pitch)|
+      // for each unit it goes sideways by tan(hHalf); where that reach runs out the camera
+      // sees straight down and needs the whole ring.
+      const reach = Math.cos(pitch) - Math.tan(vHalf) * Math.abs(Math.sin(pitch));
+      const half = reach > 0.08 ? Math.min(Math.PI, Math.atan(Math.tan(hHalf) / reach) + 0.3) : Math.PI;
+      const n = Math.min(segs, Math.ceil((half / Math.PI) * segs / 2) * 2 + 4);
+      const s0 = Math.max(0, Math.floor(segs / 2 - n / 2));
+      g.setDrawRange(s0 * per, Math.min(n, segs - s0) * per);
       // Vertex spacing per metre from the camera, near the camera (radial and around).
       uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0076;
       // The foam simulation moves the ocean along with it (the rock bursts follow the swell).
       sim.update(time, (t) => ocean.update(t));
       ocean.update(time);
+      breaker.update(time);
     },
   };
 }
+
+const tmpV = new THREE.Vector3();
 
 // Polar grid centred on the origin (the shader adds the camera position). Rings are spaced
 // exponentially, with a share `nearShare` of them packed inside `rMid`, where close-up
@@ -182,10 +205,12 @@ function radialGrid(rings, segments, rMin, rMax, rMid, nearShare) {
       pos[k + 2] = r * Math.sin(a);
     }
   }
+  // Segment by segment (all the rings of one wedge, then the next), so a range of the index
+  // buffer is a wedge of the grid.
   const idx = new Uint32Array(rings * segments * 6);
   let n = 0;
-  for (let i = 0; i < rings; i++) {
-    for (let j = 0; j < segments; j++) {
+  for (let j = 0; j < segments; j++) {
+    for (let i = 0; i < rings; i++) {
       const a = i * segments + j;
       const b = i * segments + ((j + 1) % segments);
       const c = a + segments;
@@ -197,5 +222,6 @@ function radialGrid(rings, segments, rMin, rMax, rMid, nearShare) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.userData = { segments, perSegment: rings * 6 };
   return g;
 }
