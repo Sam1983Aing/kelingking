@@ -624,8 +624,12 @@ void main() {
   vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * relW);
   float heap = mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
   vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
-  // In the crevices between lumps: shaded foam and the water showing through, not dirt.
-  foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
+  // In the crevices between lumps the sun does not reach: only the sky above them and the
+  // light scattered through the foam around (a fifth of the sun's), with the water showing
+  // through. About a tenth of the lit tops, so the heap keeps its shape at noon instead of
+  // clipping to a flat white.
+  vec3 crevice = foamAlb / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
+  foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
   // Old foam is a thin film of bubbles: up close the water shows through it.
   float thinFilm = mix(mix(0.55, 0.75, smoothstep(0.01, 0.08, fp)), 1.0, max(fresh, smoothstep(0.3, 0.8, amount)));
   col = mix(col, foamRad, foam * thinFilm);

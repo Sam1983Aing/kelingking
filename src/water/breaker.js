@@ -322,8 +322,9 @@ void main() {
   vec3 rel = relW > 0.01 ? foamRelief(rp * 2.2 + vec2(0.0, tau * 2.0), fp, uTime) : vec3(1.0, 0.0, 0.0);
   vec3 Nf = normalize(N + (tA * rel.y + tB * rel.z) * relW);
   vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
-  // In the crevices: shaded foam and the water showing through.
-  foamRad = mix(mix(col, foamRad * 0.45, 0.5), foamRad, mix(1.0, rel.x, relW));
+  // In the crevices: no sun, only sky and light scattered through the foam (as the sea's).
+  vec3 crevice = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
+  foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
   col = mix(col, foamRad, foam);
 
   gl_FragColor = vec4(col * vApT + vApIns, edgeFade);
