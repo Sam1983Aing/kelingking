@@ -252,7 +252,7 @@ vec3 foamRelief(vec2 q, float fp, float t) {
   float h0 = reliefH(q, o, fine);
   vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine) - reliefH(q - vec2(e, 0.0), o, fine),
                 reliefH(q + vec2(0.0, e), o, fine) - reliefH(q - vec2(0.0, e), o, fine)) / (2.0 * e);
-  return vec3(mix(0.35, 1.0, smoothstep(0.2, 0.6, h0)), g * 0.6);
+  return vec3(mix(0.3, 1.0, smoothstep(0.34, 0.62, h0)), g * 0.6);
 }
 
 // Foam lace at a map position: two levels of warping (big swirls, then filaments bent along

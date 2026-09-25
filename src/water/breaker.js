@@ -238,8 +238,12 @@ void main() {
     float holes = vnoise(vec2(vAlong * 2.3, vInfo.x * 40.0 + vInfo.y * 5.0)) * 0.65 + vnoise(vec2(vAlong * 7.9, vInfo.x * 110.0)) * 0.35;
     if (holes < rim * 0.75 * smoothstep(0.2, 0.45, vInfo.y)) discard;
   }
-  // And it fades into the sea over its last stretch at both ends (drawn after the sea).
-  float edgeFade = smoothstep(0.0, 0.06, vInfo.x) * (1.0 - smoothstep(0.78, 0.86, vInfo.x));
+  // And it fades into the sea over its last stretch at both ends (drawn after the sea), and in
+  // time: it takes over from the sea as the break starts, over the same stretch in which the
+  // sea tucks its crest away, and hands back as the collapse turns into the bore.
+  float edgeFade = smoothstep(0.0, 0.06, vInfo.x) * (1.0 - smoothstep(0.78, 0.86, vInfo.x))
+                 * smoothstep(0.02, 0.1, vInfo.y) * (1.0 - smoothstep(0.9, 1.02, vInfo.y));
+  if (edgeFade < 0.005) discard;
   float v = vInfo.x, tau = vInfo.y, H = vInfo.w;
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 N = normalize(vNormal);
@@ -299,7 +303,7 @@ void main() {
   float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
-  float impact = smoothstep(0.62, 0.85, tau) * (1.0 - smoothstep(0.88, 1.04, tau)) * smoothstep(0.2, 0.4, v);
+  float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.5;
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   float foam = smoothstep(1.0 - amount - 0.08, 1.0 - amount + 0.08, lp.x);
