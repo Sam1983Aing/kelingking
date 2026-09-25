@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { WATER_VERT, WATER_FRAG } from './water-shader.js';
 import { createOcean } from './ocean.js';
 import { createSurfSim } from './surf-sim.js';
+import { createBreaker } from './breaker.js';
+import { createSpray } from './spray.js';
 
 export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}, simOpts = {}) {
   const params = {
@@ -65,6 +67,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uDebug: { value: 0 },
       uGridScale: { value: 1 },
       uGridK: { value: 0.0076 },
+      uBreakerOn: { value: 0 },
     },
   ]);
   // The ocean's textures are swapped every update, so share its uniform objects.
@@ -87,6 +90,12 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
   const mesh = new THREE.Mesh(dense, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
+  // The breaking lip on the beaches (its own mesh; the sea tucks its breaking crests under it).
+  const breaker = createBreaker(uniforms);
+  mesh.add(breaker.mesh);
+  // Spray off the breakers and bursts of white water at the rock.
+  const spray = createSpray(uniforms);
+  mesh.add(spray.points);
 
   function applyParams() {
     const u = uniforms;
@@ -119,7 +128,16 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     params,
     ocean,
     sim,
+    breaker,
+    spray,
     applyParams,
+    setBreakers(lines, rockSites) {
+      const r = breaker.setLines(lines);
+      spray.setBeach(lines);
+      if (rockSites) spray.setRock(rockSites);
+      uniforms.uBreakerOn.value = r.columns > 0 ? 1 : 0;
+      return r;
+    },
     setData(texture, shoreDir, extent, coast) {
       uniforms.uData.value = texture;
       uniforms.uShoreDir.value = shoreDir;
@@ -127,8 +145,9 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
       sim.reset();
     },
-    update(time, camera) {
+    update(time, camera, renderer) {
       uniforms.uTime.value = time;
+      if (renderer) spray.update(camera, renderer);
       // Keep the rings about as dense on screen from 1 km up as from the beach.
       const h = Math.max(camera.position.y, 1);
       uniforms.uGridScale.value = Math.max(1, h / 12);

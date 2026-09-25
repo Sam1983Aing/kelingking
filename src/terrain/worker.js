@@ -2,7 +2,7 @@
 // object-space normal map, so the page stays responsive while tuning.
 
 import { generateHeightfield, signedDistance, blur } from './heightfield.js';
-import { buildTerrainMesh } from './mesh-builder.js';
+import { buildTerrainMesh, contourChains, resampleChain } from './mesh-builder.js';
 import { scatterPlants } from '../veg/scatter.js';
 
 self.onmessage = (e) => {
@@ -13,11 +13,12 @@ self.onmessage = (e) => {
   const water = waterData(hf, N);
   const shoreDir = shoreDirection(hf.shore, N);
   const coast = coastData(hf, mesh, layout, N);
+  const breakers = breakerLines(hf, N);
   const plants = scatterPlants(hf, layout, [0, 1, 2], mesh.surfaceShift);
-  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms,
+  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms, breakers, rockSites: coast.sites,
     plants: { data: plants.data, count: plants.count, ms: plants.ms },
     mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:
@@ -130,6 +131,22 @@ function coastData(hf, mesh, layout, N) {
     const o = openAt(x + (gx / gl) * 12, y + (gy / gl) * 12);
     expo[k] = Math.min(1, Math.max(0, 0.15 + 0.85 * smooth01(-0.35, 0.7, facing))) * (0.2 + 0.8 * o);
   }
+  // Sites for the bursts of white water (src/water/spray.js): a foot cell in every 2.5 m
+  // square, with the way out to sea and the exposure.
+  const sites = [];
+  const bucket = new Set();
+  for (let k = 0; k < N * N; k++) {
+    if (!foot[k] || hf.sand[k] > 0.3) continue;
+    const i = k % N, j = (k / N) | 0;
+    const x = x0 + (i + 0.5) * cell, y = y0 + (j + 0.5) * cell;
+    const key = Math.floor(x / 2.5) * 100000 + Math.floor(y / 2.5);
+    if (bucket.has(key)) continue;
+    bucket.add(key);
+    const r = 3, im = Math.max(0, i - r), ip = Math.min(N - 1, i + r), jm = Math.max(0, j - r), jp = Math.min(N - 1, j + r);
+    const gx = -(S[j * N + ip] - S[j * N + im]), gy = -(S[jp * N + i] - S[jm * N + i]);
+    const gl = Math.hypot(gx, gy) || 1;
+    sites.push(x, y, gx / gl, gy / gl, expo[k]);
+  }
   for (let k = 0; k < N * N; k++) {
     const i = k % N, j = (k / N) | 0;
     const x = x0 + (i + 0.5) * cell, y = y0 + (j + 0.5) * cell;
@@ -139,8 +156,55 @@ function coastData(hf, mesh, layout, N) {
     out[k * 4 + 2] = toHalf(openAt(x, y));
     out[k * 4 + 3] = toHalf(n >= 0 && hf.sand[n] < 0.5 ? 1 : 0);
   }
-  return { data: out, ms: Math.round(performance.now() - t0) };
+  return { data: out, sites: new Float32Array(sites), ms: Math.round(performance.now() - t0) };
 }
+// The beaches' waterlines, for the breaking waves (src/water/breaker.js): smooth polylines
+// 0.5 m apart, as runs of (x, y, offshore x, offshore y, distance along), each run ended by
+// a row of NaN. Only where the shore is sand, and only runs longer than 25 m.
+function breakerLines(hf, N) {
+  const { x0, y0, size } = hf.extent;
+  const cell = size / N;
+  const F = new Float32Array(N * N);
+  for (let k = 0; k < N * N; k++) F[k] = -hf.shore[k];
+  const sandAt = (x, y) => {
+    const i = Math.min(N - 1, Math.max(0, Math.floor((x - x0) / cell))), j = Math.min(N - 1, Math.max(0, Math.floor((y - y0) / cell)));
+    return hf.sand[j * N + i];
+  };
+  const out = [];
+  for (const chain of contourChains(F, N, x0, y0, cell)) {
+    // Split into runs on sand.
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        let len = 0;
+        for (let k = 1; k < run.length; k++) len += Math.hypot(run[k][0] - run[k - 1][0], run[k][1] - run[k - 1][1]);
+        if (len > 25) {
+          const pts = resampleChain(run, () => 0.5);
+          // Offshore normals from the smoothed tangent, pointing to where the shore distance grows.
+          let along = 0;
+          for (let k = 0; k < pts.length; k++) {
+            const a = pts[Math.max(0, k - 6)], b = pts[Math.min(pts.length - 1, k + 6)];
+            let tx = b[0] - a[0], ty = b[1] - a[1];
+            const tl = Math.hypot(tx, ty) || 1;
+            tx /= tl; ty /= tl;
+            let nx = ty, ny = -tx;
+            const px = pts[k][0] + nx * 3, py = pts[k][1] + ny * 3;
+            const i = Math.min(N - 1, Math.max(0, Math.floor((px - x0) / cell))), j = Math.min(N - 1, Math.max(0, Math.floor((py - y0) / cell)));
+            if (F[j * N + i] < 0) { nx = -nx; ny = -ny; }
+            if (k > 0) along += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+            out.push(pts[k][0], pts[k][1], nx, ny, along);
+          }
+          out.push(NaN, NaN, NaN, NaN, NaN);
+        }
+      }
+      run = [];
+    };
+    for (const q of chain) { if (sandAt(q[0], q[1]) > 0.6) run.push(q); else flush(); }
+    flush();
+  }
+  return new Float32Array(out);
+}
+
 const smooth01 = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
 
 // RGBA8: the unit direction pointing offshore (R, G, from -1..1 packed to 0..255), so the

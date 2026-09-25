@@ -183,6 +183,7 @@ placeSun();
 
 scene.add(water.mesh);
 water.uniforms.uDebug.value = +(params.get('debug') || 0);
+water.spray.uniforms.uSprayDebug.value = +(params.get('sprayDebug') || 0);
 
 const terrain = createTerrain(lightUniforms, grade.uniforms);
 scene.add(terrain.mesh);
@@ -251,6 +252,7 @@ worker.onmessage = (e) => {
   water.uniforms.uShoreDir.value?.dispose();
   water.uniforms.uCoast.value?.dispose();
   water.setData(tex, dir, hf.extent, coast);
+  if (hf.breakers) water.setBreakers(hf.breakers, hf.rockSites);
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
   shadowDirty = true;
@@ -604,7 +606,7 @@ renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
-  water.update(simTime, camera);
+  water.update(simTime, camera, renderer);
   if (plants) {
     plants.update(hf?.extent);
     plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;

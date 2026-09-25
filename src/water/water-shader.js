@@ -24,6 +24,7 @@ uniform float uSurge;      // how high the swash runs up (m of water level)
 uniform vec2 uSwellDir;    // direction the swell travels, local
 uniform vec4 uOceanL;      // patch size of each ocean cascade (m)
 uniform vec4 uGust;        // gust pattern: scale (1/m), drift east and north (m/s), strength
+uniform float uBreakerOn;  // 1 when the breaker mesh is drawn (the heightfield tucks its breaking crests away)
 
 const vec4 OCEAN = vec4(-45.0, 900.0, 0.0, 0.0);
 
@@ -100,10 +101,16 @@ struct Surf {
   float foam;     // what it leaves behind (used where the foam simulation does not reach)
   float push;     // how hard the bore is carrying water up the beach (0..1)
   float broken;   // inside the break
+  float hRaw;     // height before the breaking crest is tucked away under the breaker mesh
+  float tau;      // how far this wave is through breaking: 0 starting to throw, 1 collapsed
+  float vph;      // where this point is on its wave (phase, 0 at the crest, < 0 in front)
+  float L;        // wavelength here (m)
+  float wf;       // width of the wave's front (phase)
+  float sink;     // how much of the crest is tucked away (breaker.js draws it instead)
 };
 
 Surf surfAt(vec2 p, vec4 d) {
-  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 30.0, 0.1, 0.0);
   float s = d.g;
   if (s > 280.0 || s < -30.0) return o;
   float sand = d.b;
@@ -122,8 +129,8 @@ Surf surfAt(vec2 p, vec4 d) {
   // Each wave has its own wobble along the shore, so no two crests are parallel.
   float wob = mix(vnoise(p * 0.03 + idx * 5.13), vnoise(p * 0.03 + nb * 5.13), hand) - 0.5;
   float v = v0 + wob * 0.12;
-  float bigK = setSize(idx) * mix(0.35, 1.25, vnoise(p * 0.04 + idx * 7.31));
-  float bigN = setSize(nb) * mix(0.35, 1.25, vnoise(p * 0.04 + nb * 7.31));
+  float bigK = setSize(idx) * mix(0.6, 1.2, vnoise(p * 0.04 + idx * 7.31));
+  float bigN = setSize(nb) * mix(0.6, 1.2, vnoise(p * 0.04 + nb * 7.31));
   float big = mix(bigK, bigN, hand);
 
   // Bigger waves break further out.
@@ -146,8 +153,17 @@ Surf surfAt(vec2 p, vec4 d) {
   float wf = max(mix(0.14, 0.07, smoothstep(br + 45.0, br, s)), 1.8 / Lhere);   // front at least ~2 m wide
   float w = v < 0.0 ? wf : 0.24;
   float crest = exp(-(v * v) / (w * w)) * smoothstep(0.44, 0.32, abs(v));
-  float h = Ak * crest - 0.28 * A;
-  h = max(h, -0.45 * depthHere);
+  // Breaking: this wave's crest reaches its break point, throws its lip and collapses over
+  // 8 m of travel (about 2.5 s). The breaker mesh (breaker.js) draws the face and the lip
+  // then, from 0.45 of a wavelength behind the crest to 0.12 in front, and the heightfield's
+  // own crest is tucked under it.
+  float brK = uBreakAt * (0.7 + 0.35 * bigK);
+  float sCrest = s - v * Lhere;
+  float tau = (brK + 5.0 - sCrest) / 8.0;
+  float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.36, 0.45, v));
+  float sink = win * smoothstep(0.02, 0.12, tau) * (1.0 - smoothstep(0.95, 1.1, tau)) * beachy * uBreakerOn;
+  float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
+  float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
   // and squeezing the front into a few grid rows turns it into a staircase of teeth.
   float lean = Ak * 0.1 * crest * smoothstep(br + 25.0, br, s) * (1.0 - broken);
@@ -162,7 +178,9 @@ Surf surfAt(vec2 p, vec4 d) {
   float us = fract(clock + jag);
   float surge = uSurge * sand * (smoothstep(0.82, 1.0, us) + (1.0 - smoothstep(0.0, 0.55, us)) * step(us, 0.55));
   surge *= 0.75 + 0.5 * vnoise(p * 0.09);
-  h += surge * (1.0 - smoothstep(br * 0.4, br, s));
+  float sw = surge * (1.0 - smoothstep(br * 0.4, br, s));
+  h += sw;
+  hRaw += sw;
 
   float sz = mix(0.85, 1.1, big) * offshoreFade;
   o.h = h * offshoreFade;
@@ -171,6 +189,12 @@ Surf surfAt(vec2 p, vec4 d) {
   o.foam = max(trail, resid) * sz;
   o.push = broken * smoothstep(-0.03, 0.0, v) * exp(-max(v, 0.0) / 0.1) * offshoreFade;
   o.broken = broken * offshoreFade;
+  o.hRaw = hRaw * offshoreFade;
+  o.tau = tau;
+  o.vph = v;
+  o.L = Lhere;
+  o.wf = wf;
+  o.sink = sink;
   return o;
 }
 
@@ -184,6 +208,145 @@ float rockFoamBand(vec2 p, vec4 d, vec4 c) {
   float patchy = smoothstep(0.2, 0.7, fbm3(p * 0.09 + vec2(uTime * 0.1, 0.0)));
   float rock = c.a * (0.5 + 0.5 * pulse) * (0.35 + 0.75 * exposed) * mix(band * band, band, patchy);
   return max(rock, c.a * smoothstep(1.5, 0.0, c.r) * 0.9);
+}
+`;
+
+
+// Shared by the sea and the breaker: caustics and the foam's lace.
+export const FOAM_GLSL = /* glsl */ `
+// Caustics: animated cell edges (F2 - F1 of a jittered grid), two layers.
+float cells(vec2 p, float t) {
+  vec2 ip = floor(p), fp = fract(p);
+  float f1 = 9.0, f2 = 9.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 h = vec2(hash12(ip + g), hash12(ip + g + 19.19));
+    vec2 o = 0.5 + 0.42 * sin(t + 6.2831 * h);
+    float dd = length(g + o - fp);
+    if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) { f2 = dd; }
+  }
+  return f2 - f1;
+}
+float caustics(vec2 p, float t) {
+  float a = 1.0 - smoothstep(0.0, 0.14, cells(p * 0.9, t * 0.9));
+  float b = 1.0 - smoothstep(0.0, 0.16, cells(p * 1.3 + 7.3, -t * 0.7));
+  return a * a + b * b * 0.7;
+}
+
+
+// Relief of thick white water (a heap of bubbles and churned water) at a position in metres:
+// x how much light gets into this spot (the crevices between lumps are dark), yz a tilt of
+// the surface in two directions, for its lumps to face toward or away from the sun. Three
+// scales of lumps, 1 m down to 15 cm, the smallest only where a pixel is small enough.
+vec3 foamRelief(vec2 q, float fp, float t) {
+  vec2 o = vec2(t * 0.35, -t * 0.2);
+  float e = 0.08;
+  float fine = smoothstep(0.08, 0.02, fp);
+  float h0 = vnoise(q * 1.1 + o) * 0.55 + vnoise(q * 2.9 + 3.1 - o) * 0.3 + vnoise(q * 7.3 + 9.2) * 0.15 * fine;
+  float hx = vnoise((q + vec2(e, 0.0)) * 1.1 + o) * 0.55 + vnoise((q + vec2(e, 0.0)) * 2.9 + 3.1 - o) * 0.3 + vnoise((q + vec2(e, 0.0)) * 7.3 + 9.2) * 0.15 * fine;
+  float hy = vnoise((q + vec2(0.0, e)) * 1.1 + o) * 0.55 + vnoise((q + vec2(0.0, e)) * 2.9 + 3.1 - o) * 0.3 + vnoise((q + vec2(0.0, e)) * 7.3 + 9.2) * 0.15 * fine;
+  vec2 g = vec2(hx - h0, hy - h0) / e;
+  return vec3(mix(0.3, 1.0, smoothstep(0.18, 0.62, h0)), g * 0.9);
+}
+
+// Foam lace at a map position: two levels of warping (big swirls, then filaments bent along
+// them), ridges of noise for the filaments, small cells for bubbles up close, and a slow
+// variation in how dense it is. Returns the pattern (x) and the big ridges (y).
+vec2 lacePattern(vec2 pf, float fp) {
+    vec2 q = pf * 0.9;
+    vec2 w1 = vec2(fbm3(q * 0.18 + vec2(0.0, uTime * 0.03)), fbm3(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
+    vec2 qw = q + (w1 - 0.5) * 6.0;
+    vec2 w2 = vec2(fbm3(qw * 0.5 + 2.7), fbm3(qw * 0.5 + 9.1));
+    vec2 qq = qw + (w2 - 0.5) * 2.2;
+    float ridge = 1.0 - abs(2.0 * fbm3(qq * 0.45) - 1.0);
+    float ridge2 = 1.0 - abs(2.0 * fbm3(qq * 1.1 + 4.4) - 1.0);
+    float near = smoothstep(0.12, 0.03, fp);
+    float ridge3 = near > 0.0 ? 1.0 - abs(2.0 * fbm3(qq * 3.2 + 7.7 + w2 * 3.0) - 1.0) : 0.6;
+    float walls = fp < 0.05 ? 1.0 - smoothstep(0.0, 0.25, cells(qq * 3.0, uTime * 0.35)) : 0.4;
+    float body = fbm3(qw * 0.12 + 11.0);
+    float pattern = clamp(pow(ridge, 3.0) * 0.45 + pow(ridge2, 5.0) * 0.3 + mix(0.12, pow(ridge3, 6.0) * 0.35 + walls * 0.12, near)
+                    + (body - 0.5) * 0.9 + 0.08, 0.0, 1.0);
+    return vec2(pattern, ridge);
+}
+`;
+
+// Light coming up out of the water toward the viewer (shared by the sea and the breaker).
+// Follow the refracted view ray down to the seabed. A ray that runs nearly flat (looking
+// through the face of a standing wave) leaves through the back of the wave after 'thick'
+// metres instead, and picks up the light coming through it; forceExit = 1 always does (a
+// thin lip with air behind it).
+export const UNDER_GLSL = /* glsl */ `
+uniform vec3 uSkyIrr;        // irradiance from the sky on flat water
+uniform vec3 uAbsorb;        // absorption per metre, per channel (red dies first)
+uniform vec3 uBackscatter;   // backscattering per metre of clear water
+uniform vec3 uSedAbsorb;     // per unit of suspended sand
+uniform float uSedBack;      // backscattering per unit of suspended sand (white)
+uniform float uGordonF;      // reflectance of deep water = F * bb / (a + bb)
+uniform vec3 uSandAlbedo;
+uniform vec3 uReefAlbedo;
+uniform float uTurbidity;    // stirred-up sand near the surf
+uniform float uMurk;         // the milky plumes (sand in the water of the bays)
+struct Under { vec3 light; float depth0; float sed; float through; vec3 bb; vec3 K; };
+Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float shadow, float thick, float forceExit, float simSand, float simW) {
+  vec3 L = uSunDir;
+  vec3 R = refract(-V, N, 1.0 / 1.333);
+  float down = max(-R.y, 0.0);
+  float depth0 = max(world.y - d.r, 0.0);
+  float tBed = depth0 / max(down, 0.02);
+  float tExit = mix(mix(1e4, thick, smoothstep(0.45, 0.08, down)), thick, forceExit);
+  float tRay = min(min(tBed, tExit), 60.0);
+  float through = smoothstep(0.0, 0.3, (tBed - tExit) / max(tExit, 0.1));
+  vec2 bedP = p + vec2(R.x, -R.z) * tRay;
+  vec4 bd = dataAt(bedP);
+  float depth = mix(max(world.y - bd.r, 0.0), depth0, through);
+
+  // Suspended sand: stirred up where waves break, and hanging in the bays as milky plumes.
+  float nearSurf = bd.b * smoothstep(70.0, 4.0, bd.g);
+  float cloud = fbm3(bedP * 0.03 + vec2(uTime * 0.02, -uTime * 0.015));
+  // The plumes: where the map says there is sand in the water, cut by drifting, warped noise
+  // into clouds with billowing edges, thicker in their middles.
+  vec2 pq = p * 0.0055 + vec2(uTime * 0.0006, -uTime * 0.0004);
+  vec2 pw = vec2(fbm3(pq * 1.7 + 3.3), fbm3(pq * 1.7 + 8.1));
+  float pBig = fbm3(pq + pw * 1.4);
+  float pFine = fbm3(p * 0.045 + pw * 3.0 + uTime * 0.003);
+  float pEdge = d.a * 1.15 + (pBig - 0.5) * 1.1 + (pFine - 0.5) * 0.35 - 0.12;
+  float plume = uMurk * smoothstep(0.25, 0.75, pEdge) * (0.55 + 0.6 * pBig) * step(0.001, d.a);
+  // Coarse sand churned up in the surf (beige: the grains absorb some blue) and the fine
+  // silt of the plumes (white: it only scatters).
+  float churn = mix(uTurbidity * nearSurf * smoothstep(0.2, 0.75, cloud), simSand * uTurbidity * (0.6 + 0.8 * cloud), simW)
+              * mix(0.08, 1.0, smoothstep(0.45, 0.85, N.y));
+  float sed = churn + plume;
+
+  // Absorption and backscattering, clear water plus sand.
+  vec3 a = uAbsorb + churn * uSedAbsorb + plume * 0.012;
+  vec3 bb = uBackscatter + sed * uSedBack;
+  vec3 K = a + bb;
+  vec3 Lr = refract(-L, vec3(0.0, 1.0, 0.0), 1.0 / 1.333);
+  float sunY = max(L.y, 0.0);
+  float muS = max(-Lr.y, 0.3);
+  vec3 Td = exp(-K * depth / muS);
+  vec3 Tv = exp(-K * tRay);
+
+  // Reef and weed: along the foot of the rock, and patches on the sand in the bays.
+  float reef = max((1.0 - bd.b) * smoothstep(40.0, 2.0, bd.g) * 0.85,
+                   smoothstep(0.52, 0.7, fbm3(bedP * 0.018 + 4.0)) * smoothstep(3.0, 9.0, depth) * smoothstep(22.0, 12.0, depth));
+  vec3 bedAlbedo = mix(uSandAlbedo, uReefAlbedo, reef);
+  float causFade = exp(-depth / 4.0) * (1.0 - reef * 0.6) * smoothstep(0.5, 0.08, fp) * (1.0 - clamp(sed * 3.0, 0.0, 1.0));
+  float caus = causFade > 0.01 ? mix(1.0, 0.85 + 0.4 * caustics(bedP, uTime * 1.3), causFade) : 1.0;
+  vec3 Ebed = uSunIrr * sunY * shadow * caus * Td + uSkyIrr * exp(-K * depth * 1.2);
+  vec3 bedRad = bedAlbedo / PI * Ebed;
+  vec3 Rout = normalize(vec3(R.x, max(R.y, 0.08), R.z));
+  if (through > 0.001) {
+    vec3 behind = skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1;
+    bedRad = mix(bedRad, behind, through);
+  }
+  // The water column: what the water itself sends back (deep water reflectance, Gordon's
+  // F bb / (a + bb)), filling in as the bed fades with depth.
+  vec3 E = uSunIrr * sunY * mix(0.35, 1.0, shadow) + uSkyIrr;
+  vec3 column = uGordonF * bb / K * E / PI;
+  vec3 under = bedRad * Tv + column * (1.0 - Tv * mix(Td, vec3(1.0), through));
+
+  return Under(under, depth0, sed, through, bb, K);
 }
 `;
 
@@ -241,23 +404,16 @@ void main() {
 `;
 
 export const WATER_FRAG = /* glsl */ `
+#include <common>
 ${COMMON}
 ${SKY_PARS}
 ${AERIAL_FRAG_PARS}
 ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
+${FOAM_GLSL}
+${UNDER_GLSL}
 uniform sampler2D uOceanB[4];
 uniform float uOceanTail;    // slope variance of ripples too small for any cascade
-uniform vec3 uSkyIrr;        // irradiance from the sky on flat water
-uniform vec3 uAbsorb;        // absorption per metre, per channel (red dies first)
-uniform vec3 uBackscatter;   // backscattering per metre of clear water
-uniform vec3 uSedAbsorb;     // per unit of suspended sand
-uniform float uSedBack;      // backscattering per unit of suspended sand (white)
-uniform float uGordonF;      // reflectance of deep water = F * bb / (a + bb)
-uniform vec3 uSandAlbedo;
-uniform vec3 uReefAlbedo;
-uniform float uTurbidity;    // stirred-up sand near the surf
-uniform float uMurk;         // the milky plumes (sand in the water of the bays)
 uniform float uWhitecaps;
 uniform float uFoam;
 uniform float uReflSpread;   // scale on the unresolved slope spread used for the reflection
@@ -266,7 +422,6 @@ uniform sampler2D uSim;      // the foam simulation
 uniform vec3 uSimRect;       // its square on the map: x0, y0, size
 uniform float uSimOn;
 uniform int uDebug;
-#include <common>
 #include <logdepthbuf_pars_fragment>
 varying vec3 vWorld;
 varying vec2 vGrid;
@@ -286,25 +441,6 @@ vec4 oceanSurface(vec2 p, vec4 sw) {
           + sw.w * sw.w * (max(b3.z - dot(b3.xy, b3.xy), 0.0) + uOceanTail);
   float foam = max(b1.w * smoothstep(0.5, 1.0, sw.y), b2.w * 0.5 * smoothstep(0.6, 1.1, sw.z)) + b0.w * sw.x * 0.5;
   return vec4(s, v, foam);
-}
-
-// Caustics: animated cell edges (F2 - F1 of a jittered grid), two layers.
-float cells(vec2 p, float t) {
-  vec2 ip = floor(p), fp = fract(p);
-  float f1 = 9.0, f2 = 9.0;
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 g = vec2(float(i), float(j));
-    vec2 h = vec2(hash12(ip + g), hash12(ip + g + 19.19));
-    vec2 o = 0.5 + 0.42 * sin(t + 6.2831 * h);
-    float dd = length(g + o - fp);
-    if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) { f2 = dd; }
-  }
-  return f2 - f1;
-}
-float caustics(vec2 p, float t) {
-  float a = 1.0 - smoothstep(0.0, 0.14, cells(p * 0.9, t * 0.9));
-  float b = 1.0 - smoothstep(0.0, 0.16, cells(p * 1.3 + 7.3, -t * 0.7));
-  return a * a + b * b * 0.7;
 }
 
 void main() {
@@ -335,66 +471,11 @@ void main() {
 
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
-  // Light under the surface. Follow the refracted view ray down to the seabed. A ray that
-  // runs nearly flat (looking through the face of a standing wave) leaves through the back
-  // of the wave after a few metres instead, and picks up the light coming through it.
-  vec3 R = refract(-V, N, 1.0 / 1.333);
-  float down = max(-R.y, 0.0);
-  float depth0 = max(vWorld.y - d.r, 0.0);
-  float tBed = depth0 / max(down, 0.02);
-  float thick = 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1);
-  float tExit = mix(1e4, thick, smoothstep(0.45, 0.08, down));
-  float tRay = min(min(tBed, tExit), 60.0);
-  float through = smoothstep(0.0, 0.3, (tBed - tExit) / max(tExit, 0.1));
-  vec2 bedP = p + vec2(R.x, -R.z) * tRay;
-  vec4 bd = dataAt(bedP);
-  float depth = mix(max(vWorld.y - bd.r, 0.0), depth0, through);
-
-  // Suspended sand: stirred up where waves break, and hanging in the bays as milky plumes.
-  float nearSurf = bd.b * smoothstep(70.0, 4.0, bd.g);
-  float cloud = fbm3(bedP * 0.03 + vec2(uTime * 0.02, -uTime * 0.015));
-  // The plumes: where the map says there is sand in the water, cut by drifting, warped noise
-  // into clouds with billowing edges, thicker in their middles.
-  vec2 pq = p * 0.0055 + vec2(uTime * 0.0006, -uTime * 0.0004);
-  vec2 pw = vec2(fbm3(pq * 1.7 + 3.3), fbm3(pq * 1.7 + 8.1));
-  float pBig = fbm3(pq + pw * 1.4);
-  float pFine = fbm3(p * 0.045 + pw * 3.0 + uTime * 0.003);
-  float pEdge = d.a * 1.15 + (pBig - 0.5) * 1.1 + (pFine - 0.5) * 0.35 - 0.12;
-  float plume = uMurk * smoothstep(0.25, 0.75, pEdge) * (0.55 + 0.6 * pBig) * step(0.001, d.a);
-  // Coarse sand churned up in the surf (beige: the grains absorb some blue) and the fine
-  // silt of the plumes (white: it only scatters).
-  float churn = mix(uTurbidity * nearSurf * smoothstep(0.2, 0.75, cloud), sim.g * uTurbidity * (0.6 + 0.8 * cloud), simW)
-              * mix(0.08, 1.0, smoothstep(0.45, 0.85, N.y));
-  float sed = churn + plume;
-
-  // Absorption and backscattering, clear water plus sand.
-  vec3 a = uAbsorb + churn * uSedAbsorb + plume * 0.012;
-  vec3 bb = uBackscatter + sed * uSedBack;
-  vec3 K = a + bb;
-  vec3 Lr = refract(-L, vec3(0.0, 1.0, 0.0), 1.0 / 1.333);
+  Under uw = underLight(p, d, vWorld, N, V, fp, shadow, 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1), 0.0, sim.g, simW);
+  vec3 under = uw.light;
+  float depth0 = uw.depth0, sed = uw.sed, through = uw.through;
+  vec3 bb = uw.bb, K = uw.K;
   float sunY = max(L.y, 0.0);
-  float muS = max(-Lr.y, 0.3);
-  vec3 Td = exp(-K * depth / muS);
-  vec3 Tv = exp(-K * tRay);
-
-  // Reef and weed: along the foot of the rock, and patches on the sand in the bays.
-  float reef = max((1.0 - bd.b) * smoothstep(40.0, 2.0, bd.g) * 0.85,
-                   smoothstep(0.52, 0.7, fbm3(bedP * 0.018 + 4.0)) * smoothstep(3.0, 9.0, depth) * smoothstep(22.0, 12.0, depth));
-  vec3 bedAlbedo = mix(uSandAlbedo, uReefAlbedo, reef);
-  float causFade = exp(-depth / 4.0) * (1.0 - reef * 0.6) * smoothstep(0.5, 0.08, fp) * (1.0 - clamp(sed * 3.0, 0.0, 1.0));
-  float caus = causFade > 0.01 ? mix(1.0, 0.85 + 0.4 * caustics(bedP, uTime * 1.3), causFade) : 1.0;
-  vec3 Ebed = uSunIrr * sunY * shadow * caus * Td + uSkyIrr * exp(-K * depth * 1.2);
-  vec3 bedRad = bedAlbedo / PI * Ebed;
-  vec3 Rout = normalize(vec3(R.x, max(R.y, 0.08), R.z));
-  if (through > 0.001) {
-    vec3 behind = skyRadiance(Rout) * 0.5 + uSunIrr * shadow * pow(max(dot(Rout, L), 0.0), 3.0) * 0.1;
-    bedRad = mix(bedRad, behind, through);
-  }
-  // The water column: what the water itself sends back (deep water reflectance, Gordon's
-  // F bb / (a + bb)), filling in as the bed fades with depth.
-  vec3 E = uSunIrr * sunY * mix(0.35, 1.0, shadow) + uSkyIrr;
-  vec3 column = uGordonF * bb / K * E / PI;
-  vec3 under = bedRad * Tv + column * (1.0 - Tv * mix(Td, vec3(1.0), through));
 
   // Surface reflection and the sun glint.
   float NoV = max(dot(N, V), 1e-3);
@@ -463,23 +544,8 @@ void main() {
   vec2 travel = sim.ba * simW;
   if (amount > 0.002 || caps > 0.002 || d.b > 0.01) {
     // On a steep face the ground position barely changes going up, so fold the height in.
-    vec2 pf = p - travel + vec2(1.7, -1.3) * vWorld.y;
-    vec2 q = pf * 0.9;
-    // Two levels of warping: big swirls, then the filaments bent along them.
-    vec2 w1 = vec2(fbm3(q * 0.18 + vec2(0.0, uTime * 0.03)), fbm3(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
-    vec2 qw = q + (w1 - 0.5) * 6.0;
-    vec2 w2 = vec2(fbm3(qw * 0.5 + 2.7), fbm3(qw * 0.5 + 9.1));
-    vec2 qq = qw + (w2 - 0.5) * 2.2;
-    // Filaments: the ridges of noise (lines where it crosses its middle), at two scales.
-    ridge = 1.0 - abs(2.0 * fbm3(qq * 0.45) - 1.0);
-    float ridge2 = 1.0 - abs(2.0 * fbm3(qq * 1.1 + 4.4) - 1.0);
-    // Fine threads and bubbles, only where a pixel is small enough to show them.
-    float near = smoothstep(0.12, 0.03, fp);
-    float ridge3 = near > 0.0 ? 1.0 - abs(2.0 * fbm3(qq * 3.2 + 7.7 + w2 * 3.0) - 1.0) : 0.6;
-    float walls = fp < 0.05 ? 1.0 - smoothstep(0.0, 0.25, cells(qq * 3.0, uTime * 0.35)) : 0.4;
-    float body = fbm3(qw * 0.12 + 11.0);
-    pattern = clamp(pow(ridge, 3.0) * 0.45 + pow(ridge2, 5.0) * 0.3 + mix(0.12, pow(ridge3, 6.0) * 0.35 + walls * 0.12, near)
-                    + (body - 0.5) * 0.9 + 0.08, 0.0, 1.0);
+    vec2 lp = lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp);
+    pattern = lp.x; ridge = lp.y;
   }
   float soft = clamp(fwidth(pattern) * 1.5, 0.02, 0.15);
   float lace = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, pattern);
@@ -501,9 +567,12 @@ void main() {
   foam = max(foam, edge * 0.85 * (0.6 + 0.4 * ridge));
   // Thin old foam lets the water show through; sand in the break stains it beige.
   vec3 foamAlb = mix(vec3(0.8), vec3(0.7, 0.66, 0.56), clamp(sim.g * simW * 0.5, 0.0, 0.4));
-  // Foam is a heap of bubbles: its lumps shade each other, more so in thick fresh foam.
-  float heap = mix(1.0, 0.62 + 0.5 * lumps, fresh) * mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
-  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(N, L), 0.2) * shadow + uSkyIrr);
+  // Thick fresh foam is a heap of lumps that shade each other and face the sun or not;
+  // old foam is a flat film with a little texture.
+  vec3 rel = fresh > 0.01 ? foamRelief(p - travel, fp, uTime) : vec3(1.0, 0.0, 0.0);
+  vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * fresh);
+  float heap = mix(1.0, rel.x, fresh) * mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
+  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr * mix(1.0, rel.x, fresh));
   col = mix(col, foamRad, foam * mix(0.75, 1.0, max(fresh, smoothstep(0.3, 0.8, amount))));
 
   // Fade out over the last few centimetres so the wet sand shows through the swash.
@@ -511,7 +580,10 @@ void main() {
   float alpha = max(smoothstep(0.0, 0.12, film), foam * smoothstep(0.0, 0.03, film));
 
   gl_FragColor = vec4(col * vApT + vApIns, alpha);
-  if (uDebug == 1) gl_FragColor = vec4(vec3(sed), 1.0);
+  // Debug views skip the exposure and tone curve so their values read straight (4: the light
+  // from under the surface, is scaled to the same exposure by hand).
+  if (uDebug > 0 && uDebug != 4) {
+    if (uDebug == 1) gl_FragColor = vec4(vec3(sed), 1.0);
   if (uDebug == 2) gl_FragColor = vec4(vec3(through), 1.0);
   if (uDebug == 3) gl_FragColor = vec4(amount, caps, fresh, 1.0);
   if (uDebug == 8) gl_FragColor = vec4(sim.rg, length(sim.ba) * 0.05, 1.0);
@@ -519,6 +591,8 @@ void main() {
   if (uDebug == 5) gl_FragColor = vec4(N * 0.5 + 0.5, 1.0);
   if (uDebug == 6) gl_FragColor = vec4(vec3(sub * 4.0), 1.0);
   if (uDebug == 7) { vec4 cd = coastAt(p); gl_FragColor = vec4(smoothstep(30.0, 0.0, cd.r) * cd.a, cd.g, cd.b, 1.0); }
+    return;
+  }
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   // Label: water (2), distance, and whether the bed is shallow enough to show.
