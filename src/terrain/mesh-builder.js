@@ -34,7 +34,7 @@ export function buildTerrainMesh(hf, layout, M) {
   const inFocus = (x, y) => smooth(fc.x[0] - fc.soft, fc.x[0], x) * (1 - smooth(fc.x[1], fc.x[1] + fc.soft, x))
     * smooth(fc.y[0] - fc.soft, fc.y[0], y) * (1 - smooth(fc.y[1], fc.y[1] + fc.soft, y));
   const across = (x, y) => lerp(cfg.faceStep[1], cfg.faceStep[0], inFocus(x, y)) / q;
-  const bands = { pos: [], nrm: [], idx: [], columns: [], hash: new Map() };
+  const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], strips: [], hash: new Map() };
   let nCols = 0;
   for (const chain of chains) {
     const pts = resampleChain(chain, (x, y) => across(x, y) * cfg.faceStepAlong);
@@ -57,11 +57,15 @@ export function buildTerrainMesh(hf, layout, M) {
     // Walk the face with the land on the left, so every strip winds the same way.
     const mid = cols[cols.length >> 1], nx = cols[Math.min(cols.length - 1, (cols.length >> 1) + 1)];
     if ((nx.x - mid.x) * mid.gy - (nx.y - mid.y) * mid.gx < 0) cols.reverse();
-    // One profile per column; runs of columns with a profile become strips.
+    // Each column's window, then the windows smoothed along the face (where one stops
+    // short and its neighbour does not, the rows of the two would not line up), then one
+    // profile per column. Runs of columns with a profile become strips.
+    for (const col of cols) col.w = windowAlong(col.x, col.y, col.gx, col.gy);
+    smoothWindows(cols);
     let run = [];
     const flush = () => { if (run.length >= 3) buildStrip(run); run = []; };
     for (const col of cols) {
-      col.P = profileAlong(col.x, col.y, col.gx, col.gy);
+      col.P = col.w ? profileAlong(col.x, col.y, col.gx, col.gy, col.w.a, col.w.b) : null;
       if (col.P) run.push(col); else flush();
     }
     flush();
@@ -72,6 +76,7 @@ export function buildTerrainMesh(hf, layout, M) {
   // are zipped together by how far up the profile each vertex is.
   function buildStrip(cols) {
     const n = cols.length;
+    bands.strips.push(cols);
     // Carving fades out over the last few metres of a strip, where the plain ground takes over.
     let run = 0;
     const along = cols.map((c, k) => (run += k ? Math.hypot(c.x - cols[k - 1].x, c.y - cols[k - 1].y) : 0));
@@ -84,6 +89,7 @@ export function buildTerrainMesh(hf, layout, M) {
       const R = Math.min(900, Math.max(4, Math.ceil(S / du) + 1));
       col.first = bands.pos.length / 3;
       col.R = R;
+      const cs = [];
       for (let r = 0; r < R; r++) {
         const s = (r / (R - 1)) * S;
         let lo = 0, hi = P.S.length - 1;
@@ -99,7 +105,14 @@ export function buildTerrainMesh(hf, layout, M) {
         // fighting.
         h -= 0.5 * (1 - smooth(0, 2.5, Math.min(t - P.a, P.b - t)));
         bands.pos.push(bx + c * col.gx, h, -(by + c * col.gy));
+        cs.push(c);
+        // Sand runs on in under an overhang, where the ground texture cannot know it.
+        const F = P.feat;
+        const sand = F.onSand * (1 - smooth(F.hFoot + 0.4, F.hFoot + 1.6, h)) * smooth(0.5, 2, c);
+        bands.rock.push(sand, 1, Math.max(c, 0));
+        bands.lit.push(1);
       }
+      col.cs = cs;
       nCols++;
       const key = hashKey(col.x, col.y);
       if (!bands.hash.has(key)) bands.hash.set(key, []);
@@ -138,12 +151,49 @@ export function buildTerrainMesh(hf, layout, M) {
         bands.nrm.push(nx / l, ny / l, nz / l);
       }
     }
+    // How much sky each point sees past the rock that hangs over it, in the plane of its
+    // column (overhangs only: a wall standing behind open ground is left to the sky light,
+    // so the strip and the plain ground beside it agree). The lowest angle, from the
+    // outward horizon, at which rock above and further out blocks the sky; then the
+    // cosine-weighted share of the sky arc below it.
+    for (const col of cols) {
+      const o = (v) => -(bands.pos[v * 3] * col.gx - bands.pos[v * 3 + 2] * col.gy);   // outward
+      // Furthest out anything above reaches, to skip the points nothing hangs over.
+      const above = new Float32Array(col.R + 1).fill(-1e9);
+      for (let r = col.R - 1; r >= 0; r--) above[r] = Math.max(above[r + 1], o(col.first + r));
+      for (let r = 0; r < col.R; r++) {
+        const v = col.first + r;
+        const or0 = o(v), h0 = bands.pos[v * 3 + 1];
+        if (above[r + 1] <= or0 + 0.05) continue;
+        let lowest = Math.PI;
+        for (let r2 = r + 1; r2 < col.R; r2++) {
+          const v2 = col.first + r2;
+          const dout = o(v2) - or0, dh = bands.pos[v2 * 3 + 1] - h0;
+          if (dout > 0.05 && dh > 0) lowest = Math.min(lowest, Math.atan2(dh, dout));
+        }
+        if (lowest >= Math.PI) continue;
+        const n = v * 3;
+        const nOut = -(bands.nrm[n] * col.gx - bands.nrm[n + 2] * col.gy), nUp = bands.nrm[n + 1];
+        const nu = Math.atan2(nUp, nOut);
+        const arc = (A, B) => {
+          const a = Math.max(A, nu - Math.PI / 2), b = Math.min(B, nu + Math.PI / 2);
+          return b > a ? Math.sin(b - nu) - Math.sin(a - nu) : 0;
+        };
+        const full = arc(0, Math.PI);
+        bands.rock[n + 1] = full > 1e-3 ? Math.min(1, arc(0, lowest) / full) : 0.2;
+        // The sunlit ground it can see: only out past the drip line (the furthest out the
+        // rock above it reaches), below the horizon. Half the cosine-weighted arc, so an
+        // open wall comes out at 0.5 and an open ceiling at 1, as for open ground.
+        const beta = Math.atan2(Math.max(h0 - col.P.feat.hFoot, 0.3), above[r + 1] - or0);
+        bands.lit[v] = 0.5 * arc(-beta, 0);
+      }
+    }
   }
 
   // The profile along a line across a face, from its foot on the middle of the face (F)
   // in the direction g (inland). t is the distance along the line, which for a distance
   // field is also the field's value.
-  function profileAlong(Fx, Fy, gx, gy) {
+  function windowAlong(Fx, Fy, gx, gy) {
     const face = Math.max(sample(f.face, Fx, Fy), 5);
     // Stop short of the crest of a ridge (PSIMAX, the face field's highest value nearby).
     let a = -0.5 * face - cfg.below;
@@ -167,7 +217,38 @@ export function buildTerrainMesh(hf, layout, M) {
     const ea = edgeOf(a), eb = edgeOf(b);
     if (ea > a) a = Math.min(ea + 3, -2);
     if (eb < b) b = Math.max(eb - 3, 2);
-    if (b - a < 6) return null;
+    return { a, b };
+  }
+
+  // Along a face, each window end becomes the lowest within 4 m of it, then the average over
+  // 4 m of that: smooth, and never further out than any column allowed.
+  function smoothWindows(cols) {
+    const n = cols.length;
+    const along = [0];
+    for (let k = 1; k < n; k++) along.push(along[k - 1] + Math.hypot(cols[k].x - cols[k - 1].x, cols[k].y - cols[k - 1].y));
+    const R = 4;
+    for (const [key, sign] of [['a', -1], ['b', 1]]) {
+      const raw = cols.map((c) => (c.w ? sign * c.w[key] : null));
+      const lo = raw.map((_, k) => {
+        if (raw[k] === null) return null;
+        let m = raw[k];
+        for (let j = k - 1; j >= 0 && along[k] - along[j] <= R && raw[j] !== null; j--) m = Math.min(m, raw[j]);
+        for (let j = k + 1; j < n && along[j] - along[k] <= R && raw[j] !== null; j++) m = Math.min(m, raw[j]);
+        return m;
+      });
+      for (let k = 0; k < n; k++) {
+        if (lo[k] === null) continue;
+        let acc = 0, cnt = 0;
+        for (let j = k; j >= 0 && along[k] - along[j] <= R && lo[j] !== null; j--) { acc += lo[j]; cnt++; }
+        for (let j = k + 1; j < n && along[j] - along[k] <= R && lo[j] !== null; j++) { acc += lo[j]; cnt++; }
+        cols[k].w[key] = sign * (acc / cnt);
+      }
+    }
+    for (const c of cols) if (c.w && c.w.b - c.w.a < 6) c.w = null;
+  }
+
+  function profileAlong(Fx, Fy, gx, gy, a, b) {
+    const face = Math.max(sample(f.face, Fx, Fy), 5);
     const K0 = 48;
     const t = [], h = [];
     for (let k = 0; k < K0; k++) {
@@ -179,21 +260,22 @@ export function buildTerrainMesh(hf, layout, M) {
     const hAt = (tm) => heightAt(Fx + tm * gx, Fy + tm * gy);
     refine(t, h, (i) => Math.hypot(t[i + 1] - t[i], h[i + 1] - h[i]) > 0.7, hAt);
 
-    // Carve, then refine again where the carving stretches the profile (a cave's ceiling).
+    // Rows are shared out along the profile before carving: the carving only moves them
+    // sideways, so a little more or less of it from one column to the next does not shift
+    // every row above it (which zips neighbouring columns together crooked).
     const feat = carve.features(t, h, face, Fx, Fy, gx, gy);
     const slopeAt = (i) => {
       const i0 = Math.max(0, i - 1), i1 = Math.min(t.length - 1, i + 1);
       return Math.abs(h[i1] - h[i0]) / Math.max(t[i1] - t[i0], 1e-6);
     };
-    const cOf = (tk, hk) => carve.offset(Fx, Fy, tk, hk, feat, a, b, Math.abs(hAt(tk + 1.2) - hAt(tk - 1.2)) / 2.4);
-    const c = t.map((tk, i) => carve.offset(Fx, Fy, tk, h[i], feat, a, b, slopeAt(i)));
-    refine(t, h, (i) => Math.hypot(t[i + 1] + c[i + 1] - t[i] - c[i], h[i + 1] - h[i]) > 0.7, hAt, c, cOf);
-
     const S = new Float64Array(t.length);
     const sl = new Float32Array(t.length);
     let cmax = 0;
-    for (let i = 0; i < t.length; i++) { sl[i] = slopeAt(i); cmax = Math.max(cmax, c[i]); }
-    for (let i = 1; i < t.length; i++) S[i] = S[i - 1] + Math.hypot(t[i] + c[i] - t[i - 1] - c[i - 1], cfg.weight * (h[i] - h[i - 1]));
+    for (let i = 0; i < t.length; i++) {
+      sl[i] = slopeAt(i);
+      cmax = Math.max(cmax, carve.offset(Fx, Fy, t[i], h[i], feat, a, b, sl[i]));
+    }
+    for (let i = 1; i < t.length; i++) S[i] = S[i - 1] + Math.hypot(t[i] - t[i - 1], cfg.weight * (h[i] - h[i - 1]));
     return { t, S, sl, a, b, feat, cmax };
   }
 
@@ -204,6 +286,8 @@ export function buildTerrainMesh(hf, layout, M) {
   const xs = axisCoords(x0, size, M, fc.x, fc.density, fc.soft);
   const ys = axisCoords(y0, size, M, fc.y, fc.density, fc.soft);
   const pos = new Float32Array(M * M * 3);
+  const gridW = new Float32Array(M * M).fill(-1);   // push weight, for debugging (-1 = not near a face)
+  const dbg = cfg.debug ? [] : null;
   let pushed = 0;
   const e = f.cell;
   for (let j = 0; j < M; j++) {
@@ -223,12 +307,18 @@ export function buildTerrainMesh(hf, layout, M) {
           const col = nearestColumn(Fx, Fy);
           if (col && psi > col.P.a && psi < col.P.b) {
             const w = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist);
-            // In by the carving at this spot (never out), and a margin.
+            // In by the deepest carving within 2.5 m above or below this spot (the grid's
+            // big triangles would otherwise cut across the bend of a cave's ceiling), never
+            // out, plus a margin; and down a little, but only on flat ground: under a ceiling
+            // down is out into the cave.
             const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
-            const cl = Math.max(0, carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade);
+            const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
+            const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade;
             const inward = (cl + 1.2) * w;
+            gridW[v] = w;
+            if (dbg) dbg.push({ v, x, y, h, psi, w, cl, dist: col.dist, cx: col.x, cy: col.y, a: col.P.a, b: col.P.b, fade: col.fade });
             px += inward * gx; py += inward * gy;
-            h -= 1.2 * w;
+            h -= 1.2 * w * smooth(1.5, 0.4, sl);
             if (w > 0) pushed++;
           }
         }
@@ -250,6 +340,21 @@ export function buildTerrainMesh(hf, layout, M) {
     return best;
   }
 
+  // Where the carved face is, for things placed on the heightfield (the plants): how far a
+  // point at (x, y, h) on the face was moved in (positive) or out, and which way is in.
+  function surfaceShift(x, y, h) {
+    const psi = sample(f.PSI, x, y);
+    if (!(psi > -60 && psi < 60)) return null;
+    let gx = sample(f.PSI, x + e, y) - sample(f.PSI, x - e, y), gy = sample(f.PSI, x, y + e) - sample(f.PSI, x, y - e);
+    const gl = Math.hypot(gx, gy);
+    if (gl / (2 * e) < 0.3) return null;
+    gx /= gl; gy /= gl;
+    const col = nearestColumn(x - psi * gx, y - psi * gy);
+    if (!col || col.dist > 2.5 || psi <= col.P.a || psi >= col.P.b) return null;
+    const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
+    return { c: carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade, gx, gy };
+  }
+
   const gridIdx = gridIndex(M, pos, cfg.cull);
   const gridNrm = gridNormals(pos, M);
 
@@ -259,6 +364,18 @@ export function buildTerrainMesh(hf, layout, M) {
   positions.set(pos); positions.set(bands.pos, pos.length);
   const normals = new Float32Array(positions.length);
   normals.set(gridNrm); normals.set(bands.nrm, gridNrm.length);
+  // Per vertex, for the shader: sand under an overhang, sky seen past the overhang, how far
+  // the face is carved in (m / 32), and the sunlit ground seen from under an overhang (1 =
+  // nothing overhead, use the open-ground bounce). The plain ground: none, all, none, 1.
+  const rock = new Uint8Array((positions.length / 3) * 4);
+  for (let v = 0; v < M * M; v++) { rock[v * 4 + 1] = 255; rock[v * 4 + 3] = 255; }
+  for (let v = 0; v < nb; v++) {
+    const o = (M * M + v) * 4;
+    rock[o] = Math.round(255 * Math.min(Math.max(bands.rock[v * 3], 0), 1));
+    rock[o + 1] = Math.round(255 * Math.min(Math.max(bands.rock[v * 3 + 1], 0), 1));
+    rock[o + 2] = Math.round(255 * Math.min(bands.rock[v * 3 + 2] / 32, 1));
+    rock[o + 3] = Math.round(255 * Math.min(Math.max(bands.lit[v], 0), 1));
+  }
   const bandIdx = [];
   const base = M * M;
   for (let t = 0; t < bands.idx.length; t += 3) {
@@ -268,7 +385,7 @@ export function buildTerrainMesh(hf, layout, M) {
   }
   const index = new Uint32Array(gridIdx.length + bandIdx.length);
   index.set(gridIdx); index.set(bandIdx, gridIdx.length);
-  return { positions, normals, index, M, moved: nb, columns: nCols, pushed,
+  return { positions, normals, index, rock, M, moved: nb, columns: nCols, pushed, gridW, dbg, hash: bands.hash, surfaceShift, strips: bands.strips, bandPos: bands.pos,
     gridTris: gridIdx.length / 3, faceTris: bandIdx.length / 3, ms: Math.round(performance.now() - t0) };
 }
 
@@ -360,11 +477,12 @@ function resampleChain(pts, spacing) {
   return out;
 }
 
-// Split segments that fail a test until none do (at most five times over). New samples get
-// their height from hAt, and, when a carving function is given, their carving too.
+// Split segments that fail a test until none do (at most ten times over: a sheer face can
+// fall 100 m within one of the first samples). New samples get their height from hAt, and,
+// when a carving function is given, their carving too.
 function refine(t, h, tooLong, hAt, c = null, cOf = null) {
   let added = 0;
-  for (let pass = 0; pass < 5; pass++) {
+  for (let pass = 0; pass < 10; pass++) {
     let any = false;
     for (let i = 0; i < t.length - 1; i++) {
       if (!tooLong(i)) continue;
@@ -424,7 +542,10 @@ export function makeCarver(hf, layout, sample) {
     const tFoot = tW - 1;
     const hFoot = at(tFoot);
     const onSand = smooth(0.8, 2.4, at(tW - 3));
-    return { wall, onSand, tFoot, hFoot, hRim: hMax, maxIn };
+    // The top of the wall itself (the mapped cliff top), which on the beach is well below
+    // the top of the profile: the ridge carries on up behind it as a slope.
+    const hEdge = Math.min(sample(f.EDGE, Fx, Fy), hMax);
+    return { wall, onSand, tFoot, hFoot, hRim: hMax, hEdge, maxIn };
   }
 
   function zoneAt(x, y) {
@@ -468,7 +589,7 @@ export function makeCarver(hf, layout, sample) {
       const recess = z.recess, cave = z.cave, caveH = Math.max(z.caveH, 1);
       // Below the foot, the sand runs on in under the overhang.
       const zz = t < F.tFoot ? 0 : Math.max(h - F.hFoot, 0);
-      const hr = Math.min(zz / Math.max(F.hRim - F.hFoot, 1), 1);
+      const hr = Math.min(zz / Math.max(F.hEdge - F.hFoot, 1), 1);
       let cw = recess * (1 - hr) ** z.scoop;
       cw += cave * (1 - smooth(caveH, caveH + 5, zz));
       cw += under * (1 - smooth(underH, underH + 2.5, zz));

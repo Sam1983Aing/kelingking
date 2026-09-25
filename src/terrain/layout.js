@@ -69,11 +69,15 @@ export function defaultLayout() {
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
       { name: 'beach south crescent', at: [70, 95], r: 30, sand: 1 },
+      { name: 'beach south end', at: [60, 66], r: 20, sand: 1 },
       { name: 'emboo beach', at: [390, 205], r: 45, sand: 1 },
       { name: 'neck root south-east', at: [195, 92], r: 30, sand: 1 },
       { name: 'trail slope', at: [165, 185], r: 45, face: 62, pf: 1.5 },
       { name: 'beach back north', at: [150, 290], r: 45, face: 28, pf: 1.2 },
       { name: 'neck wall', at: [110, 85], r: 38, face: 9, pf: 0.7 },
+      // The wall at the south end of the beach drops sheer from its rim; the mesh builder
+      // then cuts it back underneath into the overhang (overhangs, below).
+      { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
       { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
@@ -103,7 +107,7 @@ export function defaultLayout() {
     // down), cave = a further cut at the foot, caveH metres high. Rock in the sea: a deeper
     // notch (notch metres deep, notchTop high).
     overhangs: [
-      { name: 'beach south end', at: [58, 60], r: 34, recess: 14, cave: 9, caveH: 10, scoop: 2.5 },
+      { name: 'beach south end', at: [54, 63], r: 34, recess: 22, cave: 10, caveH: 8, scoop: 1.8 },
       { name: 'jaw arch', at: [6, 80], r: 24, notch: 9, notchTop: 13 },
     ],
 
