@@ -85,10 +85,10 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     transparent: true,
   });
 
-  // Dense grid for eye level, lighter one once the camera is up in the air. (v4: 640 rings
-  // near the camera instead of 960; the vertices do more work now, and side by side at the
+  // Dense grid for eye level, lighter one once the camera is up in the air. (v4: 480 rings
+  // near the camera instead of 960. The vertices do more work now, and side by side at the
   // shore break the two could not be told apart.)
-  const dense = radialGrid(640, 960, 0.8, 14000, 150, 0.72);
+  const dense = radialGrid(480, 960, 0.8, 14000, 150, 0.72);
   const light = radialGrid(640, 720, 0.8, 14000, 150, 0.6);
   const mesh = new THREE.Mesh(dense, material);
   mesh.frustumCulled = false;
@@ -170,16 +170,17 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       // for each unit it goes sideways by tan(hHalf); where that reach runs out the camera
       // sees straight down and needs the whole ring.
       const reach = Math.cos(pitch) - Math.tan(vHalf) * Math.abs(Math.sin(pitch));
-      const half = reach > 0.08 ? Math.min(Math.PI, Math.atan(Math.tan(hHalf) / reach) + 0.3) : Math.PI;
+      const half = reach > 0.08 ? Math.min(Math.PI, Math.atan(Math.tan(hHalf) / reach) + 0.2) : Math.PI;
       const n = Math.min(segs, Math.ceil((half / Math.PI) * segs / 2) * 2 + 4);
       const s0 = Math.max(0, Math.floor(segs / 2 - n / 2));
       g.setDrawRange(s0 * per, Math.min(n, segs - s0) * per);
       // Vertex spacing per metre from the camera, near the camera (radial and around).
-      uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0114;
+      uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0152;
       // The foam simulation moves the ocean along with it (the rock bursts follow the swell).
       sim.update(time, (t) => ocean.update(t));
       ocean.update(time);
       breaker.update(time);
+      breaker.sortChunks(camera);
     },
   };
 }

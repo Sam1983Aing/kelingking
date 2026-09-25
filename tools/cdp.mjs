@@ -71,6 +71,7 @@ export async function launch() {
             await new Promise((res) => setTimeout(res, 250));
           }
         },
+        front: () => send('Page.bringToFront', {}, sessionId),
         close: () => send('Target.closeTarget', { targetId }),
       };
     },

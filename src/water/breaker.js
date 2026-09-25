@@ -150,6 +150,17 @@ varying float vTear;
 void main() {
   float v = aProf.x;
   BreakCol bc = readBreak(aProf.z);
+  // A stretch of beach that is not breaking now costs next to nothing: its whole column goes
+  // to one point a metre under the sea (the triangles to it have no area, or lie under the
+  // sea where the ribbon starts or stops, and are faded out there anyway).
+  if (bc.on < 0.5 || bc.tau > 1.05) {
+    vec3 w0 = vec3(aLine.x, -1.0, -aLine.y);
+    vWorld = w0; vNormal = vec3(0.0, 1.0, 0.0); vMap = aLine.xy; vInfo = vec4(aProf.x, 0.0, 0.0, 0.0);
+    vAlong = aProf.y; vTear = 1.0;
+    gl_Position = projectionMatrix * (viewMatrix * vec4(w0, 1.0));
+    vApT = vec3(1.0); vApIns = vec3(0.0);
+    return;
+  }
   // Where neighbouring columns found different waves (their crests far apart), the triangles
   // between them would stretch across the gap: those are dropped (vTear, in the fragment).
   float cMax = float(textureSize(uBreakCol0, 0).x) - 1.0;
@@ -169,18 +180,21 @@ void main() {
   Surf sp = surfAt(pm, dataAt(pm));
   float yHf = sp.hRaw;
   float y = mix(yRef + pr.y, yHf, pr.w);
-  // The face's foot and the floor never dip below the sea as it is drawn there (in front the
-  // trough is not flat: the last wave's bore and the swash lift it), or the sea would cut
-  // across the bottom of the face in a straight line.
-  if (v > 0.6) y = max(y, sp.h + 0.02);
+  // (Where the sea in front stands higher than the foot of the face, carrying the last wave's
+  // bore, it covers the foot: the water in front of a breaking wave does that.)
   // Collapse into the bore: the thrown water lands as a lumpy heap of white water, then
   // settles into the heightfield's own bore (so the ribbon can switch off without a jump).
   float heap = smoothstep(0.7, 0.85, tau) * (1.0 - smoothstep(0.9, 1.05, tau));
   float lumps = vnoise(vec2(aProf.y * 0.9, v * 8.0 + tau * 3.0)) * 0.6 + vnoise(vec2(aProf.y * 2.7, v * 21.0)) * 0.4;
   y += heap * H * 0.35 * lumps * smoothstep(0.2, 0.45, v) * (1.0 - smoothstep(0.75, 0.95, v));
   y = mix(y, yHf, smoothstep(0.88, 1.05, tau));
-  // Off: tucked just under the sea, out of sight.
-  y = mix(yHf - 0.2, y, on);
+  // The ribbon hands over to the sea by sinking under it, at its back and front edges and at
+  // the start and end of each break: where the two are nearly the same shape, whichever is
+  // higher shows, and the depth test draws the seam. (A blend or a dither there showed as a
+  // band, because the two are never shaded exactly alike.)
+  float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.78, 0.85, v))
+               * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.92, 1.03, tau)) * on;
+  y = mix(sp.h - 0.15, y, keepUp);
 
   // Normal from the cross-section's slope and the waterline's direction.
   float e = 0.004;
@@ -238,12 +252,9 @@ void main() {
     float holes = vnoise(vec2(vAlong * 2.3, vInfo.x * 40.0 + vInfo.y * 5.0)) * 0.65 + vnoise(vec2(vAlong * 7.9, vInfo.x * 110.0)) * 0.35;
     if (holes < rim * 0.75 * smoothstep(0.2, 0.45, vInfo.y)) discard;
   }
-  // And it fades into the sea over its last stretch at both ends (drawn after the sea), and in
-  // time: it takes over from the sea as the break starts, over the same stretch in which the
-  // sea tucks its crest away, and hands back as the collapse turns into the bore.
-  float edgeFade = smoothstep(0.0, 0.06, vInfo.x) * (1.0 - smoothstep(0.78, 0.86, vInfo.x))
-                 * smoothstep(0.02, 0.1, vInfo.y) * (1.0 - smoothstep(0.9, 1.02, vInfo.y));
-  if (edgeFade < 0.005) discard;
+#ifdef BFLAT
+  gl_FragColor = vec4(0.1, 0.4, 0.5, 1.0); return;
+#endif
   float v = vInfo.x, tau = vInfo.y, H = vInfo.w;
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 N = normalize(vNormal);
@@ -327,7 +338,7 @@ void main() {
   foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
   col = mix(col, foamRad, foam);
 
-  gl_FragColor = vec4(col * vApT + vApIns, edgeFade);
+  gl_FragColor = vec4(col * vApT + vApIns, 1.0);
   // Debug views skip the exposure and tone curve so their values read straight.
   if (uDebug == 9) { gl_FragColor = vec4(v, tau, vInfo.z / 4.0, 1.0); return; }
   #include <tonemapping_fragment>
@@ -364,11 +375,15 @@ export function createBreaker(renderer, waterUniforms) {
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: THREE.DoubleSide,
-    transparent: true,
   });
-  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+  // Opaque, and drawn in chunks sorted near to far every frame (sortChunks). Seen along the
+  // beach the ribbon's columns stack up on the same pixels, and blended, in the order they
+  // happen to run, every layer was shaded: 1.7 ms at the beach frame for a small patch of
+  // wave. Drawn near to far with depth writes, the hidden layers fail the depth test before
+  // they are shaded. (The material is in a one-element array so three.js draws the groups.)
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), [material]);
   mesh.frustumCulled = false;
-  mesh.renderOrder = 2;   // after the sea, over the crest it has tucked away
+  let chunks = [];
   mesh.visible = false;
 
   // Rows across the wave, with more of them on the lip.
@@ -427,6 +442,16 @@ export function createBreaker(renderer, waterUniforms) {
     mesh,
     material,
     get columns() { return nCols; },
+    // Order the chunks near to far from the camera.
+    sortChunks(camera) {
+      if (!chunks.length) return;
+      const cx = camera.position.x, cy = -camera.position.z;
+      for (const c of chunks) c.d = (c.x - cx) ** 2 + (c.y - cy) ** 2;
+      chunks.sort((a, b) => a.d - b.d);
+      const g = mesh.geometry;
+      g.groups.length = 0;
+      for (const c of chunks) g.groups.push(c.group);
+    },
     // Work out every column's wave for the current time (once per frame, when it moves).
     update(time, force = false) {
       if (!force && time === lastT) return;
@@ -470,6 +495,24 @@ export function createBreaker(renderer, waterUniforms) {
       g.setAttribute('aLine', new THREE.BufferAttribute(line, 4));
       g.setAttribute('aProf', new THREE.BufferAttribute(prof, 3));
       g.setIndex(index);
+      // Chunks of 16 columns (8 m of beach), each a group of the index buffer.
+      chunks = [];
+      {
+        let colBase = 0, triStart = 0;
+        for (const r of runs) {
+          for (let c0 = 1; c0 < r.length; c0 += 16) {
+            const c1 = Math.min(r.length, c0 + 16);
+            const count = (c1 - c0) * (NV - 1) * 6;
+            let x = 0, y = 0;
+            for (let c = c0; c < c1; c++) { x += cols[(colBase + c) * 4] + cols[(colBase + c) * 4 + 2] * 12; y += cols[(colBase + c) * 4 + 1] + cols[(colBase + c) * 4 + 3] * 12; }
+            chunks.push({ x: x / (c1 - c0), y: y / (c1 - c0), d: 0, group: { start: triStart, count, materialIndex: 0 } });
+            triStart += count;
+          }
+          colBase += r.length;
+        }
+      }
+      for (const c of chunks) g.addGroup(c.group.start, c.group.count, 0);
+      chunks.forEach((c, i) => { c.group = g.groups[i]; });
       mesh.geometry.dispose();
       mesh.geometry = g;
       mesh.visible = nCols > 0;

@@ -412,10 +412,19 @@ void main() {
   vec4 sw = seaWeights(p, d);
   vSeaW = sw;
   float spacing = max(length(position.xz), 1.0) * uGridK * uGridScale;
-  vec3 D = sw.x * cascadeDisp(uOceanA[0], p, uOceanL.x, spacing)
-         + sw.y * cascadeDisp(uOceanA[1], p, uOceanL.y, spacing)
-         + sw.z * cascadeDisp(uOceanA[2], p, uOceanL.z, spacing);
+  // Each cascade only where it adds something: the swell is gone in the surf zone, and a
+  // cascade whose patch is less than eight vertices across has been averaged away.
+  vec3 D = vec3(0.0);
+#ifndef NO_DISP
+  if (sw.x > 0.001) D += sw.x * cascadeDisp(uOceanA[0], p, uOceanL.x, spacing);
+  if (spacing < uOceanL.y / 8.0) D += sw.y * cascadeDisp(uOceanA[1], p, uOceanL.y, spacing);
+  if (spacing < uOceanL.z / 8.0) D += sw.z * cascadeDisp(uOceanA[2], p, uOceanL.z, spacing);
+#endif
+#ifdef NO_VSURF
+  Surf sf = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0);
+#else
   Surf sf = surfAt(p, d);
+#endif
   // The surf's slope for the fragment shader, by differences over the local vertex spacing.
   float se = clamp(spacing, 0.12, 6.0);
 #ifdef NO_VSLOPE
@@ -488,6 +497,10 @@ vec4 oceanSurface(vec2 p, vec4 sw) {
 
 void main() {
   #include <logdepthbuf_fragment>
+#ifdef FRAG_FLAT
+  gl_FragColor = vec4(0.05, 0.2, 0.3, 1.0);
+  return;
+#endif
   // Evaluate the waves where this point started, not where the waves pushed it, so shading
   // agrees with the geometry.
   vec2 p = vGrid;

@@ -179,7 +179,7 @@ void main() {
   vec2 g = gl_PointCoord * 7.0;
   vec2 cell = floor(g), f = fract(g);
   float drops = 0.0;
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+  if (mist < 0.95) for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 c = cell + vec2(float(i), float(j));
     vec2 h = vec2(fract(sin(dot(c + seed, vec2(12.9898, 78.233))) * 43758.5453), fract(sin(dot(c + seed, vec2(39.3468, 11.135))) * 24634.6345));
     float rad = mix(0.15, 0.45, h.x * h.x) * (1.2 - 0.6 * r);
@@ -226,7 +226,7 @@ export function createSpray(waterUniforms) {
     const rows = [];
     // Beach: per column of the breaker (every other one, 1 m apart), a few of each kind.
     if (beach) for (let c = 0; c < beach.length / 4; c += 2) {
-      for (const [kind, n] of [[0, 22], [1, 12], [2, 12]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
+      for (const [kind, n] of [[0, 16], [1, 8], [2, 10]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
     }
     // Rock: sites every 2.5 m of coast, a dozen particles each.
     if (rock) for (let k = 0; k < rock.length; k += 5) for (let i = 0; i < 14; i++) rows.push([rock[k], rock[k + 1], rock[k + 2], rock[k + 3], 3, rock[k + 4]]);

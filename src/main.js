@@ -11,7 +11,13 @@
 //                      silhouettes (yellow) traced over it
 //   capture=1          hide the UI and set window.__ready once the frame is final
 //   t=12               freeze the clock at this many seconds (the sea animates)
-//   debug=1..5         water debug view: sediment, see-through, foam, underwater light, normals
+//   debug=1..9         water debug view: sediment, see-through, foam (surf, whitecaps, fresh),
+//                      underwater light, normals, unseen slope spread, rock coast (near,
+//                      exposure, openness), foam simulation (foam, sand, travel), breaker
+//                      (across, stage, thickness). Skips the tone curve.
+//   sprayDebug=1..4    spray: at each breaker column's crest, at its site, as it flies, rock sites
+//   w.name=value       any water setting (src/water/water.js), o.name= the wave spectrum
+//                      (ocean.js), s.name= the foam simulation (surf-sim.js)
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
 //   clay=1             plain grey ground, to judge the shape on its own (2: flat triangles)
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
