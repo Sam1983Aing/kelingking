@@ -3,6 +3,7 @@
 //   node tools/ab.mjs beach sideFromSea                   this folder against the previous version's tag
 //   node tools/ab.mjs beach --a=v3 --rounds=15            against a chosen tag
 //   node tools/ab.mjs --hero                              every hero frame
+//   node tools/ab.mjs beach --set="cam=124,200,4.4,208,-3.8,40"   both at the same camera
 //
 // Frame times on this Mac swing by 2x with whatever else is on the GPU, and `hero.mjs` times
 // each version in its own pages, minutes apart, so one version can catch a quiet moment the
@@ -76,7 +77,10 @@ const rows = [];
 try {
   for (const name of shots) {
     const shot = SHOTS[name];
-    const q = `shot=${name}&q=1024&pr=1&t=17`;
+    // --set="cam=...;hour=..." adds page switches to both builds (the same camera for both,
+    // when a shot's camera moved between them).
+    const extra = flag('set') ? '&' + String(flag('set')).split(';').join('&') : '';
+    const q = `shot=${name}&q=1024&pr=1&t=17${extra}`;
     const h = Math.round(WIDTH / refAspect(shot.ref));
     const pages = {};
     // One at a time: a page that is not in front gets no animation frames, and its ready flag

@@ -68,3 +68,15 @@ debug tools.
 - `shoreBreak` stands in the water now, 10 m from the break. The last frame of the scroll,
   standing on the sand, is `beach`.
 
+
+**From v5 (sand).**
+
+- The swash runs on the sea's clock (`src/water/swash.js`), worked out once per frame into a
+  map over the beach (`swash-map.js`, only when the clock moves). The sand's wetness and gloss
+  and the sea's sheet both read it, so they cannot disagree. The foam simulation works the
+  swash out itself at its own steps, so a replay after a jump is consistent too.
+- New hero frame `swash`: standing at the water's edge, looking at the break by the rock at
+  the south end (`beach-white-sand-surf.jpg`). It could be the last beat of the scroll, or the
+  one before `beach`.
+- `beach` moved: it stands on the upper beach 2 m up, about 14 m from the water (it was 27 m
+  from it, on a sand ramp that is gone). Its camera was refitted to its photo.

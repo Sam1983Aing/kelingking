@@ -80,3 +80,13 @@ of `src/terrain/terrain-shader.js`, the `plants` settings in `src/terrain/layout
   degrees, `smoothstep(0.3, 0.46, up)`).
 - The ledges are the tops of the hard beds now (`uStrataB.g`, hardness, in the shader), so
   plants on ledges can use the same table.
+
+**From v5 (sand).**
+
+- The wall behind the beach is steeper at its foot now (it comes down to a foot traced from
+  the drone photo, `beach.back` in `layout.js`). In `viewpoint` and `stairs` the green slope
+  behind the beach meets the sand at a steeper grey foot, as in the photos, and the plants
+  there moved with the ground.
+- The sand along the foot of the walls has grit, pebbles and a band of red grains where the
+  swash reaches (`vFoot` in `terrain-shader.js`, metres from the foot, from the mesh). Leaf
+  litter and dry twigs under the scrub that overhangs the sand would sit on the same band.

@@ -483,7 +483,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       // from the trail above, one sampling of the trampled scan is all the eye gets.)
       float close = 1.0 - smoothstep(0.015, 0.03, fp);
       Surf a = topLayer(L_SAND_DRY, uTile[L_SAND_DRY], vec2(1.0, 0.0), vec2(0.0), true);
+#ifdef SKIP_SANDB
+      if (false) {
+#else
       if (close > 0.0) {
+#endif
         Surf b = topLayer(L_SAND_DRY, uTile[L_SAND_DRY] * 1.37, vec2(0.8, 0.6), vec2(0.31, 0.77), true);
         mixSurf(a, b, smoothstep(0.3, 0.7, tn(g * 0.33 + 2.0)) * close);
       }

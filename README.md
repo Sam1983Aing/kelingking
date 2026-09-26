@@ -21,8 +21,8 @@ moving on. The plan, the rules and a brief per version are in
 | v2 | Light and atmosphere | done |
 | v3 | Rock | done |
 | v4 | Water | done |
-| v5 | Sand and the waterline | next |
-| v6 | Trail and stairs | |
+| v5 | Sand and the waterline | done |
+| v6 | Trail and stairs | next |
 | v7 | Plants | |
 | v8 | The scroll descent | |
 | v9 | Speed and the shareable build | |
@@ -101,7 +101,11 @@ The look is scanned textures (Poly Haven, CC0) plus procedural structure
 - **Scrub** on everything short of a sheer face, and in clumps along the ledges of the faces.
   At field scale it varies between forest, scrub, grass and bare patches. Bushes, trees and
   leaves appear as you get closer.
-- **Sand**, wet where the swash reaches, and smoother, running on in under the overhang.
+- **Sand**, near-white coral sand (about 0.5 reflectance), trampled up close (two close-range
+  scans), packed firm and wet where the swash runs, glossy for a moment after it drains, damp
+  above, with red grains, grit and rock dust along the foot of the walls. The beach's shape
+  follows a trace of the drone photo: flat to the foot of the walls, a steep face and a berm
+  at the water, low at the south end so the swash reaches the rock.
 - Everything finer than a pixel is faded out by the pixel footprint, so it holds up from 1 km
   and at your feet without shimmering.
 
@@ -143,6 +147,11 @@ the carved mesh, and how exposed it is to the swell), and the light from `src/sk
   and stirred sand with the water (up the beach with each bore, out in the backwash and the
   rips, off the rock after each hit, downwind, in slow eddies), and fades it. The lace is
   drawn where the foam came from, so it stretches into streaks.
+- **The swash** (`swash.js`, v5): each wave sends a sheet of water up the sand after its
+  bore, thin at its ragged, foamy front, that slows, stops and drains back. One function of
+  the time, the place and the bed's height, worked out once a frame into a map over the beach
+  (`swash-map.js`), feeds the sea (the sheet, drawn as a film over the ground's wet sand), the
+  sand (soaked, glossy, drying) and the foam simulation (which moves with it).
 - **Spray** (`spray.js`): droplets off the lip, feathering off the crest, the splash where
   the lip lands, and bursts where the swell hits the rock, in sets. Worked out per particle
   from the time, so a frozen frame and a running page agree.
@@ -215,10 +224,9 @@ caught.
   the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
   See `docs/gallery/v1` for the baseline.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
-- **Materials after v2.** The sand and plant colours were set under v1's dimmer light. Under
-  the physical light the sand comes out 0.3 to 0.5 stops too bright and the plants about 1
-  stop too dark. Their versions (v5, v7) retune them, and the numbers are in their briefs. The
-  rock was retuned in v3 and the water in v4.
+- **Materials after v2.** The plant colours were set under v1's dimmer light, and under the
+  physical light the plants come out about 1 stop too dark. v7 retunes them (the numbers are
+  in its brief). The rock was retuned in v3, the water in v4 and the sand in v5.
 - **No far coast.** The terrain stops 1.6 km out, so the ridges that fade into the haze in
   the drone photos are not there to fade.
 
