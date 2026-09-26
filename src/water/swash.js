@@ -55,6 +55,10 @@ struct Swash {
   float dry;     // seconds since the water last left this spot (0 while covered)
   float reach;   // the highest any of the last few waves has run here (m)
   float edgeUp;  // the newest sheet's edge: how far above this spot it is (m of height)
+  float edgeZ;   // the highest edge of any sheet running now, above this spot (m of height;
+                 // negative: dry). Linear across the sand, so it interpolates exactly between
+                 // vertices: its zero line is the sheet's edge.
+  float frontZ;  // the same for the sheets running up (their foamy front)
 };
 
 const float SW_RUNDOWN = -0.25;   // the backwash drains down to here before the next bore
@@ -80,6 +84,8 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
   float Z = SW_RUNDOWN + span * e;
   float zeta = Z - zl;
   if (tau < newestTau) { newestTau = tau; o.edgeUp = zeta; }
+  o.edgeZ = max(o.edgeZ, zeta);
+  if (rising) o.frontZ = max(o.frontZ, zeta);
   // The sheet: thin at its edge, thicker behind; thick at first (the bore), thinning as it
   // runs out of speed, and thin in the backwash.
   float cap = rising ? mix(0.3, 0.06, tau / tu) : mix(0.05, 0.008, (tau - tu) / td);
@@ -95,9 +101,11 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
   if (rising && zeta > 0.0) o.front = max(o.front, smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)) * (1.0 - smoothstep(0.7, 1.0, tau / tu) * 0.6));
 }
 
-// The swash at map position p (x east, y north), with bed height z (m), at time t.
-Swash swashAt(vec2 p, float z, float t, float period) {
-  Swash o = Swash(-1e3, 0.0, 0.0, 0.0, 0.0, 60.0, -1e3, -1e3);
+// The swash at map position p (x east, y north), with bed height z (m), at time t. back: how
+// many earlier waves to look at: 1 is enough for the water itself (a sheet lasts under a
+// wave period), the sand's memory of being wet wants 3.
+Swash swashAt(vec2 p, float z, float t, float period, int back) {
+  Swash o = Swash(-1e3, 0.0, 0.0, 0.0, 0.0, 60.0, -1e3, -1e3, -1e3, -1e3);
   float clock = waveClock(t) / period;
   float jag = shoreJag(p);
   float rate = waveRate(t);
@@ -106,6 +114,7 @@ Swash swashAt(vec2 p, float z, float t, float period) {
   // The waves that could still be running here or left it wet: the next one (it can arrive a
   // little early), this one and the three before.
   for (int k = -3; k <= 1; k++) {
+    if (k < -back) continue;
     float idx = i0 + float(k);
     float wob = swNoise(p * 0.03 + idx * 5.13) - 0.5;
     float tau = (clock - (idx - jag - 0.12 * wob)) * period / rate;
@@ -121,5 +130,18 @@ Swash swashAt(vec2 p, float z, float t, float period) {
   }
   o.film = max(o.surf - z, 0.0);
   return o;
+}
+
+// The foamy front of an uprush, from how far its edge is above this spot (frontZ).
+float swashFront(float zeta) { return smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)); }
+
+// The swash as worked out for this frame over the beach (swash-map.js): edge, front edge,
+// thickness or minus the seconds since it was dry, speed up the beach. Outside the map, dry.
+uniform sampler2D uSwashMap;
+uniform vec3 uSwashRect;
+vec4 swashMap(vec2 p) {
+  vec2 uv = (p - uSwashRect.xy) / uSwashRect.z;
+  if (min(uv.x, uv.y) < 0.0 || max(uv.x, uv.y) > 1.0) return vec4(-1.0, -1.0, -60.0, 0.0);
+  return texture2D(uSwashMap, uv);
 }
 `;

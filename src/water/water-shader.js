@@ -118,10 +118,15 @@ struct Surf {
   float front;    // the foamy front of an uprush
   float swVel;    // its speed up the beach (m/s, negative in the backwash)
   float swUp;     // 1 running up, 0 running back
+  float edgeZ;    // how far above this spot the sheet's edge is (swash.js), and the front's
+  float frontZ;
 };
 
+// The swash sheet is only worked out when this is set (the vertex shader's slope samples
+// leave it out: the sheet lies on the sand, so its slope is the sand's).
+bool gSwash = true;
 Surf surfAt(vec2 p, vec4 d) {
-  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);   // L = 0: no surf here
+  Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0);   // L = 0: no surf here
   float s = d.g;
   if (s > 280.0 || s < -30.0) return o;
   float sand = d.b;
@@ -196,23 +201,37 @@ Surf surfAt(vec2 p, vec4 d) {
   // would flood the whole beach at once); the swash sheet takes over.
   float onLand = smoothstep(0.0, -1.2, s);
   o.h = mix(o.h, min(o.h, -0.6), onLand);
-  if (d.r > SW_RUNDOWN - 0.6 && d.r < uRunup * 1.6 + 0.3) {
-    Swash sw = swashAt(p, d.r, uTime, uPeriod);
-    float sheetH = sw.surf - (1.0 - beachy) * 0.5;
+  // (Only the sea's vertex shader reads the swash map: every other shader that shares this
+  // would need another texture unit, and the sea's fragment shader already uses 16.)
+#if !defined(SWASH_READ) || defined(SKIP_SWASH)
+  if (false) {
+    vec4 sm = vec4(-1.0, -1.0, -60.0, 0.0);
+#else
+  if (gSwash && d.r > SW_RUNDOWN - 0.3 && d.r < uRunup * 1.6 + 0.3) {
+    vec4 sm = swashMap(p);
+#endif
+    float film = max(sm.z, 0.0);
+    // Its surface: the sand plus the water on it, and past its edge diving under the sand.
+    float sheetH = d.r + (sm.x > 0.0 ? film : sm.x) - (1.0 - beachy) * 0.5;
     if (sheetH > o.h) {
       o.sheet = smoothstep(o.h, o.h + 0.02, sheetH) * beachy;
       o.h = sheetH;
     }
-    o.film = sw.film * beachy;
-    o.front = sw.front * beachy;
-    o.swVel = sw.vel;
-    o.swUp = sw.up;
+    o.film = film * beachy;
+    o.front = swashFront(sm.y) * beachy;
+    o.swVel = sm.w;
+    o.swUp = step(0.0, sm.w);
+    o.edgeZ = sm.x;
+    o.frontZ = sm.y;
   }
   o.lean = lean * offshoreFade;
-  o.fresh = max(lip, front * 1.1) * sz;
-  o.foam = max(trail, resid) * sz;
-  o.push = broken * smoothstep(-0.03, 0.0, v) * exp(-max(v, 0.0) / 0.1) * offshoreFade;
-  o.broken = broken * offshoreFade;
+  // (On the sand the wave train's phase stops changing, so its bore front would light up the
+  // whole beach at once as each crest passed: none of it there, the swash has its own.)
+  float sea = smoothstep(-1.0, 0.0, s);
+  o.fresh = max(lip, front * 1.1) * sz * sea;
+  o.foam = max(trail, resid) * sz * sea;
+  o.push = broken * smoothstep(-0.03, 0.0, v) * exp(-max(v, 0.0) / 0.1) * offshoreFade * sea;
+  o.broken = broken * offshoreFade * sea;
   o.hRaw = hRaw * offshoreFade;
   o.tau = tau;
   o.vph = v;
@@ -270,18 +289,24 @@ float caustics(vec2 p, float t) {
 // x how much light gets into this spot (the crevices between lumps are dark), yz a tilt of
 // the surface in two directions, for its lumps to face toward or away from the sun. Three
 // scales of lumps, 1 m down to 15 cm, the smallest only where a pixel is small enough.
-float reliefH(vec2 q, vec2 o, float fine) {
+float reliefH(vec2 q, vec2 o, float fine, float fine2) {
   // Rotated octaves so the value noise's grid does not show as blocks.
   const mat2 R1 = mat2(0.8, -0.6, 0.6, 0.8), R2 = mat2(0.28, -0.96, 0.96, 0.28);
-  return vnoise(q * 1.1 + o) * 0.5 + vnoise(R1 * q * 2.9 + 3.1 - o) * 0.32 + vnoise(R2 * q * 7.3 + 9.2) * 0.18 * fine;
+  float h = vnoise(q * 1.1 + o) * 0.5 + vnoise(R1 * q * 2.9 + 3.1 - o) * 0.32 + vnoise(R2 * q * 7.3 + 9.2) * 0.18 * fine;
+  // (v5) Clumps of bubbles a few centimetres across, where a pixel is a few millimetres: the
+  // swash's foam is seen from a couple of metres away.
+  if (fine2 > 0.0) h += (vnoise(R1 * q * 21.0 + 5.7 + o * 2.0) - 0.5) * 0.14 * fine2 + (vnoise(R2 * q * 53.0 + 1.9) - 0.5) * 0.08 * fine2;
+  return h;
 }
 vec3 foamRelief(vec2 q, float fp, float t) {
   vec2 o = vec2(t * 0.35, -t * 0.2);
-  float e = 0.12;
   float fine = smoothstep(0.08, 0.02, fp);
-  float h0 = reliefH(q, o, fine);
-  vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine) - h0, reliefH(q + vec2(0.0, e), o, fine) - h0) / e;
-  return vec3(mix(0.3, 1.0, smoothstep(0.34, 0.62, h0)), g * 0.6);
+  float fine2 = smoothstep(0.02, 0.008, fp);
+  // The step for the slope follows the finest detail drawn.
+  float e = mix(0.12, 0.008, fine2);
+  float h0 = reliefH(q, o, fine, fine2);
+  vec2 g = vec2(reliefH(q + vec2(e, 0.0), o, fine, fine2) - h0, reliefH(q + vec2(0.0, e), o, fine, fine2) - h0) / e;
+  return vec3(mix(0.3, 1.0, smoothstep(0.34, 0.62, h0)), g * mix(0.6, 0.25, fine2));
 }
 
 // Foam lace at a map position: two levels of warping (big swirls, then filaments bent along
@@ -329,12 +354,12 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
   float thin = cover * (1.0 - smoothstep(0.55, 0.9, amount));
-  if (thin > 0.01 && fp < 0.06) {
+  if (thin > 0.01 && fp < 0.035) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
-    float w2 = fp < 0.025 ? 1.0 - smoothstep(0.0, 0.3, cells(qw * 9.5 + 3.1, uTime * 0.7)) : 0.5;
-    float walls = max(w1, w2 * 0.8) ;
-    float k = smoothstep(0.06, 0.025, fp);
+    float w2 = fp < 0.018 ? 1.0 - smoothstep(0.0, 0.3, cells(qw * 9.5 + 3.1, uTime * 0.7)) : 0.5;
+    float walls = max(w1, w2 * 0.8);
+    float k = smoothstep(0.035, 0.018, fp);
     cover *= mix(1.0, walls, thin * k * smoothstep(1.0 - amount + 0.25, 1.0 - amount, base) * 0.9);
   }
   return cover;
@@ -374,6 +399,9 @@ uniform vec3 uReefAlbedo;
 uniform float uTurbidity;    // stirred-up sand near the surf
 uniform float uMurk;         // the milky plumes (sand in the water of the bays)
 struct Under { vec3 light; float depth0; float sed; float through; vec3 bb; vec3 K; };
+// Sand stirred up in the swash, from the foam simulation (as underLight has it where the
+// water is clear of the bed's colour).
+float simSand(float s, float w) { return s * w * 0.9; }
 Under underLight(vec2 p, vec4 d, vec3 world, vec3 N, vec3 V, float fp, float shadow, float thick, float forceExit, float simSand, float simW) {
   vec3 L = uSunDir;
   vec3 R = refract(-V, N, 1.0 / 1.333);
@@ -511,8 +539,13 @@ void roughReflect(vec3 N0, vec3 V, float sub, out float F, out vec3 refl) {
 `;
 
 export const WATER_VERT = /* glsl */ `
+#define SWASH_READ
 ${COMMON}
-uniform sampler2D uOceanA[4];
+// (Three of the four cascades: the finest is never displaced, and the sampler this saves
+// lets the vertex shader read the swash map within the 16 texture units. water.js hands
+// them over as their own uniform: three.js allocates units by the length of the array it is
+// given, not by the shader's.)
+uniform sampler2D uOceanV[3];
 uniform float uGridScale;   // spreads the rings out when the camera is high
 uniform vec2 uGridRot;      // cos, sin of the grid's turn (its middle segment faces the way the camera looks)
 uniform float uGridK;       // ring spacing per metre of distance from the camera
@@ -523,6 +556,8 @@ varying vec3 vWorld;
 varying vec2 vGrid;   // rest position on the map: every texture and wave is looked up here
 varying vec4 vSeaW;   // ocean cascade weights
 varying vec2 vSurfSlope;  // the surf's slope (map x, y)
+varying vec4 vSheetA;     // the swash sheet: how much it is the surface, thickness, edge, front
+varying vec2 vSheetB;     // its speed up the beach, and whether it is running up
 
 // A cascade's displacement, prefiltered to what the grid can draw here: at the mip level
 // where a texel is twice the vertex spacing, anything shorter has been averaged away.
@@ -540,10 +575,13 @@ void main() {
   vec4 sw = seaWeights(p, d);
   float spacing = max(length(position.xz), 1.0) * uGridK * uGridScale;
 #ifdef NO_VSURF
-  Surf sf = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  Surf sf = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0);
 #else
   Surf sf = surfAt(p, d);
 #endif
+  // The swash for the fragment shader, which does not work it out again.
+  vSheetA = vec4(sf.sheet, sf.film, sf.edgeZ, sf.frontZ);
+  vSheetB = vec2(sf.swVel, sf.swUp);
   // The swash sheet is a few centimetres of water on the sand: the open sea's waves do not
   // ride on it (it gets its own ripples in the fragment shader).
   sw *= 1.0 - sf.sheet;
@@ -552,17 +590,23 @@ void main() {
   // cascade whose patch is less than eight vertices across has been averaged away.
   vec3 D = vec3(0.0);
 #ifndef NO_DISP
-  if (sw.x > 0.001) D += sw.x * cascadeDisp(uOceanA[0], p, uOceanL.x, spacing);
-  if (sw.y > 0.001 && spacing < uOceanL.y / 8.0) D += sw.y * cascadeDisp(uOceanA[1], p, uOceanL.y, spacing);
-  if (sw.z > 0.001 && spacing < uOceanL.z / 8.0) D += sw.z * cascadeDisp(uOceanA[2], p, uOceanL.z, spacing);
+  if (sw.x > 0.001) D += sw.x * cascadeDisp(uOceanV[0], p, uOceanL.x, spacing);
+  if (sw.y > 0.001 && spacing < uOceanL.y / 8.0) D += sw.y * cascadeDisp(uOceanV[1], p, uOceanL.y, spacing);
+  if (sw.z > 0.001 && spacing < uOceanL.z / 8.0) D += sw.z * cascadeDisp(uOceanV[2], p, uOceanL.z, spacing);
 #endif
   // The surf's slope for the fragment shader, by differences over the local vertex spacing.
   float se = clamp(spacing, 0.12, 6.0);
 #ifdef NO_VSLOPE
   vSurfSlope = vec2(0.0);
 #else
-  vSurfSlope = sf.L > 0.0 ? vec2(surfAt(p + vec2(se, 0.0), dataAt(p + vec2(se, 0.0))).h - sf.h,
-                                                 surfAt(p + vec2(0.0, se), dataAt(p + vec2(0.0, se))).h - sf.h) / se : vec2(0.0);
+  if (sf.L > 0.0) {
+    vec4 dx = dataAt(p + vec2(se, 0.0)), dy = dataAt(p + vec2(0.0, se));
+    gSwash = false;
+    float hx = surfAt(p + vec2(se, 0.0), dx).h, hy = surfAt(p + vec2(0.0, se), dy).h;
+    gSwash = true;
+    // On the sheet, the sand's own slope.
+    vSurfSlope = mix(vec2(hx - sf.h, hy - sf.h), vec2(dx.r - d.r, dy.r - d.r), sf.sheet) / se;
+  } else vSurfSlope = vec2(0.0);
 #endif
   // Beyond the sheet's edge the surface dives under the sand, but only after a few millimetres
   // above it, so the geometry always covers where the fragment shader finds water (it works
@@ -611,6 +655,8 @@ varying vec3 vWorld;
 varying vec2 vGrid;
 varying vec4 vSeaW;
 varying vec2 vSurfSlope;
+varying vec4 vSheetA;
+varying vec2 vSheetB;
 
 
 void main() {
@@ -624,8 +670,17 @@ void main() {
   vec2 p = vGrid;
   vec4 d = dataAt(p);
   float fp = max(length(fwidth(vWorld.xz)), 0.01);   // metres per pixel
-  Surf sf = surfAt(p, d);
-  vec4 oc = oceanSurface(p, vSeaW);
+  // The surf here, and the swash sheet from the vertices (its edge and front interpolate
+  // exactly: see swash.js).
+  gSwash = false;
+  // On the sheet over the sand there is no surf to work out.
+  Surf sf = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0);
+  if (vSheetA.x < 0.99 || d.g > -1.0) sf = surfAt(p, d);
+  sf.sheet = vSheetA.x; sf.film = vSheetA.y; sf.swVel = vSheetB.x; sf.swUp = vSheetB.y;
+  sf.front = sf.sheet * swashFront(vSheetA.w);
+  if (sf.sheet > 0.0) sf.h = mix(sf.h, d.r + sf.film, sf.sheet);
+  // (No reads of the ocean cascades where none of them rides, as on the swash sheet.)
+  vec4 oc = dot(vSeaW, vec4(1.0)) > 1e-3 ? oceanSurface(p, vSeaW) : vec4(0.0);
   vec4 cd = coastAt(p);
   // The foam simulation (surf-sim.js): foam, churned sand, how fresh the foam is.
   vec2 simUv = (p - uSimRect.xy) / uSimRect.z;
@@ -646,7 +701,11 @@ void main() {
 #endif
   // The swash sheet's own ripples: bumpy and turbulent behind the front of an uprush, long
   // streaks along the flow in the backwash, all carried along with the water.
+#ifdef SKIP_RIPPLES
+  if (false) {
+#else
   if (sf.sheet > 0.01) {
+#endif
     vec2 up = -offshoreAt(p);
     vec2 q = vec2(dot(p, up), dot(p, vec2(-up.y, up.x)));
     float flow = sf.swVel * uTime;
@@ -666,7 +725,17 @@ void main() {
 
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
-  Under uw = underLight(p, d, vWorld, N, V, fp, shadow, 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1), 0.0, sim.g, simW);
+  // Thin water on the sand (the swash sheet, under 12 cm) shows the ground's own sand through
+  // it (see below), so the sea's model of its bed is not needed there: only the water's own
+  // absorption and scattering, with the sand the swash carries.
+  float filmE = mix(vWorld.y - d.r, sf.h - d.r, sf.sheet);
+  Under uw;
+  if (filmE < 0.12 && sf.sheet > 0.99) {
+    float churn = simSand(sim.g, simW) * uTurbidity;
+    vec3 bbT = uBackscatter + churn * uSedBack;
+    uw = Under(vec3(0.0), max(filmE, 0.0), churn, 0.0, bbT, uAbsorb + churn * uSedAbsorb + bbT);
+  } else
+    uw = underLight(p, d, vWorld, N, V, fp, shadow, 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1), 0.0, sim.g, simW);
   vec3 under = uw.light;
   float depth0 = uw.depth0, sed = uw.sed, through = uw.through;
   vec3 bb = uw.bb, K = uw.K;
@@ -696,7 +765,8 @@ void main() {
   col += uGordonF * bb / K * uSunIrr * sunY * shadow * crestGlow * 0.5;
 
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
-  float older = mix(max(sf.foam, rockFoamBand(p, d, cd)), sim.r, simW);
+  // (The band at the rock only where the simulation does not reach, and there is rock.)
+  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
   // The front of an uprush is a band of foam and bubbles.
   float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
   float fresh = max(sf.fresh, smoothstep(0.25, 0.9, sim.r) * simW);
@@ -707,7 +777,7 @@ void main() {
   float pattern = 0.0, ridge = 0.0;
   vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
-  float swFoam = smoothstep(1.4, 0.4, vWorld.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(12.0, 3.0, d.g);
+  float swFoam = smoothstep(1.0, 0.3, vWorld.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
   if (amount > 0.002 || caps > 0.002) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp) : vec2(0.0);
@@ -715,6 +785,9 @@ void main() {
   }
   float soft = clamp(fwidth(pattern) * 1.5, 0.02, 0.15);
   float lace = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, pattern);
+#ifdef SKIP_SWFOAM
+  swFoam = 0.0;
+#endif
   if (swFoam > 0.001 && amount > 0.002)
     lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount, fp), swFoam);
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
@@ -763,11 +836,14 @@ void main() {
     vec3 T = exp(-K * max(film, 0.0) * (1.0 / muV + 1.0 / max(sunY, 0.3)));
     vec3 column = uGordonF * bb / K * (uSunIrr * sunY * mix(0.35, 1.0, shadow) + uSkyIrr) / PI;
     // Caustics from the sheet's ripples on the sand under it.
-    float cs = sf.sheet * smoothstep(0.003, 0.02, film) * smoothstep(0.25, 0.04, fp);
+    float cs = sf.sheet * smoothstep(0.003, 0.02, film) * smoothstep(0.03, 0.012, fp);
     // (Only adds: the sand's own light is the ground's, so a caustic can only brighten it.)
     // Stretched along the flow (the ripples on a running sheet are long across it), and
     // coming and going in patches.
     vec3 caus = vec3(0.0);
+#ifdef SKIP_CAUS
+    cs = 0.0;
+#endif
     if (cs > 0.0) {
       vec2 up = -offshoreAt(p);
       vec2 qc = vec2(dot(p, up) * 2.2 - sf.swVel * uTime * 2.2, dot(p, vec2(-up.y, up.x)) * 5.0);
@@ -780,11 +856,11 @@ void main() {
   }
   vec3 Xf = X * (1.0 - fo) + foamRad * fo;
   float alpha = 1.0 - dstK * (1.0 - fo);
-  // The sheet's edge, per pixel, and a little foam can run a few millimetres beyond it.
-  float edgeA = smoothstep(0.0, 0.002, film) * mix(1.0, smoothstep(0.0, 0.004, film + 0.002 * fo), sf.sheet);
+  // The sheet's edge: where its edge height above the sand crosses zero, a little soft.
+  float edgeA = mix(smoothstep(0.0, 0.002, film), smoothstep(0.0, 0.0025, vSheetA.z + 0.0012 * fo), sf.sheet);
   vec3 srcCol = Xf / max(alpha, 1e-3);
   alpha *= edgeA;
-  if (alpha < 0.002) discard;
+  // (No discard: it would stop the GPU from rejecting the sea's pixels under the ground early.)
 
   gl_FragColor = vec4(srcCol * vApT + vApIns, alpha);
   // Debug views skip the exposure and tone curve so their values read straight (4: the light

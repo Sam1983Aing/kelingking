@@ -108,12 +108,13 @@ export function defaultLayout() {
     ],
 
     // The beach. The sand rises from the waterline (shifted `shift` metres out from the mapped
-    // coast) toward `top` over `spread` metres. `back` is the foot of the wall behind it, north
+    // coast): a steep face toward the berm (`berm` m high, over `face` m, about 1 in 6 at the
+    // water, where the swash runs) and then toward `top` over `spread` metres. `back` is the foot of the wall behind it, north
     // to south, traced from the registered drone photo (aerial-high-whole-bay.jpg): the walls
     // come down to it, steep to the bottom (profile at most `backProfile`). Its south end runs
     // along the foot the zones already give there, so it hands over without a corner; the
     // overhang beyond is the mesh builder's.
-    beach: { top: 4.0, spread: 24, shift: 8, backProfile: 0.6,
+    beach: { top: 4.0, spread: 40, berm: 1.35, face: 8.5, shift: 8, backProfile: 0.6,
       back: [[119, 322], [126, 294], [150, 279], [161, 250], [161, 227], [141, 219], [129, 210], [128, 187],
         [132, 163], [130, 141], [121, 119], [114, 102], [106, 95], [100, 89], [95, 82], [92, 76]] },
 

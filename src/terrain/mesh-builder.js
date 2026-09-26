@@ -21,6 +21,7 @@
 //    above which rock hides the sun, and which way is out.
 
 import { buildStrata, strataWarp, strataStrength, coarseAt } from './strata.js';
+import { signedDistance } from './heightfield.js';
 
 export function buildTerrainMesh(hf, layout, M) {
   const t0 = performance.now();
@@ -42,7 +43,7 @@ export function buildTerrainMesh(hf, layout, M) {
   const dt = cfg.detail;
   const near = (x, y) => 1 - smooth(dt.r - 40, dt.r, Math.hypot(x - dt.at[0], y - dt.at[1]));
   const across = (x, y) => lerp(lerp(cfg.faceStep[1], cfg.faceStep[0], inFocus(x, y)), dt.step, near(x, y)) / q;
-  const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], hor: [], strips: [], hash: new Map() };
+  const bands = { pos: [], nrm: [], idx: [], rock: [], lit: [], hor: [], tuck: [], strips: [], hash: new Map() };
   let nCols = 0;
   for (const chain of chains) {
     const pts = resampleChain(chain, (x, y) => across(x, y) * cfg.faceStepAlong);
@@ -69,6 +70,23 @@ export function buildTerrainMesh(hf, layout, M) {
     // short and its neighbour does not, the rows of the two would not line up), then one
     // profile per column. Runs of columns with a profile become strips.
     for (const col of cols) col.w = windowAlong(col.x, col.y, col.gx, col.gy);
+    // On the beach, stop each line across the face short of where it would cross its
+    // neighbour's: round a concave wall the lines converge going out over the sand, and past
+    // their crossing the strip folds over itself (the dark specks on the sand in trailLow, v5).
+    for (let k = 0; k < cols.length; k++) {
+      const c = cols[k];
+      if (!c.w?.sand) continue;
+      for (const n of [cols[k - 1], cols[k + 1]]) {
+        if (!n) continue;
+        // c + t g = n + s h, for t and s.
+        const det = c.gx * -n.gy - c.gy * -n.gx;
+        if (Math.abs(det) < 1e-6) continue;
+        const dx = n.x - c.x, dy = n.y - c.y;
+        const t = (dx * -n.gy - dy * -n.gx) / det;
+        const s2 = (c.gx * dy - c.gy * dx) / det;
+        if (t < 0 && s2 < 0) c.w.a = Math.max(c.w.a, Math.min(0.7 * t, -2));
+      }
+    }
     smoothWindows(cols);
     let run = [];
     const flush = () => { if (run.length >= 3) buildStrip(run); run = []; };
@@ -125,7 +143,9 @@ export function buildTerrainMesh(hf, layout, M) {
         // At both ends of the profile the strip tucks half a metre under the ground, so
         // where it meets the plain ground there is a clean crossing, not two surfaces
         // fighting.
-        h -= 0.5 * (1 - smooth(0, 2.5, Math.min(t - P.a, P.b - t)));
+        const tuck = 1 - smooth(0, 2.5, Math.min(t - P.a, P.b - t));
+        h -= 0.5 * tuck;
+        bands.tuck.push(tuck);
         bands.pos.push(bx + c * col.gx, h, -(by + c * col.gy));
         // Sand runs on in under an overhang, where the ground texture cannot know it.
         const F = P.feat;
@@ -245,8 +265,9 @@ export function buildTerrainMesh(hf, layout, M) {
     // overhang, whose cave runs in behind it). Further out the lines across a curved wall
     // converge and cross, and the strip folds over itself on the flat sand.
     const foot = carve.footAlong(Fx, Fy, gx, gy, a);
-    if (foot && foot.onSand > 0.5) a = Math.max(a, Math.min(foot.t - foot.reach, -2));
-    return { a, b };
+    const sand = !!(foot && foot.onSand > 0.5);
+    if (sand) a = Math.max(a, Math.min(foot.t - foot.reach, -2));
+    return { a, b, sand };
   }
 
   // Along a face, each window end becomes the lowest within 4 m of it, then the average over
@@ -403,6 +424,28 @@ export function buildTerrainMesh(hf, layout, M) {
   // a floor's own normal cannot say.
   const horizon = new Uint8Array((positions.length / 3) * 4);
   for (let v = 0; v < M * M; v++) { horizon[v * 4] = 255; horizon[v * 4 + 1] = horizon[v * 4 + 2] = 128; }
+  // The fourth channel, every vertex (v5): how far it is from the foot of a wall standing on
+  // the beach (0 to 8 m), for the band of stained sand and the debris along the foot. Measured
+  // from the carved faces themselves (their steep vertices low down), so the foot at the back
+  // of a cave under an overhang is where the rock really meets the sand.
+  {
+    const foot = new Uint8Array(f.N * f.N);
+    for (let v = M * M; v < positions.length / 3; v++) {
+      const x = positions[v * 3], y = -positions[v * 3 + 2], h = positions[v * 3 + 1], ny = normals[v * 3 + 1];
+      // (Not where a strip tucks under the ground at its ends: that is steep too.)
+      if (ny > 0.45 || ny < -0.3 || h < 0.2 || bands.tuck[v - M * M] > 0.02) continue;
+      const bt = sample(f.btop ?? f.sand, x, y);
+      if (h > (f.btop ? bt : layout.beach.top) + 2.5 || sample(f.sand, x, y) < 0.3) continue;
+      const i = Math.floor((x - f.x0) / f.cell), j = Math.floor((y - f.y0) / f.cell);
+      if (i >= 0 && j >= 0 && i < f.N && j < f.N) foot[j * f.N + i] = 1;
+    }
+    const DF = signedDistance(foot, f.N, f.cell).sd;
+    const nv = positions.length / 3;
+    for (let v = 0; v < nv; v++) {
+      const d = Math.max(-sample(DF, positions[v * 3], -positions[v * 3 + 2]), 0);
+      horizon[v * 4 + 3] = Math.round(255 * Math.min(d / 8, 1));
+    }
+  }
   for (const cols of bands.strips) for (const col of cols) for (let r = 0; r < col.R; r++) {
     const v = col.first + r, o = (M * M + v) * 4;
     horizon[o] = Math.round(255 * Math.min(Math.max(bands.hor[v], 0), 1));
@@ -580,7 +623,7 @@ export function makeCarver(hf, layout, sample) {
     const e = 6;
     const lap = (sample(f.PSI, Fx + e, Fy) + sample(f.PSI, Fx - e, Fy) + sample(f.PSI, Fx, Fy + e) + sample(f.PSI, Fx, Fy - e) - 4 * sample(f.PSI, Fx, Fy)) / (e * e);
     const maxIn = Math.min(0.7 * Math.max(sample(f.PSIMAX, Fx, Fy), 4), lap < 0 ? 0.4 / -lap : 1e9);
-    const level = layout.beach.top + 2;
+    const level = (f.btop ? sample(f.btop, Fx, Fy) : layout.beach.top) + 2;   // (the local beach top, v5)
     let k = h.findIndex((v) => v >= level);
     if (k < 1) k = 1;
     const tW = t[k - 1] + ((t[k] - t[k - 1]) * (level - h[k - 1])) / Math.max(h[k] - h[k - 1], 1e-6);
@@ -604,7 +647,7 @@ export function makeCarver(hf, layout, sample) {
   // the beach, how much that is sand, and how far out past it the strip must reach: the
   // undercut's floor fades over 5 m, an overhang's cave floor further.
   function footAlong(Fx, Fy, gx, gy, a) {
-    const level = layout.beach.top + 2;
+    const level = (f.btop ? sample(f.btop, Fx, Fy) : layout.beach.top) + 2;   // (the local beach top, v5)
     let prev = heightAt(Fx, Fy);
     if (prev < level) return null;
     for (let tt = -0.5; tt >= a; tt -= 0.5) {
@@ -614,7 +657,7 @@ export function makeCarver(hf, layout, sample) {
         const out = heightAt(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy);
         const z = zoneAt(Fx, Fy);
         const ov = (z.cave + z.bulge) * 0.6 + 4 * Math.min(z.w, 1);
-        return { t: tW - 1, onSand: sandOut(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy, out), reach: 12 + ov };
+        return { t: tW - 1, onSand: sandOut(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy, out), reach: 6 + ov };
       }
       prev = hv;
     }
@@ -680,7 +723,7 @@ export function makeCarver(hf, layout, sample) {
       // Below the foot, the sand runs on in under the overhang.
       const zz = t < F.tFoot ? 0 : Math.max(h - F.hFoot, 0);
       let cw = under * (1 - smooth(underH, underH + 2.5, zz)) * (1 - Math.min(z.w, 1));
-      if (t < F.tFoot) cw *= smooth(F.tFoot - 6, F.tFoot, t);
+      if (t < F.tFoot) cw *= smooth(F.tFoot - 3.5, F.tFoot, t);
       c += cw * F.wall * F.onSand + overhang(z, t, h, F);
     }
 

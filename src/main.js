@@ -227,7 +227,7 @@ loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true
 terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
 // The swash on the sand runs on the sea's clock and settings, and the sheet over it sees the
 // ground's wet sand through it.
-for (const k of ['uTime', 'uPeriod', 'uRunup', 'uSwashT']) terrain.uniforms[k] = water.uniforms[k];
+for (const k of ['uTime', 'uPeriod', 'uRunup', 'uSwashT', 'uSwashMap', 'uSwashRect']) terrain.uniforms[k] = water.uniforms[k];
 water.uniforms.uWetSandAlb.value.setRGB(...terrain.uniforms.uSandAlb.value.toArray().map((v, i) => v * terrain.uniforms.uWetTint.value.getComponent(i)));
 const hidden = new Set((params.get('hide') || '').split(','));
 for (const name of hidden) {

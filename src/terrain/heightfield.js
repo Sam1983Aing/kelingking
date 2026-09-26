@@ -222,7 +222,10 @@ export function makeHeightAt(f, layout, noise) {
       const rock = top * (1 - (1 - vv) ** (1 / pf));
       let cove = top;
       if (dk + s < 0) cove = edge * (1 - Math.min(-(dk + s) / faceC, 1)) ** pfC;
-      const sand = btop * (1 - Math.exp(-Math.max(dc + s, 0) / beach.spread));
+      // The beach face: steep up to the berm (the highest the swash usually runs), then a
+      // gentler rise behind it to the top of the beach.
+      const hb = Math.min(beach.berm, btop), xs = Math.max(dc + s, 0);
+      const sand = hb * (1 - Math.exp(-xs / beach.face)) + (btop - hb) * (1 - Math.exp(-xs / beach.spread));
       cove = Math.max(cove, sand);
       return Math.min(lerp(rock, cove, sandW), (dc + s) * 40); // meet the water
     };

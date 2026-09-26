@@ -101,7 +101,7 @@ export const SHOTS = {
     ref: 'references/04-beach/beach-white-sand-surf.jpg',
     // v5: standing on the sand where the swash runs, looking at the break by the rock at the
     // south end of the beach, as the photo was taken.
-    pos: [99, 164, 2.15], yaw: 222.5, pitch: -3.6, roll: 0, fov: 46,
+    pos: [99, 164, 2.25], yaw: 222.5, pitch: -3.6, roll: 0, fov: 46,
   },
 };
 

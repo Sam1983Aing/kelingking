@@ -109,10 +109,10 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     u += off * 0.55 * smoothstep(18.0, 0.0, c.r) * c.a;
     // On the sand the swash sheet moves it (swash.js): up the beach and back, the same sheet
     // the sea draws.
-    Swash sw = Swash(-1e3, 0.0, 0.0, 0.0, 0.0, 60.0, -1e3, -1e3);
+    Swash sw = Swash(-1e3, 0.0, 0.0, 0.0, 0.0, 60.0, -1e3, -1e3, -1e3, -1e3);
     float onSand = nearBeach * smoothstep(0.5, -0.5, s);
     if (nearBeach > 0.0 && d.r > SW_RUNDOWN - 0.6 && d.r < uRunup * 1.6 + 0.3) {
-      sw = swashAt(p, d.r, uTime, uPeriod);
+      sw = swashAt(p, d.r, uTime, uPeriod, 1);
       float covered = smoothstep(0.0, 0.004, sw.film);
       u = mix(u, -off * sw.vel * covered + eddy(p) * 0.15 * covered, onSand);
     }
