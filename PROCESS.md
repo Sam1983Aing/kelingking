@@ -1052,8 +1052,9 @@ section's `flat` grade it becomes steps: level treads, each straddling the line 
 half a riser, at least a `going` long, risers growing where it is steep. The concrete steps
 are regular; the dirt ones vary by up to 30% each, as steps cut by hand do.
 
-304 m and 550 steps: 230 concrete, 38 on the ridge, 282 on the way down. The real count
-is about 156 concrete steps; here the concrete falls 60 m, so either the real ones are
+304 m and 559 steps on the 2048 grid the captures use: 233 concrete, 38 on the ridge, 288 on
+the way down (the page's default 1024 grid makes a few fewer). The real count is about 156
+concrete steps; here the concrete falls 60 m, so either the real ones are
 taller or the ground under them is gentler than the model's.
 
 ### The carve
@@ -1186,18 +1187,19 @@ black) found no others.
 
 ### Speed
 
-`hero.mjs` was run four times and swung too far to judge by: `viewpoint` came out +11%, +6% and
-+56%, `trailTop` +22%, +48% and +26%, `shoreBreak` -28% and -16%, with nothing changed that
-those frames see between runs (one of them crashed on a page that never became ready, the
-only time in dozens of loads). The side by side timer (`ab.mjs`, both builds open in one
+`hero.mjs` was run five times and swung too far to judge by: `viewpoint` came out +11%, +6%,
++56% and +23%, `overview` -5%, +7%, +15% and +93% (with absolute times for both builds
+doubling from one run to the next), `shoreBreak` -28% and -16%, with nothing changed that
+those frames see between runs. One run crashed on a page that never became ready, the only
+time in dozens of loads. The side by side timer (`ab.mjs`, both builds open in one
 browser, timed in turns) is what the budget below rests on. The gallery holds the last
 `hero.mjs` run.
 
 | Frame | `ab.mjs --hero` (v5's cameras for the trail frames) | at v6's camera, both builds |
 |---|---|---|
-| overview | 0% | |
+| overview | 0%, then -1% over 16 rounds | |
 | viewpoint | +6%, then 0% over 20 rounds | |
-| stairs | +11%, then +5% over 24 rounds | -8% |
+| stairs | +11%, then +5% over 24 rounds, then +10% over 16 | -8% (twice) |
 | trailTop | -7% | +2% |
 | trailLow | -8% | +10% |
 | beach | +6% | |
@@ -1215,7 +1217,7 @@ Two things were taken back to hold it:
 ### Still weak
 
 - `trailLow` is on the path but not matched to its photo, which was taken from over the beach.
-- The steps: 230 concrete ones where the real path has about 156, because the model's ground
+- The steps: 233 concrete ones where the real path has about 156, because the model's ground
   falls 60 m under them. And the treads are cleaner and more even than the real ones, which
   are chipped, patched and uneven in height at the bottom of each flight.
 - Low on the descent the treads are 25 to 35 cm, so from above the steep bottom reads a little

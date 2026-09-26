@@ -46,12 +46,17 @@ the change column means anything: it is against v5, timed in the same run.
 
 | Frame | Time | fps | Change |
 |---|---|---|---|
-| Overview, straight down | 13.9 ms | 72 | -5% |
-| Clifftop viewpoint | 10.6 ms | 94 | +56% (over budget) |
-| On the stairs | 8.5 ms | 118 | +8% |
-| Top of the trail | 7.3 ms | 137 | +26% (over budget) |
-| Low on the trail | 6.6 ms | 152 | -20% |
-| On the sand | 8.7 ms | 115 | -16% |
-| At the water's edge | 9.7 ms | 103 | +0% |
-| Shore break, eye level | 7.1 ms | 141 | -16% |
-| Head from the sea | 8.9 ms | 112 | +6% |
+| Overview, straight down | 24.3 ms | 41 | +93% (over budget) |
+| Clifftop viewpoint | 8.7 ms | 115 | +23% (over budget) |
+| On the stairs | 21.2 ms | 47 | +104% (over budget) |
+| Top of the trail | 11.0 ms | 91 | +20% (over budget) |
+| Low on the trail | 16.3 ms | 61 | +10% (over budget) |
+| On the sand | 9.9 ms | 101 | +1% |
+| At the water's edge | 10.5 ms | 95 | -20% |
+| Shore break, eye level | 11.1 ms | 90 | +5% |
+| Head from the sea | 10.1 ms | 99 | +26% (over budget) |
+
+These are from the last of five `hero.mjs` runs, and they swung from run to run by more than
+anything v6 changed: `overview` came out -5%, +7%, +15% and +93%, `stairs` +1% to +104%. The
+budget was judged with `tools/ab.mjs` instead (both builds open side by side, timed in turns),
+which put every frame within 10% of v5: see the v6 section of `PROCESS.md`.
