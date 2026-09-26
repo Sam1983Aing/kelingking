@@ -80,3 +80,22 @@ debug tools.
   one before `beach`.
 - `beach` moved: it stands on the upper beach 2 m up, about 14 m from the water (it was 27 m
   from it, on a sand ramp that is gone). Its camera was refitted to its photo.
+
+**From v6 (trail).**
+
+- The walk line: `node tools/walk-line.mjs` writes `data/walk-line.json`, 565 points 0.5 m
+  apart, from the viewpoint photo's spot on the platform (228, 236, 152), across the platform
+  onto the concrete steps (27 m down them) and down to the sand at (127.6, 188.1). Each point
+  has `s` (metres walked), `path` (metres along the path, as the shots' `s`), `pos` [east,
+  north, height], `heading` (the way the path goes) and `grade`. The eye is 1.6 m over the
+  treads with the single steps smoothed out, so it does not bob; add a bob on purpose if
+  wanted. It is built by `walkLine()` in `src/trail/route.js` from the same route the page
+  carves, so it follows any change to the path.
+- The path is steep: grades up to 1.24 on the concrete steps and 1.25 at the bottom, and the
+  hairpins are 1.2 to 1.5 m in radius, where the heading turns by up to 13 degrees between
+  points. Ease the look direction, not just the position.
+- `stairs`, `trailTop` and `trailLow` stand on the path now, 32, 147.5 and 244 m along it
+  (their `s`). The descent does not pass `trailLow`'s photo position (it was taken from over
+  the beach), so its frame was set by eye.
+- `__app.contactSheet([{ s, side, eye, yaw, pitch, fov }, ...])` renders cameras on the path
+  side by side, and `src/fit.js` fits one to a photo along it.

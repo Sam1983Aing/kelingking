@@ -30,24 +30,33 @@ export const SHOTS = {
     ref: 'references/01-overview/aerial-side-from-sea.jpg',
     pos: [-170, 230, 85], yaw: 128, pitch: -14, roll: 0, fov: 57,
   },
+  // The three on the path (v6) stand on it at eye height: `s` is how far along it (metres from
+  // the top of the concrete steps, src/trail/route.js), for the scroll. Each was fitted to its
+  // photo by outlines traced on the photo (src/fit.js), searching along the path.
   trailTop: {
     label: 'Top of the trail',
     ref: 'references/03-trail/trail-top-railing.jpg',
-    pos: [178, 134, 96], yaw: 233, pitch: -13, roll: 0, fov: 54,
+    // On the ridge path, 1.75 m over the tread; the head's outline and the horizon fitted to
+    // 9.7 px in 480. A wide phone lens (about 24 mm).
+    s: 147.5, pos: [180.7, 134.23, 94.63], yaw: 234.5, pitch: -20.3, roll: -0.9, fov: 75,
   },
   stairs: {
     label: 'On the stairs',
     ref: 'references/03-trail/trail-mid-descent-a.jpg',
-    // Placeholder until the trail version builds the steps and matches this photo.
-    pos: [232, 238, 146.7], yaw: 228, pitch: -36, roll: 0, fov: 62,
+    // Near the top of the concrete steps, just below the platform, by the handrail: the head's
+    // outline and the beach fitted to 13 px in 480 (the rest is the neck, wider than the
+    // photo's, see PROCESS.md). Anywhere from 18 to 38 m down the steps fits about as well;
+    // higher up, the platform fills the bottom of the frame.
+    s: 32, pos: [233.46, 230.32, 145.89], yaw: 224.5, pitch: -27, roll: 0, fov: 52.9,
   },
   trailLow: {
     label: 'Low on the trail',
     ref: 'references/03-trail/trail-low-beach-close.jpg',
-    // Placeholder until v6. Framed like the photo on the overhang at the south end of the
-    // beach (v3), which puts it in the air 65 m above the sand: v1's camera on the mapped
-    // zigzag looked past the overhang. The trail version puts it back on the path.
-    pos: [115, 140, 70], yaw: 225, pitch: -50, roll: 0, fov: 60,
+    // Low on the zigzag, on the inside of a switchback 52 m up, looking over the handrail into
+    // the overhang. Set by eye, not fitted: nothing on the path fits the photo better than
+    // 25 px in 480. The photo was taken from about 65 m over the south end of the beach
+    // (v3's placeholder), where there is no path.
+    s: 244, pos: [156.89, 171.69, 54.29], yaw: 226, pitch: -40, roll: 0, fov: 55,
   },
   surfTop: {
     label: 'Surf from above',

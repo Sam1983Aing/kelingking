@@ -8,22 +8,7 @@
 //   x, height, z (world), scale, yaw, species, tint (0..1, colour variation)
 
 import { makeNoise, fbm } from '../terrain/heightfield.js';
-import { TRAIL } from '../terrain/geo.js';
-
-// Nothing grows on the path. Distance from a point to the mapped trail, in metres.
-const TRAIL_LINES = Object.values(TRAIL);
-function trailDistance(x, y) {
-  let best = Infinity;
-  for (const line of TRAIL_LINES) {
-    for (let i = 1; i < line.length; i++) {
-      const [ax, ay] = line[i - 1], [bx, by] = line[i];
-      const ex = bx - ax, ey = by - ay, l2 = ex * ex + ey * ey || 1;
-      const u = Math.min(Math.max(((x - ax) * ex + (y - ay) * ey) / l2, 0), 1);
-      best = Math.min(best, Math.hypot(x - ax - u * ex, y - ay - u * ey));
-    }
-  }
-  return best;
-}
+import { padDistance } from '../trail/carve.js';
 
 export const STRIDE = 7;
 
@@ -35,6 +20,8 @@ export function scatterPlants(hf, layout, species, surfaceShift = null) {
   const noise = makeNoise(cfg.seed);
   const rand = mulberry32(cfg.seed * 7919);
   const out = [];
+  const route = hf.trail?.route;
+  const pads = layout.trail?.pads ?? [];
   const sample = (a, x, y) => {
     const fi = (x - f.x0) / f.cell - 0.5, fj = (y - f.y0) / f.cell - 0.5;
     const i = Math.max(0, Math.min(f.N - 2, Math.floor(fi))), j = Math.max(0, Math.min(f.N - 2, Math.floor(fj)));
@@ -56,8 +43,15 @@ export function scatterPlants(hf, layout, species, surfaceShift = null) {
       x += spacing;
 
       if (sample(f.DC, px, py) < 2) continue;                 // sea
-      // Keep the path clear. Trees are wide, so the clearance grows with plant size.
-      if (trailDistance(px, py) < cfg.trailClear * (0.6 + far)) continue;
+      // Keep the path clear (v6: the real corridor, src/trail/): nothing on the tread, and no
+      // canopy over it or the handrail. The biggest a plant here can be sets how far off it
+      // stands (trailClear metres per unit of scale, beyond the handrail).
+      if (pads.some((p) => padDistance(p, px, py) < 0.8)) continue;   // nor on the platform
+      if (route) {
+        const q = route.nearest(px, py, 8);
+        const most = lerp(cfg.nearScale, cfg.farScale, far) * 1.5;
+        if (q && q.d < route.lerpAt(route.w, q) / 2 + 0.3 + cfg.trailClear * most) continue;
+      }
       const h = heightAt(px, py);
       if (h < 4) continue;
       const e = 0.8;
@@ -78,7 +72,20 @@ export function scatterPlants(hf, layout, species, surfaceShift = null) {
       // Species and size: bushes near the finger, trees further out and in the hollows.
       const sp = Math.floor(rand() * species.length);
       const base = lerp(cfg.nearScale, cfg.farScale, far) * (0.7 + 0.6 * rand());
-      const scale = base * (0.85 + 0.3 * up);
+      let scale = base * (0.85 + 0.3 * up);
+      // Views from the path stay open (v6): a plant's top stays under the eye line of someone on
+      // the tread, falling away at about 12 degrees past 6 m, or is scrub (1.6 m) beside the
+      // path (scanned trees are 3.4 to 5 m tall at scale 1). In the photos the slopes beside
+      // the steps and along the ridge are scrub and dry grass, and the views from the steps
+      // down to the beach are open.
+      if (route) {
+        const q = route.nearest(px, py, 26);
+        if (q) {
+          const eye = route.lerpAt(route.ht, q) + 0.9 - 0.21 * Math.max(0, q.d - 6);
+          const top = Math.max(eye, h + 1.6 + 4 * smooth(9, 14, q.d));
+          scale = Math.min(scale, (top - h) / 5 + 10 * smooth(20, 26, q.d));
+        }
+      }
       // The mesh carves the faces (the notch, overhangs, buttresses, beds): follow the face
       // in or out, and nothing grows in under an overhang.
       let qx = px, qy = py;

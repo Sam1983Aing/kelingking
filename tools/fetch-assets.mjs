@@ -18,6 +18,11 @@ export const TEXTURES = {
   aerial_grass_rock: 'scrub and grass seen from above, the ground under the plants',
   sand_02: 'trampled beach sand up close, the dry beach (v5)',
   damp_beach_sand: 'firm damp sand up close, where the swash runs (v5)',
+  // The path (v6). Not part of the ground's texture array: src/trail/ loads them itself.
+  concrete_floor_02: 'weathered concrete, the steps and the viewpoint platform (v6)',
+  rocky_trail: 'dirt and embedded stones, the path (v6)',
+  weathered_planks: 'grey weathered wood, the handrail posts and rails (v6)',
+  bark_brown_02: 'bark, the logs across the dirt steps (v6)',
 };
 export const MODELS = {
   island_tree_01: 'tree',

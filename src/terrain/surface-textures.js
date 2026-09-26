@@ -15,8 +15,8 @@ async function pixels(url, size) {
   return ctx.getImageData(0, 0, size, size).data;
 }
 
-async function arrayTexture(kind, size, colorSpace, base) {
-  const layers = await Promise.all(SURFACES.map((s) => pixels(`${base}${s.id}_${kind}.jpg`, size)));
+async function arrayTexture(kind, size, colorSpace, base, list) {
+  const layers = await Promise.all(list.map((s) => pixels(`${base}${s.id}_${kind}.jpg`, size)));
   const data = new Uint8Array(size * size * 4 * layers.length);
   layers.forEach((px, i) => data.set(px, i * size * size * 4));
   const tex = new THREE.DataArrayTexture(data, size, size, layers.length);
@@ -32,11 +32,12 @@ async function arrayTexture(kind, size, colorSpace, base) {
   return tex;
 }
 
-export async function loadSurfaceTextures(base = 'assets/textures/') {
+// (list: which surfaces, in layer order; the path's are in src/trail/surfaces.js, v6.)
+export async function loadSurfaceTextures(base = 'assets/textures/', list = SURFACES, colorSize = 2048) {
   const [color, normal, mask] = await Promise.all([
-    arrayTexture('color', 2048, THREE.SRGBColorSpace, base),
-    arrayTexture('normal', 1024, THREE.NoColorSpace, base),
-    arrayTexture('mask', 1024, THREE.NoColorSpace, base),
+    arrayTexture('color', colorSize, THREE.SRGBColorSpace, base, list),
+    arrayTexture('normal', 1024, THREE.NoColorSpace, base, list),
+    arrayTexture('mask', 1024, THREE.NoColorSpace, base, list),
   ]);
-  return { color, normal, mask, sizes: SURFACES.map((s) => s.size) };
+  return { color, normal, mask, sizes: list.map((s) => s.size) };
 }

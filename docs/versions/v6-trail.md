@@ -50,6 +50,13 @@ New `src/trail/`, the path carve in `src/terrain/heightfield.js`, the clearance 
 - The path is continuous from the platform to the sand.
 - Frame budget holds.
 
+## Outcome
+
+Done in v6: see the v6 section of `PROCESS.md`. The path is continuous from the viewpoint
+platform to the sand, carved into the ground; `stairs` and `trailTop` are fitted to their
+photos on it; `trailLow` is on it but set by eye (its photo was taken from over the beach);
+the walk line for v8 is `data/walk-line.json`.
+
 ## Found by other versions
 
 - (from stage 0) At the placeholder `stairs` camera the head looks closer and wider than in

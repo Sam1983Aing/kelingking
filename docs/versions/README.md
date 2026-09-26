@@ -11,8 +11,8 @@ version. A session works on its element only, and goes deep on it.
 | v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
 | v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
-| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | next |
-| v7 | Plants | [v7-plants.md](v7-plants.md) | |
+| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
+| v7 | Plants | [v7-plants.md](v7-plants.md) | next |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |
 
@@ -26,7 +26,7 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v6-trail.md, then start v6.
+> Read docs/versions/README.md and docs/versions/v7-plants.md, then start v7.
 
 ## Rules for every version
 
@@ -73,9 +73,9 @@ passes through them. Each is tied to a reference photo.
 |---|---|
 | `overview` | The whole bay from about 1 km up: layout, sea colour bands, plateau texture |
 | `viewpoint` | The postcard from the clifftop platform: the main colour and light target |
-| `stairs` | Top of the stairs looking down the ridge (placeholder camera until v6) |
-| `trailTop` | Where the path leaves the steps and runs along the ridge |
-| `trailLow` | Low on the zigzag, looking into the overhang behind the beach (placeholder until v6) |
+| `stairs` | On the concrete steps below the platform, looking over the ridge to the head (on the path from v6) |
+| `trailTop` | On the ridge path, the head ahead (on the path from v6) |
+| `trailLow` | Low on the zigzag, looking into the overhang behind the beach (on the path from v6, set by eye) |
 | `beach` | Standing on the sand with the cliff wall above |
 | `swash` | At the water's edge, the swash running up the sand (from v5) |
 | `shoreBreak` | A wave breaking at eye level |
@@ -103,6 +103,8 @@ node tools/parts.mjs beach --parts=none,SKIP_SANDNEAR,WSKIP_SWASH   # what parts
 node tools/capture.mjs cove --console                # print the page's shader errors and warnings
 node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings
 node tools/preview-height.mjs 1024                   # top-down shaded height map
+node tools/walk-line.mjs                             # the camera line down the path, data/walk-line.json (v6)
+node tools/capture.mjs trailTop --eval="__app.contactSheet([{ s: 150, yaw: 234, pitch: -20, fov: 70 }])"   # cameras on the path by distance along it
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
@@ -113,7 +115,8 @@ Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,pl
 `faceStep=` (face strip spacing). From v4: `debug=1..9` (water views, see `src/main.js`),
 `sprayDebug=1..4`, and `w.`, `o.`, `s.` for any water, spectrum or foam setting. From v5:
 `debug=10` (the swash: sheet, foam, thickness), `w.runup=` and `w.swashT=` (how high the swash
-runs and how long its uprush takes). Keys: `1` to `9`
+runs and how long its uprush takes). From v6: `trail=0` (no path at all), `cam=` takes a roll
+as a seventh number. Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light
