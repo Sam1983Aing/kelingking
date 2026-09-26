@@ -421,7 +421,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
     // litter and bare earth, and shade, which the lighting takes from tCanopy.
     float canopy = clamp(-D.a, 0.0, 1.0);
-    gr.color = mix(gr.color, gr.color * vec3(0.8, 0.66, 0.55), canopy);
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(0.72, 0.7, 0.6), canopy);
     // Near the camera the grass is real (the tussocks, src/veg/, up to about 20 m): the ground
     // under it is straw and earth. Further off the ground carries the grass's colour itself.
     float litter = 1.0 - smoothstep(14.0, 22.0, distance(P, cameraPosition));

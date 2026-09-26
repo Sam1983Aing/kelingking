@@ -295,8 +295,17 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           if (s) { if (s.c > 1.5) continue; qx += s.c * s.gx; qy += s.c * s.gy; }
         }
         const variant = Math.floor(rand() * 3);
+        // Beside the concrete steps the verge is low leafy scrub, not grass
+        // (trail-mid-descent-a.jpg, trail-stairs-viewpoint.jpg): now and then a small naupaka
+        // instead of a tussock, a metre or so out, leaning over the handrail.
+        if (q && route.sec[q.i] === 0 && d > 0.6 && d < 5 && rand() < cfg.grass.vergeScrub) {
+          const sv = Math.floor(rand() * 2);
+          out.push(qx, h - 0.08, -qy, 0.55 + 0.3 * rand(), rand() * Math.PI * 2, SP.SCAEVOLA, sv, rand());
+          continue;
+        }
         // Taller in the open, low right beside the tread (trodden and cut back).
-        const scale = (0.75 + 0.5 * rand()) * (0.55 + 0.45 * smooth(0, 1.5, d));
+        // (Beside the concrete steps it is short: the photos show scrub there, and the view.)
+        const scale = (0.75 + 0.5 * rand()) * (0.55 + 0.45 * smooth(0, 1.5, d)) * (q && route.sec[q.i] === 0 ? 0.65 : 1);
         out.push(qx, h - 0.04, -qy, scale, rand() * Math.PI * 2, SP.GRASS, variant, rand());
       }
     }

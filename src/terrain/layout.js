@@ -202,7 +202,7 @@ export function defaultLayout() {
       density: 0.95, ledgeChance: 0.5, trailClear: 1.4,
       // Grass tussocks (v7), drawn only near the camera, so only within `reach` metres of the
       // path: on a grid `spacing` apart, kept with a chance of up to `density`.
-      grass: { reach: 22, spacing: 0.42, density: 1 },
+      grass: { reach: 22, spacing: 0.42, density: 1, vergeScrub: 0.22 },
       // Scrub down the sheer faces (v7): a clump every `step` metres up the face where its
       // patches are, kept with a chance of up to `density`.
       face: { step: 1.8, density: 0.9 },
