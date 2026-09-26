@@ -225,6 +225,10 @@ fetch('assets/veg/impostors.json').then((r) => r.json())
 loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true; })
   .catch((e) => { console.error('surface textures failed', e); texturesReady = true; });
 terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
+// The swash on the sand runs on the sea's clock and settings, and the sheet over it sees the
+// ground's wet sand through it.
+for (const k of ['uTime', 'uPeriod', 'uRunup', 'uSwashT']) terrain.uniforms[k] = water.uniforms[k];
+water.uniforms.uWetSandAlb.value.setRGB(...terrain.uniforms.uSandAlb.value.toArray().map((v, i) => v * terrain.uniforms.uWetTint.value.getComponent(i)));
 const hidden = new Set((params.get('hide') || '').split(','));
 for (const name of hidden) {
   if (name === 'terrain') terrain.mesh.visible = false;
@@ -472,7 +476,8 @@ wf.add(timeCtl, 'speed', 0, 3, 0.05).name('time speed');
 wf.add(wp, 'period', 4, 18, 0.1).name('wave period (s)').onChange(wa);
 wf.add(wp, 'swell', 0, 3, 0.01).name('swell height (m)').onChange(wa);
 wf.add(wp, 'breakAt', 4, 60, 0.5).name('break distance (m)').onChange(wa);
-wf.add(wp, 'surge', 0, 1.5, 0.01).name('swash run-up (m)').onChange(wa);
+wf.add(wp, 'runup', 0, 2.5, 0.01).name('swash run-up (m)').onChange(wa);
+wf.add(wp, 'swashT', 0.8, 6, 0.05).name('uprush time (s)').onChange(wa);
 wf.add(wp, 'swellHeading', 0, 360, 1).name('swell heading').onChange(wa);
 wf.add(wp, 'foam', 0, 2, 0.01).onChange(wa);
 wf.add(wp, 'whitecaps', 0, 3, 0.01).onChange(wa);

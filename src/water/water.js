@@ -13,7 +13,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     period: 9,          // seconds between waves
     swell: 1.1,         // wave height at sea (m)
     breakAt: 20,        // where waves break on the beach (m offshore)
-    surge: 0.55,        // swash run-up (m)
+    runup: 0.95,        // how high an average wave's swash runs up the sand (m above still water)
+    swashT: 2.6,        // seconds its uprush takes (the backwash takes 1.8 times as long)
     swellHeading: 40,   // direction the swell travels, compass degrees
     foam: 1.0,
     whitecaps: 1.0,
@@ -47,7 +48,9 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uPeriod: { value: 9 },
       uSwell: { value: 0.9 },
       uBreakAt: { value: 16 },
-      uSurge: { value: 0.5 },
+      uRunup: { value: 0.95 },
+      uSwashT: { value: 2.6 },
+      uWetSandAlb: { value: new THREE.Color(0.3, 0.26, 0.2) },
       uSwellDir: { value: new THREE.Vector2(0.64, 0.77) },
       uSkyIrr: { value: new THREE.Color(0.5, 0.6, 0.7) },   // sky light on flat ground (klux)
       uAbsorb: { value: new THREE.Vector3() },
@@ -105,7 +108,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     u.uPeriod.value = params.period;
     u.uSwell.value = params.swell;
     u.uBreakAt.value = params.breakAt;
-    u.uSurge.value = params.surge;
+    u.uRunup.value = params.runup;
+    u.uSwashT.value = params.swashT;
     const sh = THREE.MathUtils.degToRad(params.swellHeading);
     u.uSwellDir.value.set(Math.sin(sh), Math.cos(sh));
     u.uFoam.value = params.foam;

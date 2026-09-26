@@ -107,6 +107,15 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     u += off * (0.3 + 1.1 * rip) * surfZone * (1.0 - sf.push);
     // Off the rock after a hit.
     u += off * 0.55 * smoothstep(18.0, 0.0, c.r) * c.a;
+    // On the sand the swash sheet moves it (swash.js): up the beach and back, the same sheet
+    // the sea draws.
+    Swash sw = Swash(-1e3, 0.0, 0.0, 0.0, 0.0, 60.0, -1e3, -1e3);
+    float onSand = nearBeach * smoothstep(0.5, -0.5, s);
+    if (nearBeach > 0.0 && d.r > SW_RUNDOWN - 0.6 && d.r < uRunup * 1.6 + 0.3) {
+      sw = swashAt(p, d.r, uTime, uPeriod);
+      float covered = smoothstep(0.0, 0.004, sw.film);
+      u = mix(u, -off * sw.vel * covered + eddy(p) * 0.15 * covered, onSand);
+    }
 
     vec2 src = p - u * uDt;
     vec2 suv = (src - uRect.xy) / uRect.z;
@@ -140,6 +149,11 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     // And the wash that is always running up and down the foot of the rock.
     float wash = c.a * smoothstep(2.0 + 7.0 * c.g * c.g, 0.0, c.r) * (0.45 + 0.3 * vnoise(p * 0.3 + uTime * 0.3));
     make = max(make, max(hit, wash));
+    // The front of each uprush is a band of foam and bubbles, which it leaves behind as it
+    // slows; foam left on bare sand drains into it and is gone within a few seconds.
+    make = max(make, sw.front * 0.75 * nearBeach);
+    float bare = onSand * (1.0 - smoothstep(0.0, 0.003, sw.film));
+    foam *= exp(-uDt * bare / 2.5);
     // New foam starts its own pattern where it is made.
     travel *= 1.0 - smoothstep(foam, foam + 0.3, make);
     foam = max(foam, make);
@@ -148,7 +162,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     sand = min(sand, 1.0);
 
     // Nothing lives on dry land (above where the swash reaches).
-    float wet = 1.0 - smoothstep(uSurge + 0.1, uSurge + 0.6, d.r);
+    float wet = 1.0 - smoothstep(uRunup * 1.5 + 0.1, uRunup * 1.5 + 0.4, d.r);
     oState = vec4(foam * wet, sand * wet, travel);
   }`;
 
@@ -193,7 +207,8 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     gl.uniform1f(u.uPeriod, W.uPeriod.value);
     gl.uniform1f(u.uSwell, W.uSwell.value);
     gl.uniform1f(u.uBreakAt, W.uBreakAt.value);
-    gl.uniform1f(u.uSurge, W.uSurge.value);
+    gl.uniform1f(u.uRunup, W.uRunup.value);
+    gl.uniform1f(u.uSwashT, W.uSwashT.value);
     gl.uniform2f(u.uSwellDir, W.uSwellDir.value.x, W.uSwellDir.value.y);
     const L = W.uOceanL.value;
     gl.uniform4f(u.uOceanL, L.x, L.y, L.z, L.w);

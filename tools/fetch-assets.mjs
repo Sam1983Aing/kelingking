@@ -16,6 +16,8 @@ export const TEXTURES = {
   cliff_side: 'layered rock, the bedding on the faces',
   seaside_rock: 'dark wet rock, the notch and the waterline band',
   aerial_grass_rock: 'scrub and grass seen from above, the ground under the plants',
+  sand_02: 'trampled beach sand up close, the dry beach (v5)',
+  damp_beach_sand: 'firm damp sand up close, where the swash runs (v5)',
 };
 export const MODELS = {
   island_tree_01: 'tree',

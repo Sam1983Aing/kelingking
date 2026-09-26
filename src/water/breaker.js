@@ -460,7 +460,8 @@ export function createBreaker(renderer, waterUniforms) {
     gl.uniform1f(u.uPeriod, U.uPeriod.value);
     gl.uniform1f(u.uSwell, U.uSwell.value);
     gl.uniform1f(u.uBreakAt, U.uBreakAt.value);
-    if (u.uSurge) gl.uniform1f(u.uSurge, U.uSurge.value);
+    if (u.uRunup) gl.uniform1f(u.uRunup, U.uRunup.value);
+    if (u.uSwashT) gl.uniform1f(u.uSwashT, U.uSwashT.value);
     if (u.uBreakerOn) gl.uniform1f(u.uBreakerOn, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

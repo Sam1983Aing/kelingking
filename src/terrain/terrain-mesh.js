@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL, TERRAIN_BOUNCE } from './terrain-shader.js';
-import { SURFACES, surfaceGains } from './surfaces.js';
+import { SURFACES, surfaceGains, WET_SAND } from './surfaces.js';
 import { STRATA, SHADOW_ROWS, buildStrata } from './strata.js';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
@@ -87,6 +87,13 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     uContours: { value: 0 },
     uClay: { value: 0 },
     uBeachTop: { value: 4.6 },
+    uSandAlb: { value: surfaceAlbedo('aerial_beach_01') },
+    uWetTint: { value: new THREE.Vector3(...WET_SAND) },
+    // The swash's clock and settings come from the sea (main.js shares its uniforms).
+    uTime: { value: 0 },
+    uPeriod: { value: 9 },
+    uRunup: { value: 0.95 },
+    uSwashT: { value: 2.6 },
     uSurfColor: { value: null },
     uSurfNormal: { value: null },
     uSurfMask: { value: null },

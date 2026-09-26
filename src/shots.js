@@ -96,6 +96,13 @@ export const SHOTS = {
     // v1 had it (a film camera, about 28 mm).
     pos: [115, 220, 3.55], yaw: 208.3, pitch: -4.85, roll: 0, fov: 46,
   },
+  swash: {
+    label: 'At the water\'s edge',
+    ref: 'references/04-beach/beach-white-sand-surf.jpg',
+    // v5: standing on the sand where the swash runs, looking at the break by the rock at the
+    // south end of the beach, as the photo was taken.
+    pos: [99, 164, 2.15], yaw: 222.5, pitch: -3.6, roll: 0, fov: 46,
+  },
 };
 
 // The hero frames: the shots every version is judged on, in the order the scroll passes
