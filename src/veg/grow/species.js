@@ -305,7 +305,8 @@ export function palm(seed, o = {}) {
     const pts = [madd(c, [0, 1, 0], -0.12), madd(c, [0, 1, 0], 0.12)];
     b.tube(pts, [0.12, 0.12], { color: [...lin(110, 104, 50), 0.1], sides: 6, wind: [[0.3, 0.2], [0.3, 0.2]], shade: [0.5, 0.5] });
   }
-  const green = lin(84, 100, 50), dry = lin(146, 124, 80);
+  // Coconut fronds are a lighter, yellower green than the scrub under them.
+  const green = lin(100, 114, 56), dry = lin(150, 128, 82);
   const nF = Math.round(rand.range(22, 28));
   let area = 0;
   for (let f = 0; f < nF; f++) {
@@ -346,7 +347,7 @@ export function palm(seed, o = {}) {
         const dir = norm(add(add(mul(side, sgn * 0.8), mul(T, 0.4)), [0, -0.75 - 0.4 * t, 0]));
         const pts = [at, madd(madd(at, dir, ll * 0.5), [0, -1, 0], 0.03), madd(madd(at, dir, ll), [0, -1, 0], ll * 0.15)];
         const face = norm(add(cross(dir, T), [0, 0.5, 0]));
-        b.strap(pts, [0.04, 0.034, 0.004], [face, face, face], {
+        b.strap(pts, [0.05, 0.043, 0.005], [face, face, face], {
           colors: [col, col, mixc(col, dry, 0.15)], wind: pts.map(() => wAt(t)), leafPhase: rand(), shade: 0.9, gloss: 0.6, trans: 0.45, flat: true, cup: 0.3,
         });
         area += ll * 0.03;

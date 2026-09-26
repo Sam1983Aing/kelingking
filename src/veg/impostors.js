@@ -12,7 +12,7 @@ import { STRIDE } from './scatter.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
-import { WIND_GLSL, FOLIAGE_LIGHT_GLSL } from './foliage-glsl.js';
+import { WIND_GLSL, FOLIAGE_LIGHT_GLSL, GUST_SHEEN_GLSL } from './foliage-glsl.js';
 
 const VERT = /* glsl */ `
 ${HEMI_OCT_GLSL}
@@ -33,6 +33,7 @@ varying float vYaw;
 varying float vScale;
 varying float vTint;
 varying float vFade;
+varying float vGust;
 ${AERIAL_VERT_PACKED}
 #include <common>
 
@@ -81,6 +82,7 @@ void main() {
   vYaw = yaw;
   vScale = s;
   vTint = iYawTint.y;
+  vGust = windGust(iPosScale.xz) * uWind.z * uWind.w;
   vFoot = iPosScale.xyz;
   vFrameDir = rotY(d, yaw);
   vec4 mvPosition = viewMatrix * vec4(wp, 1.0);
@@ -109,7 +111,10 @@ varying float vYaw;
 varying float vScale;
 varying float vTint;
 varying float vFade;
+varying float vGust;
+uniform float uWindTime;
 ${SUN_SHADOW_GLSL}
+${GUST_SHEEN_GLSL}
 ${CLOUD_SHADOW_GLSL}
 ${FOLIAGE_LIGHT_GLSL}
 
@@ -151,6 +156,7 @@ void main() {
   N *= dot(N, V) < 0.0 ? -1.0 : 1.0;
   vec3 alb = c.rgb * c.rgb;
   alb *= mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), vTint * 0.5 + 0.5);
+  if (vGust > 0.01) alb = gustSheen(alb, vGust, 0.5 + 0.5 * sin(uWindTime * 7.0 + pHash(floor(vUv * 700.0)) * 6.2832));
   // Light through the crown to this point (as plant-material.js does per vertex).
   vec3 pl = rotY(P - vFoot, -vYaw) / vScale;
   vec3 sunL = rotY(uSunDir, -vYaw);

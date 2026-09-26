@@ -23,7 +23,7 @@ export const SPECIES = [
   { id: 'scaevola', heights: [1.3, 1.6, 1.95], impostor: true, crown: [0.85, 0.85] },
   { id: 'grass', heights: [0.5, 0.65, 0.8], impostor: false },
   { id: 'tree', heights: [4.5, 5.5, 6.5], impostor: true, crown: [0.55, 0.8] },
-  { id: 'palm', heights: [10, 12.5], impostor: true, crown: [0.36, 0.45] },
+  { id: 'palm', heights: [10, 12.5], impostor: true, crown: [0.36, 0.3] },
   { id: 'pandanus', heights: [3.2, 4.2], impostor: true, crown: [0.5, 0.6] },
   { id: 'creeper', heights: [2.6, 3.8], impostor: true, crown: [0.3, 0.6] },
 ];
@@ -200,6 +200,10 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       // Scrub patches close up, the grassy ground between them carries the odd bush.
       const scrub = scrubAt(px, py);
       veg *= lerp(1, 0.45 + 0.55 * scrub, 1 - far);
+      // On the plateau a mosaic hundreds of metres across: woodland, and open grassland with
+      // scattered bushes and trees (aerial-high-whole-bay.jpg: lime slopes, dark wooded gullies).
+      const wood = smooth(0.38, 0.6, fbm(noise, px * 0.006 - 13, py * 0.006 + 5, 3) + 0.5);
+      veg *= lerp(1, 0.3 + 0.7 * wood, far);
       if (rand() > veg * cfg.density) continue;
 
       // Species and size: the naupaka on the finger, the odd screw pine on the slopes and the
@@ -212,7 +216,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
         // Palms about 8 m apart in a grove (one in five of the 3.6 m slots), scrub and the odd
         // tree under and between them.
         const grove = groveAt(px, py) * smooth(0.2, 0.6, far);
-        sp = r < grove * 0.2 ? SP.PALM : r < (0.55 + 0.35 * far) * (1 - 0.6 * grove) ? SP.TREE : r < 0.95 ? SP.SCAEVOLA : SP.PANDANUS;
+        sp = r < grove * 0.2 ? SP.PALM : r < (0.35 + 0.55 * far * wood) * (1 - 0.6 * grove) ? SP.TREE : r < 0.95 ? SP.SCAEVOLA : SP.PANDANUS;
       }
       const tree = sp === SP.TREE;
       const variant = Math.floor(rand() * SPECIES[sp].heights.length);

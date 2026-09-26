@@ -34,6 +34,17 @@ float windPush(vec2 xz) {
 }
 `;
 
+// What a gust does to a canopy's colour: the leaves it turns over show their undersides,
+// paler and greyer, flickering as they flip back and forth. From a distance this is what
+// shows a gust running across a slope of scrub (the sway itself is too small to see).
+//   gust  windGust() times its strength, flick  0..1, changing fast from leaf to leaf
+export const GUST_SHEEN_GLSL = /* glsl */ `
+vec3 gustSheen(vec3 alb, float gust, float flick) {
+  float flip = gust * (0.3 + 0.7 * flick) * 0.45;
+  return mix(alb, vec3(dot(alb, vec3(0.3, 0.55, 0.15))) * vec3(1.25, 1.3, 1.25) + alb * 0.3, flip);
+}
+`;
+
 // Light on foliage. A leaf reflects light on the side it faces and lets some through to the
 // other side, yellower (chlorophyll passes green and a little red); thin leaves pass more.
 // Its waxy skin is a dielectric sheen (index about 1.45) that mirrors the sky and catches the

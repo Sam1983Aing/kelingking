@@ -23,7 +23,7 @@ import * as THREE from 'three';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
-import { WIND_GLSL, FOLIAGE_LIGHT_GLSL } from './foliage-glsl.js';
+import { WIND_GLSL, FOLIAGE_LIGHT_GLSL, GUST_SHEEN_GLSL } from './foliage-glsl.js';
 import { ATLAS_GLSL } from './grow/leaves.js';
 
 const VERT = /* glsl */ `
@@ -76,6 +76,7 @@ varying vec4 vLeaf;
 varying vec2 vKeep;
 varying float vSelf;         // sunlight left after the crown
 varying float vTint;
+varying float vGust;         // a gust turning the leaves over (foliage-glsl.js)
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
@@ -128,6 +129,8 @@ void main() {
   vLeaf = aLeaf;
   vKeep = iYawTint.zw;
   vTint = iYawTint.y;
+  // (Leaves only; the flicker from each leaf's own phase.)
+  vGust = floor(aLeaf.x * 255.0 + 0.5) == 0.0 ? 0.0 : windGust(iPosScale.xz) * uWind.z * uWind.w * (0.3 + 0.7 * (0.5 + 0.5 * sin(t * 7.0 + aWind.w * 40.0)));
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mv;
 #ifdef DBG_NOAERIAL
@@ -163,6 +166,8 @@ varying vec4 vLeaf;
 varying vec2 vKeep;
 varying float vSelf;
 varying float vTint;
+varying float vGust;
+${GUST_SHEEN_GLSL}
 #ifdef VERTEX_LIGHT
 varying vec3 vDiffE;
 varying vec3 vSpec;
@@ -222,6 +227,7 @@ void main() {
   }
   // Plants vary: some greener, some yellower, some darker.
   alb *= kind == 0.0 ? vec3(1.0) : mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), vTint * 0.5 + 0.5);
+  if (vGust > 0.01) alb = gustSheen(alb, vGust, 1.0);
 
   vec3 P = vWorld;
 #if defined(VERTEX_LIGHT)
