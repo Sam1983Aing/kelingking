@@ -88,10 +88,24 @@ export const SHOTS = {
   beach: {
     label: 'On the sand',
     ref: 'references/04-beach/beach-white-sand-cliff.jpg',
-    pos: [124, 200, 4.4], yaw: 208, pitch: -3.8, roll: 0, fov: 40,
+    // v5 refitted it (v1's was by eye, 27 m from the water, and after v5 narrowed the beach it
+    // stood 6 m from the wall). The people in the photo give their distances by their size and
+    // the eye's height above their feet: the man at the water's edge is about 14 m off and
+    // 3.5 m below the eye, so the photographer stood on the upper beach, 2 m up. The head's
+    // edge against the sky sets the heading, the horizon the pitch. The lens is wider than
+    // v1 had it (a film camera, about 28 mm).
+    pos: [115, 220, 3.55], yaw: 208.3, pitch: -4.85, roll: 0, fov: 46,
+  },
+  swash: {
+    label: 'At the water\'s edge',
+    ref: 'references/04-beach/beach-white-sand-surf.jpg',
+    // v5: standing on the sand where the swash runs, looking at the break by the rock at the
+    // south end of the beach, as the photo was taken.
+    pos: [99, 164, 2.25], yaw: 222.5, pitch: -3.6, roll: 0, fov: 46,
   },
 };
 
 // The hero frames: the shots every version is judged on, in the order the scroll passes
 // through them, plus the head from the sea. tools/hero.mjs renders and times these.
-export const HERO = ['overview', 'viewpoint', 'stairs', 'trailTop', 'trailLow', 'beach', 'shoreBreak', 'sideFromSea'];
+// (swash from v5.)
+export const HERO = ['overview', 'viewpoint', 'stairs', 'trailTop', 'trailLow', 'beach', 'swash', 'shoreBreak', 'sideFromSea'];

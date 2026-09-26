@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { TERRAIN_PARS, TERRAIN_COLOR, TERRAIN_NORMAL, TERRAIN_LABEL, TERRAIN_BOUNCE } from './terrain-shader.js';
-import { SURFACES, surfaceGains } from './surfaces.js';
+import { SURFACES, surfaceGains, WET_SAND } from './surfaces.js';
 import { STRATA, SHADOW_ROWS, buildStrata } from './strata.js';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
@@ -87,6 +87,15 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     uContours: { value: 0 },
     uClay: { value: 0 },
     uBeachTop: { value: 4.6 },
+    uSandAlb: { value: surfaceAlbedo('aerial_beach_01') },
+    uWetTint: { value: new THREE.Vector3(...WET_SAND) },
+    // The swash's clock and settings come from the sea (main.js shares its uniforms).
+    uTime: { value: 0 },
+    uPeriod: { value: 9 },
+    uRunup: { value: 0.85 },
+    uSwashT: { value: 2.6 },
+    uSwashMap: { value: null },
+    uSwashRect: { value: new THREE.Vector3(0, 0, 1) },
     uSurfColor: { value: null },
     uSurfNormal: { value: null },
     uSurfMask: { value: null },
@@ -103,7 +112,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     // Every patch must find its place (patch() throws if not), or the shader silently loses
     // a feature: that is how the ground went without cast shadows until v3.
     shader.vertexShader = patchAll(shader.vertexShader, (s) => s
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute vec4 aRock;\nvarying vec4 vRock;\nattribute vec4 aHorizon;\nvarying vec3 vHorizon;\n' + AERIAL_VERT_PACKED)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute vec4 aRock;\nvarying vec4 vRock;\nattribute vec4 aHorizon;\nvarying vec3 vHorizon;\nvarying float vFoot;\n' + AERIAL_VERT_PACKED)
       // The haze per vertex. The mesh covers the whole island, so vertices well outside the
       // view skip it (the ground's triangles are small, so none spans the margin; and near
       // the camera, where one could, the haze is nothing anyway).
@@ -111,7 +120,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
         vAp = vec4(0.0, 0.0, 0.0, 1.0);
         if (gl_Position.w > 0.0 && all(lessThan(abs(gl_Position.xy), vec2(1.3 * gl_Position.w)))) aerialVertex(vWorldPos);`)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * objectNormal);')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvRock = aRock;\nvHorizon = vec3(aHorizon.x, aHorizon.yz * 2.0 - 1.0);'));
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvRock = aRock;\nvHorizon = vec3(aHorizon.x, aHorizon.yz * 2.0 - 1.0);\nvFoot = aHorizon.w * 8.0;'));
     shader.fragmentShader = patchAll(shader.fragmentShader, (s) => s
       .replace('#include <common>', '#include <common>\n' + SKY_PARS + AERIAL_FRAG_PACKED + CLOUD_SHADOW_GLSL + TERRAIN_PARS)
       .replace('#include <color_fragment>', TERRAIN_COLOR)

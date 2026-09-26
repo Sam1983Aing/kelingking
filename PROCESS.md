@@ -867,3 +867,160 @@ A jump of the clock replays 30 s of foam, about 440 ms.
   simpler band of white water and the wind rows.
 - The sea beyond 15 km is 0.6 stops dark, with v2's horizon band. Clouds are still not in the
   reflection.
+
+## v5: sand and the waterline (2026-09-25 and 26)
+
+### The shape of the beach, from the drone photo
+
+At v4 the `beach` frame showed the sand climbing to the left as a smooth dune. Two causes:
+
+- The camera. v1 had set it by eye, 27 m from the water. The people in the photo say
+  otherwise: from their size and how far their feet sit below the eye, the man at the water's
+  edge is about 14 m away and 3.5 m below the eye. A search over camera positions, scored on
+  those distances and on the head's edge against the sky, put the photographer on the upper
+  beach 2 m above the water, with a wider lens than v1 had (46 degrees, a film camera at
+  about 28 mm).
+- The ground. Behind the beach the walls came down with the zones' gentle profiles, so they
+  ended in long toes, and the sand ran up them as ramps.
+
+The foot of the wall is now traced from the registered drone photo: the sand's edge,
+clicked on the photo and projected onto the map through the `overview` camera
+(`beach.back` in `layout.js`, smoothed). Behind the beach each wall comes down to that line,
+steep at the bottom. A trace of the render's sand over the drone photo and over the viewpoint
+photo lines up now. The south end of the beach is low (a zone sets how high the sand gets,
+`btop`), so the swash reaches the rock there, as in the photos, and the beach has a steep face
+up to a berm and a gentler rise behind it. The outline checks on `viewpoint` and `overview`
+still pass.
+
+What went wrong on the way:
+
+1. **Folds on the sand from above** (`trailLow`): dark specks and thin lines. With the water
+   switched off they showed as holes, and a rasterisation of the mesh from above as full
+   cover, so they were not holes: they were strips of face folded over, their back faces
+   shaded dark. Round a concave wall the lines across the face converge going out over the
+   sand and cross. The strips on the beach now stop before the lines cross, and a few metres
+   past the foot (more under the overhang, whose cave floor they carry).
+2. **A pillar and two recesses at the wall's foot** where the traced line ended short of the
+   zones' own foot. The line now runs on along the zones' foot to the south, so it hands over
+   without a corner.
+3. **The south end's lower sand fooled the mesh builder**, which judged "standing on the
+   beach" by how high the ground 3 m out was (0.8 to 2.4 m). It asks the zones now.
+
+### The sand
+
+- **Colour.** About 0.5 reflectance (v2 found v1's 0.72 too bright under the physical
+  light) and a little pinker, as coral sand with red foraminifera is: the midday photos have
+  green over red about 0.93 and blue over red 0.80 to 0.87 on sunlit sand. `viewpoint
+  --measure`: sunlit sand +0.07 stops against the photo (it was +0.3 to 0.5). The drone photo
+  still reads +0.27, a different day and haze.
+- **Up close**, two CC0 scans from Poly Haven (Sam approved the 29 MB download): `sand_02`,
+  trampled beach sand, and `damp_beach_sand`, the firm sand the swash packs down. v1 used the
+  aerial scan at two scales, whose wind ripples came out half a metre apart, and the photos
+  show trampled sand, not ripples. The aerial scan still gives the colour from further off.
+- **Along the foot of the walls**, from how far each vertex is from the foot (worked out in the
+  mesh builder from the carved faces): a narrow band of red grains where the swash reaches
+  the rock (`beach-white-sand-surf.jpg`), grit and pebbles thinning out over a few metres,
+  and greyer sand in under the overhangs.
+
+### The swash
+
+v1 to v4 raised the water level over the whole beach at once, like a tide, with a thin bright
+line where it met the sand. Now each wave sends a sheet up the beach (`src/water/swash.js`):
+
+- The edge moves like a ball thrown up the slope, fast then slowing, stops, and drains back
+  down more slowly. The sheet is thin at its edge and thicker behind, a bore's worth at first
+  and a few millimetres in the late backwash. Loosely after Shen and Meyer's solution for a
+  bore collapsing on a beach.
+- Each wave runs its own height (its size in the set, and lobes along the shore that change
+  from wave to wave), so the next uprush meets the last backwash. The front runs up in lobes a
+  metre or two across, and its edge is ragged at a few centimetres.
+- **The sea** draws the sheet as a thin film: mostly the ground's wet sand seen through it,
+  with the sky's reflection by its Fresnel, a little colour from the water, caustics from its
+  ripples (streaks along the flow), and a foamy band at the front of each uprush. The ocean's
+  waves do not ride on it.
+- **The sand** under and behind it is soaked, a mirror for a couple of seconds after the water
+  leaves (the film in the dimples reflects the sky and the sun), then dark and damp, drying
+  over a minute, with a ragged damp line where the big waves of a set reach.
+- **The foam simulation** moves with it: up in the uprush, back in the backwash. Foam left on
+  bare sand drains away within a few seconds.
+
+One function feeds all three, from the time, the place and the bed's height, so they cannot
+disagree. It is worked out once per frame into a 1024 square map over the beach
+(`swash-map.js`). Its values change smoothly (the edge of a sheet is where a linear height
+crosses zero), so reading it bilinearly draws the same sharp edge.
+
+What went wrong:
+
+1. **Per vertex, it was expensive where it was not used.** The first version worked the swash
+   out in the ground's vertex shader, for the few thousand vertices on the wet sand. `beach`
+   got 1.2 ms slower: the ground is one draw of millions of vertices, and a heavier vertex
+   shader slows all of them. The map costs next to nothing.
+2. **Out of texture units.** The sea's shaders already used 16, the most WebGL promises. Its
+   vertex shader now takes the three displacement cascades it uses as their own uniform
+   (three.js allocates units by the length of the JavaScript array, not the shader's).
+3. **A ternary choosing between two GLSL structs hung Chrome's GPU process**: the page never
+   became ready and printed nothing. Plain if/else is fine.
+4. **A spike of water standing up** where the map ended, on the sand under the overhang: the
+   sheet on one side, the sea on the other. The map covers the whole beach now and fades at
+   its edges.
+5. **The white carpet.** In the uprush a flat white mass covers the lower beach. A debug view
+   of the sheet (`debug=10`: sheet, foam, thickness) showed it is not the sheet but the bore's
+   foam on the sea in front of it. It clips to white in full sun at the photo's exposure, as
+   the photo's foreground does. Attempts to give it texture up close by modulating its
+   brightness did nothing (it is above white anyway), and bubble cells cut into its cover read
+   as honeycomb, so they were left out.
+
+### Tools
+
+- `tools/parts.mjs` times parts of a frame in one page: compile switches on the ground's and
+  the sea's materials (`SKIP_x`, `WSKIP_x`, combinable with `+`), alternated over many rounds.
+  The first version recompiled on every switch (three.js drops a program when no material
+  uses it); it keeps one material per variant now.
+- `tools/ab.mjs` defaulted to the second newest gallery folder, which before `docs/gallery/v5`
+  existed was v3. It takes the newest tagged version now. It and `hero.mjs` skip shots the
+  older build does not have (its page would fall back to another shot).
+- New shot `swash` (a hero frame from v5), water debug view 10.
+
+### Speed
+
+The official run (`hero.mjs v5`, against v4 checked out from its tag) and the side by side
+tool, which agrees with itself better:
+
+| Frame | `hero.mjs` | `ab.mjs --hero`, 10 rounds |
+|---|---|---|
+| overview | +4% | +1% |
+| viewpoint | -4% | -3% |
+| stairs | -5% | -13% |
+| trailTop | 0% | +3% |
+| trailLow | 0% | +3% |
+| beach | +13% | +16% |
+| swash | new | new |
+| shoreBreak | -4% | +3% |
+| sideFromSea | -4% | -4% |
+
+`beach` is over budget, and it is the camera: the same frame at v4's camera (`ab.mjs beach
+--set="cam=124,200,4.4,208,-3.8,40"`, 16 rounds) is +5%, at v5's camera +17%. v5's camera
+stands 14 m from the water, as the photo was taken, and most of its frame is close-range sand
+and the swash, which is what this version is for. Switching parts off one at a time
+(`parts.mjs`) put each of them (the second sampling of the sand scan, the scans at all, the
+foot of the wall, the sheet) within the noise of about half a millisecond, so there is no one
+thing to take out. Logged in the v9 brief.
+
+On the way down from +43% at `trailLow` and +39% at `beach`: the swash moved from the
+vertices to the map (1.2 ms at `beach`), the strips on the sand stopped a few metres past the
+foot (`trailLow` had them reaching 12 to 30 m out over flat sand), the sea skips the ocean's
+texture reads and the surf where the sheet lies on the sand, and the finest sand, bubbles and
+caustics only run where a pixel is small enough to show them.
+
+### Still weak
+
+- The bore's foam up close is a flat, soft white carpet with grey smudges. The photo's is
+  white too (film, overexposed), but real foam at a couple of metres shows bubbles.
+- At noon the sun reaches deep into the cave under the overhang, where `beach-under-cliff.jpg`
+  has its floor in shade. v4 does the same: it is the cave's sun horizon (v3), not v5's sand.
+- Under the neck wall the undercut's edges zigzag across the rows of the face strips. The
+  plain grey view shows it clearly; with textures it mostly hides.
+- Seen along the beach, the sheet's backwash and the sea just offshore read a little glassy
+  and turquoise, with the sea's streaky lace (v4) on top.
+- Shaded sand from the viewpoint measures 1.7 stops darker than the photo at the same pixels,
+  mostly because the photo's shadows fall differently there.

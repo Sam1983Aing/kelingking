@@ -74,3 +74,19 @@ New `src/trail/`, the path carve in `src/terrain/heightfield.js`, the clearance 
 - The faces are separate strips of mesh now (`mesh-builder.js`), and the ground grid is
   pushed back into the rock under them. A path cut into a steep slope will need to cut the
   strips too, or be its own mesh laid over them.
+
+**From v5 (sand).**
+
+- The wall behind the beach comes down to a foot traced from the registered drone photo
+  (`beach.back` in `layout.js`), steep at the bottom (`beach.backProfile`). The sand ends up
+  to 10 m further west than before. So the bottom of the mapped zigzag no longer lies on the
+  sand: (142, 179) to (136, 187) are now 14 to 21 m up the slope, the path climbs to about
+  44 m at (149, 203) and then drops 32 m to the sand at (143, 220) within 6 m. In v4 it ran
+  onto a sand ramp that the photos do not show. The path needs its own carve down the wall
+  there, and the drone photo and `trail-low-beach-close.jpg` say where it really meets the
+  sand.
+- The plant clearance (`plants.trailClear`) is unchanged. Plants on the new steep wall
+  follow the ground, so the bottom of the path may have trees on it until the carve exists.
+- The strips of face on the beach stop a few metres out onto the sand now, and before the
+  lines across a concave wall cross (`windowAlong` and the crossing check in
+  `mesh-builder.js`). A path cut into the foot of the wall meets them there.

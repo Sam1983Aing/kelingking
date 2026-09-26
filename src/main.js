@@ -11,10 +11,11 @@
 //                      silhouettes (yellow) traced over it
 //   capture=1          hide the UI and set window.__ready once the frame is final
 //   t=12               freeze the clock at this many seconds (the sea animates)
-//   debug=1..9         water debug view: sediment, see-through, foam (surf, whitecaps, fresh),
+//   debug=1..10        water debug view: sediment, see-through, foam (surf, whitecaps, fresh),
 //                      underwater light, normals, unseen slope spread, rock coast (near,
 //                      exposure, openness), foam simulation (foam, sand, travel), breaker
-//                      (across, stage, thickness). Skips the tone curve.
+//                      (across, stage, thickness), 10 the swash (sheet, foam, thickness).
+//                      Skips the tone curve.
 //   sprayDebug=1..4    spray: at each breaker column's crest, at its site, as it flies, rock sites
 //   w.name=value       any water setting (src/water/water.js), o.name= the wave spectrum
 //                      (ocean.js), s.name= the foam simulation (surf-sim.js)
@@ -225,6 +226,10 @@ fetch('assets/veg/impostors.json').then((r) => r.json())
 loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true; })
   .catch((e) => { console.error('surface textures failed', e); texturesReady = true; });
 terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
+// The swash on the sand runs on the sea's clock and settings, and the sheet over it sees the
+// ground's wet sand through it.
+for (const k of ['uTime', 'uPeriod', 'uRunup', 'uSwashT', 'uSwashMap', 'uSwashRect']) terrain.uniforms[k] = water.uniforms[k];
+water.uniforms.uWetSandAlb.value.setRGB(...terrain.uniforms.uSandAlb.value.toArray().map((v, i) => v * terrain.uniforms.uWetTint.value.getComponent(i)));
 const hidden = new Set((params.get('hide') || '').split(','));
 for (const name of hidden) {
   if (name === 'terrain') terrain.mesh.visible = false;
@@ -472,7 +477,8 @@ wf.add(timeCtl, 'speed', 0, 3, 0.05).name('time speed');
 wf.add(wp, 'period', 4, 18, 0.1).name('wave period (s)').onChange(wa);
 wf.add(wp, 'swell', 0, 3, 0.01).name('swell height (m)').onChange(wa);
 wf.add(wp, 'breakAt', 4, 60, 0.5).name('break distance (m)').onChange(wa);
-wf.add(wp, 'surge', 0, 1.5, 0.01).name('swash run-up (m)').onChange(wa);
+wf.add(wp, 'runup', 0, 2.5, 0.01).name('swash run-up (m)').onChange(wa);
+wf.add(wp, 'swashT', 0.8, 6, 0.05).name('uprush time (s)').onChange(wa);
 wf.add(wp, 'swellHeading', 0, 360, 1).name('swell heading').onChange(wa);
 wf.add(wp, 'foam', 0, 2, 0.01).onChange(wa);
 wf.add(wp, 'whitecaps', 0, 3, 0.01).onChange(wa);

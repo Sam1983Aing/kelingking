@@ -154,7 +154,11 @@ try {
         for (const k of ${JSON.stringify(String(flag('ablate', '')).split(',').filter(Boolean))}) {
           if (k === 'SKIP_passes') { out[k] = (() => { const d = () => { R.render(A.scene, A.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }; for (let i = 0; i < 3; i++) d(); const t0 = performance.now(); for (let i = 0; i < 15; i++) d(); return (performance.now() - t0) / 15; })(); continue; }
           if (parts[k]) { parts[k][0](); time(); out[k] = time(); parts[k][1](); continue; }
-          mat.defines = { [k]: 1 }; mat.needsUpdate = true; time(); out[k] = time();
+          // WSKIP_x: a define on the sea's material instead of the ground's.
+          const m2 = k.startsWith('WSKIP_') ? A.water.mesh.material : mat;
+          const keep = { ...m2.defines };
+          m2.defines = { ...keep, [k.startsWith('WSKIP_') ? k.slice(1) : k]: 1 }; m2.needsUpdate = true; time(); out[k] = time();
+          m2.defines = keep; m2.needsUpdate = true;
         }
         mat.defines = {}; mat.needsUpdate = true;
         const c = R.domElement; out.mp = c.width * c.height / 1e6;

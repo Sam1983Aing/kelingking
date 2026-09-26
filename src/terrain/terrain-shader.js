@@ -6,6 +6,10 @@
 
 import { SUN_SHADOW_GLSL } from './sun-shadow.js';
 import { STRATA, SHADOW_ROWS } from './strata.js';
+import { SURFACES } from './surfaces.js';
+import { SWASH_GLSL } from '../water/swash.js';
+
+const NS = SURFACES.length;
 
 export const TERRAIN_PARS = /* glsl */ `
 precision highp sampler2DArray;
@@ -18,8 +22,12 @@ uniform float uBeachTop;
 uniform sampler2DArray uSurfColor;
 uniform sampler2DArray uSurfNormal;
 uniform sampler2DArray uSurfMask;
-uniform vec3 uGain[5];
-uniform float uTile[5];
+uniform vec3 uGain[${NS}];
+uniform float uTile[${NS}];
+uniform vec3 uSandAlb;     // the beach's dry sand, linear (surfaces.js)
+uniform vec3 uWetTint;     // what water in the pores does to it (WET_SAND)
+uniform float uTime;       // for the swash (the sea's clock)
+uniform float uPeriod;
 uniform sampler2D uStrataA;
 uniform sampler2D uStrataB;
 uniform sampler2D uStrataC;
@@ -30,14 +38,18 @@ varying vec3 vWorldNormal;
 varying vec4 vRock;
 varying vec3 vHorizon;    // elevation (/ pi, from straight out) above which rock overhead hides
                           // the sky, and the outward direction (world x, z) of the face
+varying float vFoot;      // metres out from the foot of a wall on the beach (0 to 8)
 
 #define L_LIMESTONE 0
 #define L_BEDS 1
 #define L_WET 2
 #define L_SAND 3
 #define L_GROUND 4
+#define L_SAND_DRY 5
+#define L_SAND_FIRM 6
 
 ${SUN_SHADOW_GLSL}
+${SWASH_GLSL}
 
 // Filled in while working out the surface, used later by the lighting.
 float tShadow = 1.0;
@@ -48,6 +60,8 @@ float tSandW = 0.0;   // how much of this pixel is sand, and ground cover (for t
 float tVegW = 0.0;
 float tFineShadow = 1.0;   // shadow of the ledges above, on a bedded face
 float tLedgeSky = 1.0;     // share of the sky the ledges above leave
+float tWet = 0.0;          // sand wet from the swash (0..1)
+float tGloss = 0.0;        // a film of water on it, mirror-like (0..1)
 
 // ---------------------------------------------------------------- bedding (strata.js)
 // Same formulas as strata.js, sines only, so the beds here are the beds in the mesh.
@@ -206,6 +220,24 @@ void mixSurf(inout Surf a, Surf b, float t) {
   a.dn = mix(a.dn, b.dn, t);
   a.rough = mix(a.rough, b.rough, t);
   a.ao = mix(a.ao, b.ao, t);
+}
+
+// A layer seen from above, for the beach, which is nearly flat: one projection instead of
+// three, turned by rot (cos, sin) and shifted, so two samplings of one tile do not line up.
+// The map's x and green (up) are turned the same way into world directions.
+Surf topLayer(int layer, float tile, vec2 rot, vec2 off, bool withColor) {
+  mat2 R = mat2(rot.x, rot.y, -rot.y, rot.x);
+  vec2 q = R * triP.xz / tile + off;
+  vec2 gx = R * triDx.xz / tile, gy = R * triDy.xz / tile;
+  Surf s = Surf(vec3(0.0), vec3(0.0), 0.9, 1.0);
+  vec3 n = textureGrad(uSurfNormal, vec3(q, float(layer)), gx, gy).xyz * 2.0 - 1.0;
+  s.dn = vec3(rot.x, 0.0, -rot.y) * n.x + vec3(-rot.y, 0.0, -rot.x) * n.y;
+  if (withColor) {
+    s.color = textureGrad(uSurfColor, vec3(q, float(layer)), gx, gy).rgb * uGain[layer];
+    vec2 m = textureGrad(uSurfMask, vec3(q, float(layer)), gx, gy).rg;
+    s.rough = m.r; s.ao = m.g;
+  }
+  return s;
 }
 
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -393,11 +425,125 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   // ---------------------------------------------------------------- sand
   if (sand > 0.001) {
-    Surf sd = triplanar(L_SAND, uTile[L_SAND], vec2(0.0));
-    Surf s2 = triplanar(L_SAND, uTile[L_SAND] * 0.31, vec2(0.21, 0.83));   // finer grain up close
-    mixSurf(sd, s2, 0.5 * detail);
-    sd.color *= mix(vec3(1.0), vec3(0.62, 0.6, 0.58), wet);
-    sd.rough = mix(sd.rough, 0.3, wet);
+    // Below the swash's reach the sand is packed firm and smooth, and wet; above it people
+    // have trampled it, more in some places than others. Both from close-range scans; further
+    // off, where a footprint is smaller than a pixel, patches of tone and the sand's own
+    // colour. (v1 used the aerial scan here at two scales: its wind ripples came out half a
+    // metre apart, and the photos show trampled sand, not ripples.)
+    // The swash (swash.js, the same sheets the sea draws): the sand it covers is soaked, just
+    // after the backwash has left it is a mirror of water for a couple of seconds, then it
+    // drains to dark wet sand that dries out over a minute or so. Above the highest recent
+    // swash it is damp for a while (the big waves of a set wet it) and then dry, with a
+    // ragged line between.
+    float hs = h + (n1 - 0.5) * 0.35;
+    float top = uRunup * (1.3 + 0.25 * (n2 - 0.5));   // how high the big waves wet it
+    float firm = 1.0 - smoothstep(top - 0.2, top + 0.4, hs);
+    float wetS = 0.0;
+#ifdef SKIP_SWASH
+    if (false) {
+#else
+    if (h < uRunup * 1.6 + 0.3 && h > SW_RUNDOWN - 0.15 && sandZone > 0.0) {
+#endif
+      vec4 sm = swashMap(g);   // (swash-map.js)
+      float covered = smoothstep(0.0, 0.004, sm.x);
+      float dry = max(-sm.z, 0.0);
+      float soaked = exp(-dry / 30.0);
+      float damp = 0.55 * (1.0 - smoothstep(top - 0.15, top + 0.05, h + (tn(g * 0.6 + 3.0) - 0.5) * 0.09 + (tn(g * 2.3) - 0.5) * 0.04));
+      // Low on the beach the sand is below the water table where it meets the sea: always wet.
+      float table = 1.0 - smoothstep(0.1, 0.45, h);
+      wetS = max(max(covered, table), max(soaked * 0.95, damp));
+      tGloss = exp(-dry / 2.2) * (1.0 - covered);
+    } else if (h < 0.0) wetS = 1.0;
+    // (Single octaves of noise here: the sand covers most of the frame on the beach, and at
+    // these scales the eye cannot tell them from fbm.)
+    float trample = (1.0 - firm) * smoothstep(0.3, 0.62, 0.65 * tn(g * 0.09 + 5.3) + 0.35 * tn(g * 0.21 + 1.1) + 0.12 * (n1 - 0.5));
+    Surf sd = Surf(uSandAlb, vec3(0.0), 0.92, 1.0);
+    // Tone: broad patches, drift lines of paler sand, and the pinkish grains of the
+    // foraminifera sorted into streaks.
+    float tone = (n2 - 0.5) * 0.08 + (tn(g * 0.31 + 1.7) - 0.5) * 0.05;
+    sd.color *= 1.0 + tone;
+    sd.color *= mix(vec3(1.0), vec3(1.035, 0.985, 0.95), smoothstep(0.55, 0.8, tn(vec2(g.x * 0.05, g.y * 0.2) + 8.0)));
+    // From further off, the aerial scan's variation in colour (its ripples are too small to
+    // see from there; up close they came out half a metre apart, which the photos do not show).
+    float farW = smoothstep(0.03, 0.12, fp);
+    if (farW > 0.0) {
+      mat2 Ra = mat2(0.8, 0.6, -0.6, 0.8);
+      vec2 qa = Ra * triP.xz / uTile[L_SAND];
+      vec3 ac = textureGrad(uSurfColor, vec3(qa, float(L_SAND)), Ra * triDx.xz / uTile[L_SAND], Ra * triDy.xz / uTile[L_SAND]).rgb * uGain[L_SAND];
+      sd.color *= mix(vec3(1.0), ac / uSandAlb, farW * 0.7);
+    }
+    float nearW = 1.0 - smoothstep(0.1, 0.4, fp);
+#ifdef SKIP_SANDNEAR
+    nearW = 0.0;
+#endif
+    if (nearW > 0.0) {
+      // Trampled: the scan twice, turned and scaled against each other so its 2 m tile does
+      // not repeat, handing over through a noise.
+      // (The second sampling and the firm sand only where a pixel is small enough to tell:
+      // from the trail above, one sampling of the trampled scan is all the eye gets.)
+      float close = 1.0 - smoothstep(0.015, 0.03, fp);
+      Surf a = topLayer(L_SAND_DRY, uTile[L_SAND_DRY], vec2(1.0, 0.0), vec2(0.0), true);
+#ifdef SKIP_SANDB
+      if (false) {
+#else
+      if (close > 0.0) {
+#endif
+        Surf b = topLayer(L_SAND_DRY, uTile[L_SAND_DRY] * 1.37, vec2(0.8, 0.6), vec2(0.31, 0.77), true);
+        mixSurf(a, b, smoothstep(0.3, 0.7, tn(g * 0.33 + 2.0)) * close);
+      }
+      a.dn *= mix(0.35, 1.0, trample);
+      if (firm > 0.001) {
+        if (close > 0.0) {
+          Surf fs = topLayer(L_SAND_FIRM, uTile[L_SAND_FIRM], vec2(0.6, -0.8), vec2(0.13, 0.4), true);
+          fs.color = mix(uSandAlb, fs.color, close);
+          fs.dn *= close;
+          mixSurf(a, fs, firm);
+        } else {
+          // Further off, packed sand is the same colour, smoother.
+          a.color = mix(a.color, uSandAlb, firm * 0.6);
+          a.dn *= 1.0 - firm * 0.7;
+        }
+      }
+      sd.color *= mix(vec3(1.0), a.color / uSandAlb, nearW * 0.85);
+      sd.dn = a.dn * nearW;
+      sd.rough = mix(sd.rough, a.rough, nearW);
+      sd.ao = mix(1.0, a.ao, nearW * 0.7);
+    }
+    // Along the foot of the walls (vFoot: metres out from it).
+    // Where the swash reaches the rock it leaves a narrow maroon band (the red grains of
+    // foraminifera and coralline algae it sorts out there, beach-white-sand-surf.jpg); all
+    // along the foot grit and pebbles fallen from the wall, thinning out over a few metres;
+    // and in under the overhangs the sand is greyer with rock dust.
+#ifndef SKIP_FOOT
+    if (vFoot < 5.0) {
+#else
+    if (false) {
+#endif
+      float fd = vFoot + (tn(g * 0.7) - 0.5) * 0.7 + (tn(g * 3.1) - 0.5) * 0.25;
+      float reachFoot = 1.0 - smoothstep(top - 0.1, top + 0.5, h);
+      float band = (1.0 - smoothstep(0.1, 0.75, fd)) * reachFoot;
+      sd.color = mix(sd.color, sd.color * vec3(0.55, 0.3, 0.27), band * 0.75);
+      float grit = 1.0 - smoothstep(-0.5, 3.5, fd);
+      if (grit > 0.01 && fp < 0.08) {
+        vec2 gc = g * 16.0;
+        vec2 ci = floor(gc);
+        float r = th12(ci);
+        vec2 off = vec2(th12(ci + 17.1), th12(ci + 3.7)) * 0.6 + 0.2;
+        float dist = length(fract(gc) - off);
+        float size = 0.12 + 0.3 * th12(ci + 9.3);
+        float stone = (1.0 - smoothstep(size * 0.7, size, dist)) * step(1.0 - grit * 0.55, r) * smoothstep(0.08, 0.03, fp);
+        vec3 stoneCol = uGain[L_LIMESTONE] * mix(vec3(0.3, 0.28, 0.25), vec3(0.62, 0.6, 0.55), th12(ci + 5.5));
+        sd.color = mix(sd.color, stoneCol, stone);
+        sd.dn += vec3(fract(gc) - off, 0.0).xzy * vec3(1.0, 0.0, -1.0) * stone * 2.5;
+        sd.ao *= 1.0 - 0.35 * (1.0 - smoothstep(size, size * 1.6, dist)) * step(1.0 - grit * 0.55, r) * (1.0 - stone);
+      }
+      sd.color *= mix(vec3(1.0), vec3(0.97, 0.94, 0.9), grit * 0.6);
+      sd.color *= mix(vec3(1.0), vec3(0.82, 0.8, 0.78), vRock.x);
+    }
+    // Wet sand: water in the pores, darker and a little more saturated.
+    tWet = wetS * sand;
+    sd.color *= mix(vec3(1.0), uWetTint, wetS);
+    sd.rough = mix(sd.rough, 0.45, wetS);
     mixSurf(s, sd, sand);
   }
 
@@ -436,6 +582,34 @@ export const TERRAIN_COLOR = /* glsl */ `
 // here, late, from the final normal, so nothing has to be carried through the shader.
 export const TERRAIN_BOUNCE = /* glsl */ `
   reflectedLight.indirectDiffuse += groundBounce(vWorldPos, normalize((vec4(normal, 0.0) * viewMatrix).xyz)) * BRDF_Lambert(material.diffuseColor) * tAO;
+  // Wet sand reflects the sky: a blurred sheen when damp, and a mirror when a film of water
+  // still lies on it after the backwash (on the smooth surface: the water fills the dimples).
+#ifdef SKIP_GLOSS
+  if (false) {
+#else
+  if ((tWet > 0.01 || tGloss > 0.01) && vWorldPos.y > -0.3) {
+#endif
+    vec3 Vw = normalize(cameraPosition - vWorldPos);
+    vec3 Ns = normalize(vWorldNormal);
+    vec3 Nw = normalize(mix(tNormalW, Ns, tGloss));
+    float NoVw = max(dot(Nw, Vw), 1e-3);
+    float Fw = 0.02 + 0.98 * pow(1.0 - NoVw, 5.0);
+    vec3 Rw = reflect(-Vw, Nw);
+    Rw.y = abs(Rw.y) + 0.01;
+    vec3 sky = mix(skyIrradiance(Rw) / PI, skyRadiance(Rw), tGloss);
+    reflectedLight.indirectSpecular += sky * Fw * max(tGloss, 0.35 * tWet) * vRock.y * tAO;
+    // The sun in the film.
+    if (tGloss > 0.01) {
+      vec3 Hw = normalize(Vw + uSunDirW);
+      float a2w = 0.0025;
+      float NoH = max(dot(Nw, Hw), 0.0), NoL = max(dot(Nw, uSunDirW), 0.0);
+      float Dw = a2w / (PI * pow(NoH * NoH * (a2w - 1.0) + 1.0, 2.0));
+      float FsW = 0.02 + 0.98 * pow(1.0 - max(dot(Hw, Vw), 0.0), 5.0);
+      reflectedLight.directSpecular += uSunIrr * tShadow * Dw * FsW * NoL / (4.0 * NoVw * max(NoL, 1e-3) + 1e-3) * tGloss;
+    }
+    reflectedLight.indirectDiffuse *= 1.0 - Fw * tGloss;
+    reflectedLight.directDiffuse *= 1.0 - Fw * tGloss;
+  }
 `;
 
 // Labels for the measuring tool: class (sand 3, rock 4, ground cover 5) and whether the sun

@@ -110,3 +110,25 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   slope back to the pixels only near the camera, fewer ring segments away from the view
   direction. Single runs of either tool swung by 10 to 40 points for the same frame on this
   Mac, so compare with several rounds.
+
+**From v5 (sand).**
+
+- Anything in the ground's vertex shader is paid for by every vertex of the island, every
+  frame (the mesh is one draw of 2 to 4 million vertices). Working the swash out per vertex on
+  the wet sand, a few thousand of them, made `beach` 1.2 ms slower. A map made once per frame
+  (`swash-map.js`, 1024 square) costs next to nothing. A level of detail for the ground mesh
+  would help every version after this.
+- The sea's shaders are at 16 texture units, the limit WebGL guarantees. v5 took one back in
+  the vertex shader (`uOceanV`, three displacement cascades instead of four). Anything else
+  the sea needs to read will have to share a texture.
+- `tools/parts.mjs` times parts of a frame in one page (compile switches on the ground's and
+  the sea's materials, alternated over many rounds). It found the costs above.
+- Frame times after v5 against v4: within 10% everywhere except `beach` (+13% in `hero.mjs`,
+  +16% in `ab.mjs`), whose camera moved to 14 m from the water and now sees mostly close
+  sand. At v4's camera the same frame is +5% (`ab.mjs beach --set="cam=124,200,4.4,208,-3.8,40"`).
+  What that frame pays for: the close-range sand scans (up to three samplings of two scans,
+  about 1 to 1.7 ms), the swash's foam and sheet on the sea (0.5 to 0.9 ms). Levers: one
+  sampling of the trampled scan instead of two blended, or baking the sand's close-range
+  detail into fewer textures.
+- The foam simulation now also works out the swash each step (`surf-sim.js`), which makes
+  its step dearer (not measured separately; it runs when the clock moves).

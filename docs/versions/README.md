@@ -10,8 +10,8 @@ version. A session works on its element only, and goes deep on it.
 | v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
 | v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
 | v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
-| v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | next |
-| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
+| v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
+| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | next |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |
@@ -26,7 +26,7 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v5-sand.md, then start v5.
+> Read docs/versions/README.md and docs/versions/v6-trail.md, then start v6.
 
 ## Rules for every version
 
@@ -54,9 +54,9 @@ Open a new chat in this folder and paste:
 
 ## Finishing a version
 
-1. `node tools/hero.mjs v5`: renders the hero frames into `docs/gallery/v5/`, times them
+1. `node tools/hero.mjs v6`: renders the hero frames into `docs/gallery/v6/`, times them
    against the previous version, and puts side by sides with the photos in
-   `captures/compare-v5/` (local only). Frame times swing a lot on this Mac, so also run
+   `captures/compare-v6/` (local only). Frame times swing a lot on this Mac, so also run
    `node tools/ab.mjs --hero` (both versions side by side in one browser) before judging
    the budget.
 2. Add a section to `PROCESS.md`: what changed, what went wrong and how it was fixed, what
@@ -77,6 +77,7 @@ passes through them. Each is tied to a reference photo.
 | `trailTop` | Where the path leaves the steps and runs along the ridge |
 | `trailLow` | Low on the zigzag, looking into the overhang behind the beach (placeholder until v6) |
 | `beach` | Standing on the sand with the cliff wall above |
+| `swash` | At the water's edge, the swash running up the sand (from v5) |
 | `shoreBreak` | A wave breaking at eye level |
 | `sideFromSea` | The head from the sea, the frame people share |
 
@@ -98,6 +99,7 @@ node tools/capture.mjs viewpoint --set="hour=17"     # any page switch, ; betwee
 node tools/capture.mjs viewpoint --eval="expr"       # read from the page (a PNG data URL is saved)
 node tools/hero.mjs v2                               # finish a version
 node tools/ab.mjs beach --rounds=16                  # this build against the previous tag, side by side
+node tools/parts.mjs beach --parts=none,SKIP_SANDNEAR,WSKIP_SWASH   # what parts of a frame cost
 node tools/capture.mjs cove --console                # print the page's shader errors and warnings
 node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings
 node tools/preview-height.mjs 1024                   # top-down shaded height map
@@ -109,7 +111,9 @@ Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,pl
 `cam=e,n,h,yaw,pitch[,fov]` (any camera, in a shot's frame), `clay=2` (the bare triangles),
 `terrainDebug=1..5` (the ground's shadow, sky share, overhang horizon, lit ground, carving),
 `faceStep=` (face strip spacing). From v4: `debug=1..9` (water views, see `src/main.js`),
-`sprayDebug=1..4`, and `w.`, `o.`, `s.` for any water, spectrum or foam setting. Keys: `1` to `9`
+`sprayDebug=1..4`, and `w.`, `o.`, `s.` for any water, spectrum or foam setting. From v5:
+`debug=10` (the swash: sheet, foam, thickness), `w.runup=` and `w.swashT=` (how high the swash
+runs and how long its uprush takes). Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light

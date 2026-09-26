@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { WATER_VERT, WATER_FRAG } from './water-shader.js';
 import { createOcean } from './ocean.js';
 import { createSurfSim } from './surf-sim.js';
+import { createSwashMap } from './swash-map.js';
 import { createBreaker } from './breaker.js';
 import { createSpray } from './spray.js';
 
@@ -13,7 +14,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     period: 9,          // seconds between waves
     swell: 1.1,         // wave height at sea (m)
     breakAt: 20,        // where waves break on the beach (m offshore)
-    surge: 0.55,        // swash run-up (m)
+    runup: 0.85,        // how high an average wave's swash runs up the sand (m above still water)
+    swashT: 2.6,        // seconds its uprush takes (the backwash takes 1.8 times as long)
     swellHeading: 40,   // direction the swell travels, compass degrees
     foam: 1.0,
     whitecaps: 1.0,
@@ -47,7 +49,9 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uPeriod: { value: 9 },
       uSwell: { value: 0.9 },
       uBreakAt: { value: 16 },
-      uSurge: { value: 0.5 },
+      uRunup: { value: 0.85 },
+      uSwashT: { value: 2.6 },
+      uWetSandAlb: { value: new THREE.Color(0.3, 0.26, 0.2) },
       uSwellDir: { value: new THREE.Vector2(0.64, 0.77) },
       uSkyIrr: { value: new THREE.Color(0.5, 0.6, 0.7) },   // sky light on flat ground (klux)
       uAbsorb: { value: new THREE.Vector3() },
@@ -73,8 +77,13 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
   ]);
   // The ocean's textures are swapped every update, so share its uniform objects.
   Object.assign(uniforms, ocean.uniforms);
+  // The sea's vertex shader takes only the three coarse displacement cascades (see uOceanV).
+  const ov = [];
+  uniforms.uOceanV = { get value() { const a = ocean.uniforms.uOceanA.value; for (let i = 0; i < 3; i++) ov[i] = a[i]; ov.length = 3; return ov; } };
   const sim = createSurfSim(renderer, uniforms, simOpts);
   Object.assign(uniforms, sim.uniforms);
+  const swashMap = createSwashMap(renderer, uniforms);
+  Object.assign(uniforms, swashMap.uniforms);
   // The sun, the sky and the haze come from the atmosphere (src/sky/), shared, not copied.
   Object.assign(uniforms, atmosphereUniforms, gradeUniforms);
 
@@ -105,7 +114,8 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     u.uPeriod.value = params.period;
     u.uSwell.value = params.swell;
     u.uBreakAt.value = params.breakAt;
-    u.uSurge.value = params.surge;
+    u.uRunup.value = params.runup;
+    u.uSwashT.value = params.swashT;
     const sh = THREE.MathUtils.degToRad(params.swellHeading);
     u.uSwellDir.value.set(Math.sin(sh), Math.cos(sh));
     u.uFoam.value = params.foam;
@@ -131,6 +141,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     params,
     ocean,
     sim,
+    swashMap,
     breaker,
     spray,
     applyParams,
@@ -147,6 +158,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uniforms.uCoast.value = coast;
       uniforms.uExtent.value.set(extent.x0, extent.y0, extent.size);
       sim.reset();
+      swashMap.reset();
     },
     update(time, camera, renderer) {
       uniforms.uTime.value = time;
@@ -178,6 +190,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
       uniforms.uGridK.value = h > 40 ? 0.0138 : 0.0152;
       // The foam simulation moves the ocean along with it (the rock bursts follow the swell).
       sim.update(time, (t) => ocean.update(t));
+      swashMap.update(time);
       ocean.update(time);
       breaker.update(time);
       breaker.sortChunks(camera);
