@@ -2,7 +2,7 @@
 // Working it out per vertex in the ground and the sea cost more than a millisecond at the
 // beach: the ground's vertex shader runs for every vertex of the island, and carrying the
 // swash made all of them slower, not only the few on the wet sand. A 1024 square map over the
-// beach is 27 cm a texel, and the values in it change smoothly (the edge of a sheet is where
+// beach is 32 cm a texel, and the values in it change smoothly (the edge of a sheet is where
 // a linear height crosses zero), so reading it back bilinearly draws the same edge.
 //
 //   R  how far above this spot the highest running sheet's edge is (m; negative: dry)
@@ -19,7 +19,7 @@ import { COMMON } from './water-shader.js';
 export function createSwashMap(renderer, waterUniforms, opts = {}) {
   const P = {
     N: 1024,
-    rect: [70, 60, 280],   // x0, y0, size (m): Kelingking beach and the little one east of the neck
+    rect: [30, 40, 330],   // x0, y0, size (m): Kelingking beach (into the cave under the overhang) and the little one east of the neck
     ...opts,
   };
   const N = P.N;

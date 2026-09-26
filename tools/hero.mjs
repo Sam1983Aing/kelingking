@@ -49,6 +49,9 @@ if (hasTag) {
   const tar = spawnSync('sh', ['-c', `git archive ${prev} | tar -x -C "${join(root, prevDir)}"`], { cwd: root });
   if (tar.status !== 0) { console.log('could not check out', prev); prevDir = null; }
 }
+// Shots the previous version did not have yet are not compared (its page would fall back to
+// another shot).
+const prevShots = prevDir ? (await import(join(root, prevDir, 'src/shots.js'))).SHOTS : null;
 const rounds = { cur: [], prev: [] };
 for (let r = 0; r < 3; r++) {
   if (prevDir) {
@@ -78,7 +81,8 @@ let over = 0;
 const rows = HERO.map((name) => {
   const b = bench[name], p = prevBench?.[name];
   let delta = '';
-  if (b && p) {
+  if (prevShots && !prevShots[name]) delta = `new in ${version}`;
+  else if (b && p) {
     const d = (b.ms / p.ms - 1) * 100;
     if (d > 10) over++;
     delta = `${d >= 0 ? '+' : ''}${d.toFixed(0)}%${d > 10 ? ' (over budget)' : ''}`;

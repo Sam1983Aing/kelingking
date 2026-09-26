@@ -107,4 +107,5 @@ export const SHOTS = {
 
 // The hero frames: the shots every version is judged on, in the order the scroll passes
 // through them, plus the head from the sea. tools/hero.mjs renders and times these.
-export const HERO = ['overview', 'viewpoint', 'stairs', 'trailTop', 'trailLow', 'beach', 'shoreBreak', 'sideFromSea'];
+// (swash from v5.)
+export const HERO = ['overview', 'viewpoint', 'stairs', 'trailTop', 'trailLow', 'beach', 'swash', 'shoreBreak', 'sideFromSea'];

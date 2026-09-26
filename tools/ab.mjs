@@ -35,7 +35,10 @@ const WIDTH = 1400;
 const num = (v) => +v.slice(1);
 const gallery = join(root, 'docs/gallery');
 const versions = readdirSync(gallery).filter((d) => /^v\d+$/.test(d)).sort((a, b) => num(a) - num(b));
-const tag = flag('a', versions.at(-2));
+// By default the newest version that has a git tag (the work in progress has none yet; the
+// second newest gallery folder was v3 during v5, before v5 had a folder).
+const tagged = versions.filter((v) => spawnSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${v}`], { cwd: root }).status === 0);
+const tag = flag('a', tagged.at(-1));
 const dir = `captures/ab-${tag}`;
 rmSync(join(root, dir), { recursive: true, force: true });
 mkdirSync(join(root, dir), { recursive: true });
@@ -65,6 +68,9 @@ function refAspect(rel) {
   return 16 / 9;
 }
 
+// Shots the other build does not have (its page would fall back to another shot).
+const otherShots = (await import(join(root, dir, 'src/shots.js'))).SHOTS;
+shots = shots.filter((s) => { if (!otherShots[s]) console.log(`${s.padEnd(12)} not in ${tag}, skipped`); return !!otherShots[s]; });
 const b = await launch();
 const rows = [];
 try {

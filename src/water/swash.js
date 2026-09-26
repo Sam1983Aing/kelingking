@@ -141,7 +141,9 @@ uniform sampler2D uSwashMap;
 uniform vec3 uSwashRect;
 vec4 swashMap(vec2 p) {
   vec2 uv = (p - uSwashRect.xy) / uSwashRect.z;
-  if (min(uv.x, uv.y) < 0.0 || max(uv.x, uv.y) > 1.0) return vec4(-1.0, -1.0, -60.0, 0.0);
-  return texture2D(uSwashMap, uv);
+  float e = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
+  if (e <= 0.0) return vec4(-1.0, -1.0, -60.0, 0.0);
+  // (Toward the map's edges the sheets fade back down the beach, so there is no step.)
+  return mix(vec4(-1.0, -1.0, -60.0, 0.0), texture2D(uSwashMap, uv), smoothstep(0.0, 0.02, e));
 }
 `;
