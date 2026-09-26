@@ -9,11 +9,11 @@
 import * as THREE from 'three';
 
 export const CELL_W = 128, CELL_H = 256, COLS = 4, ROWS = 3;
-// ROSETTE_TOP and ROSETTE_SIDE: a naupaka rosette seen from above (in the lower half of its
-// cell, square) and from the side, TUFT: a tuft of grass blades; for the lighter level of
-// detail, which draws them as cards (grow/core.js).
+// TUFT: a tuft of grass blades (and a drier one), for grass's lighter level of detail, which
+// draws them as cards (grow/core.js). (The naupaka had rosette cards too; its impostor looked
+// better from where they took over, v7.)
 export const LEAF = { SPOON: 0, ELLIPTIC: 1, OVATE: 2, LANCE: 3, SPOON_OLD: 4, ROUND: 5, SPRAY: 6, SPRAY_SMALL: 7,
-  ROSETTE_TOP: 8, ROSETTE_SIDE: 9, TUFT: 10, TUFT_DRY: 11 };
+  TUFT: 8, TUFT_DRY: 9 };
 
 // Half-width along the leaf, t from base (0) to tip (1), peaking at 1.
 const shapes = {
@@ -173,46 +173,36 @@ export function leafAtlas() {
       px[k + 3] = Math.round((cover / (SS * SS)) * 255);
     }
   }
-  // Rosettes and tufts: drawn as lists of shapes in the cell, later ones over earlier ones.
-  // Each shape is a leaf (base x, y and angle, in cell units with y up and the cell 1 wide and
-  // 2 tall) with its own shade.
-  const paint = (cell, leavesAt, shapeKey, blade = false) => {
+  // Tufts of grass seen from the side: blades from a narrow base, the outer ones arching
+  // over, drawn one over another (in cell units, y up, the cell 1 wide and 2 tall).
+  let seed = 7;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  for (const [cell, dryShare] of [[LEAF.TUFT, 0.2], [LEAF.TUFT_DRY, 0.7]]) {
+    const blades = [];
+    for (let k = 0; k < 70; k++) {
+      const out = rnd() * 2 - 1;
+      blades.push({ x: 0.5 + out * 0.07, y: 0.02, a: out * 0.55 + (rnd() - 0.5) * 0.25, L: (1.2 + 0.7 * rnd()) * (1 - 0.35 * Math.abs(out)),
+        W: 0.035 + 0.02 * rnd(), bend: Math.sign(out || 1) * (0.2 + 0.5 * Math.abs(out)) * (0.6 + 0.8 * rnd()), shade: 0.7 + 0.5 * rnd(),
+        dry: rnd() < dryShare ? 0.2 + 0.6 * rnd() : 0 });
+    }
     const cx0 = (cell % COLS) * CELL_W, cy0 = Math.floor(cell / COLS) * CELL_H;
-    const sh = shapes[shapeKey];
     const SS = 3;
     for (let y = 0; y < CELL_H; y++) for (let x = 0; x < CELL_W; x++) {
       let cover = 0, r = 0, gg = 0, b = 0;
       for (let sy = 0; sy < SS; sy++) for (let sx = 0; sx < SS; sx++) {
-        const px_ = (x + (sx + 0.5) / SS) / CELL_W;
-        const py_ = (1 - (y + (sy + 0.5) / SS) / CELL_H) * 2;
+        const dx0 = (x + (sx + 0.5) / SS) / CELL_W, dy0 = (1 - (y + (sy + 0.5) / SS) / CELL_H) * 2;
         let hit = null;
-        for (let k = leavesAt.length - 1; k >= 0 && !hit; k--) {
-          const l = leavesAt[k];
-          let dx = px_ - l.x, dy = py_ - l.y;
-          if (blade) {
-            // A blade bending over: its centre line is an arc; distance along and across it.
-            const ca = Math.cos(l.a), sa = Math.sin(l.a);
-            let along = dx * sa + dy * ca, across = dx * ca - dy * sa;
-            const t = along / l.L;
-            if (t <= 0 || t >= 1) continue;
-            across -= l.bend * t * t * l.L;
-            const hw = l.W * 0.5 * (1 - Math.pow(t, 1.6) * 0.95);
-            if (Math.abs(across) > hw) continue;
-            const m = l.shade * (0.8 + 0.25 * t);
-            const dry = l.dry > 0 ? smooth(1 - l.dry, 1 - l.dry + 0.2, t) : 0;
-            hit = [m * (1 + 0.9 * dry), m * (1 + 0.35 * dry), m * (1 - 0.2 * dry)];
-            continue;
-          }
-          const ca = Math.cos(l.a), sa = Math.sin(l.a);
-          const along = (dx * sa + dy * ca) / l.fore, across = dx * ca - dy * sa;
-          const t = along / l.L;
+        for (let k = blades.length - 1; k >= 0 && !hit; k--) {
+          const l = blades[k];
+          // A blade bending over: its centre line is an arc; distance along and across it.
+          const dx = dx0 - l.x, dy = dy0 - l.y, ca = Math.cos(l.a), sa = Math.sin(l.a);
+          const t = (dx * sa + dy * ca) / l.L;
           if (t <= 0 || t >= 1) continue;
-          const hw = halfWidth(sh, t) * l.W * 0.5;
-          if (Math.abs(across) > hw) continue;
-          const au = Math.abs(across) / Math.max(hw, 1e-4);
-          const rib = Math.max(0, 1 - Math.abs(across) / (l.W * 0.04 + 0.002));
-          const m = l.shade * (0.9 + 0.12 * t);
-          hit = [m * (1 + rib * 0.25) * (1 - 0.08 * smooth(0.75, 1, au)), m * (1 + rib * 0.28) * (1 - 0.06 * smooth(0.75, 1, au)), m * (1 + rib * 0.1)];
+          const across = dx * ca - dy * sa - l.bend * t * t * l.L;
+          if (Math.abs(across) > l.W * 0.5 * (1 - Math.pow(t, 1.6) * 0.95)) continue;
+          const m = l.shade * (0.8 + 0.25 * t);
+          const dry = l.dry > 0 ? smooth(1 - l.dry, 1 - l.dry + 0.2, t) : 0;
+          hit = [m * (1 + 0.9 * dry), m * (1 + 0.35 * dry), m * (1 - 0.2 * dry)];
         }
         if (!hit) continue;
         cover++; r += hit[0]; gg += hit[1]; b += hit[2];
@@ -226,42 +216,6 @@ export function leafAtlas() {
         px[k] = px[k + 1] = px[k + 2] = 128;
       }
       px[k + 3] = Math.round((cover / (SS * SS)) * 255);
-    }
-  };
-  {
-    let seed = 7;
-    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-    // From above: leaves radiating from the middle of the lower half (0.5, 0.5), the old ones
-    // long and spread, the young ones short in the middle, drawn outside in.
-    const top = [];
-    for (let k = 13; k >= 0; k--) {
-      const age = k / 13;
-      const a = k * 2.39996 + rnd() * 0.2;
-      top.push({ x: 0.5, y: 0.5, a, L: 0.2 + 0.28 * age, W: (0.2 + 0.28 * age) * 0.42, fore: 1, shade: 0.8 + 0.35 * (1 - age) + (rnd() - 0.5) * 0.2 });
-    }
-    paint(LEAF.ROSETTE_TOP, top, LEAF.SPOON);
-    // From the side: a fan, the old leaves spread low and wide, the young ones upright; seen
-    // foreshortened.
-    const side = [];
-    for (let k = 13; k >= 0; k--) {
-      const age = k / 13;
-      const sgn = k % 2 ? 1 : -1;
-      const a = sgn * (0.15 + 1.25 * age) + (rnd() - 0.5) * 0.3;
-      const L = (0.3 + 0.35 * age) * (0.8 + 0.4 * rnd());
-      side.push({ x: 0.5 + (rnd() - 0.5) * 0.05, y: 0.12 + 0.1 * (1 - age), a, L, W: L * 0.42, fore: 1, shade: 0.75 + 0.4 * (1 - age) + (rnd() - 0.5) * 0.2 });
-    }
-    paint(LEAF.ROSETTE_SIDE, side, LEAF.SPOON);
-    // A tuft of grass from the side: blades from a narrow base, the outer ones arching over.
-    for (const [cell, dryShare] of [[LEAF.TUFT, 0.2], [LEAF.TUFT_DRY, 0.7]]) {
-      const tuft = [];
-      for (let k = 0; k < 70; k++) {
-        const out = rnd() * 2 - 1;
-        const a = out * 0.55 + (rnd() - 0.5) * 0.25;
-        tuft.push({ x: 0.5 + out * 0.07, y: 0.02, a, L: (1.2 + 0.7 * rnd()) * (1 - 0.35 * Math.abs(out)), W: 0.035 + 0.02 * rnd(),
-          bend: Math.sign(out || 1) * (0.2 + 0.5 * Math.abs(out)) * (0.6 + 0.8 * rnd()), shade: 0.7 + 0.5 * rnd(),
-          dry: rnd() < dryShare ? 0.2 + 0.6 * rnd() : 0 });
-      }
-      paint(cell, tuft, null, true);
     }
   }
   g.putImageData(img, 0, 0);

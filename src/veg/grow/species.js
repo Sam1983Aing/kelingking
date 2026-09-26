@@ -82,28 +82,6 @@ export function scaevola(seed, o = {}) {
     const n = Math.round(rand.range(11, 17));
     const rot0 = rand() * Math.PI * 2;
     const side0 = perp(axis);
-    if (b.lod >= 2) {
-      // The lightest level: the rosette as three cards (grow/leaves.js paints it from above
-      // and from the side), about as wide as the leaves reach.
-      // (Size and colour matched to the full plant at 10 and 14 m: coverage and mean colour
-      // of the frame, tools in PROCESS.md, v7.)
-      const S = leafLen * 1.8;
-      const tint = rand.range(-1, 1);
-      const c = [...scalec(mixc(mixc(green, deep, clamp01(0.45 - 0.45 * tint)), lin(84, 108, 56), 0.2), 0.75), 0.3];
-      const w = [t.amp, t.phase];
-      const side1 = cross(axis, side0);
-      const base = madd(t.p, axis, -0.03);
-      // From above: square, across the axis, its middle on the stem.
-      b.card(madd(base, side1, -S / 2), mul(side0, S / 2), mul(side1, S), {
-        cell: LEAF.ROSETTE_TOP, vr: [0, 0.5], nb: axis, nt: axis, c0: c, c1: c, w0: w, w1: w, leafPhase: rand(), shade: t.shade, gloss: 0.75 });
-      for (const sd of [side0, side1]) {
-        const nrm = norm(add(cross(sd, axis), mul(axis, 0.6)));
-        b.card(madd(base, axis, -0.02), mul(sd, S / 2), mul(axis, S), {
-          cell: LEAF.ROSETTE_SIDE, vr: [0, 0.5], nb: nrm, nt: norm(add(nrm, mul(axis, 1.5))), c0: c, c1: c, w0: w, w1: w, leafPhase: rand(), shade: t.shade, gloss: 0.75 });
-      }
-      area += S * S * 0.5;
-      continue;
-    }
     for (let k = 0; k < n; k++) {
       const age = k / (n - 1);                   // 0 youngest (inner), 1 oldest (outer)
       const az = rot0 + k * GOLDEN;

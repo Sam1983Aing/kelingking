@@ -139,6 +139,10 @@ void main() {
   float crisp = (c.a - 0.45) / max(fwidth(c.a), 1e-3) + 0.5;
   float alpha = mix(crisp, c.a * 1.6, smoothstep(0.5, 2.0, mip));
   if (alpha < 0.02) discard;
+#ifdef DBG_IMPFLAT
+  gl_FragColor = vec4(c.rgb * 0.3, clamp(alpha, 0.0, 1.0));
+  return;
+#endif
   vec4 dt = texture2D(uData, vUv);
   vec3 N = rotY(octDecode(dt.rg), vYaw);
   // Where this pixel really is: in front of or behind the card, from the baked depth.
@@ -190,7 +194,9 @@ export function createImpostors(shared) {
         uLeafLook: { value: new THREE.Vector2(info.trans ?? 0.3, info.gloss ?? 0.6) },
       },
       vertexShader: VERT, fragmentShader: FRAG,
-      alphaToCoverage: true,
+      // (Switches for finding what costs what: vegFlags=IMPFLAT,IMPNOA2C on the page.)
+      defines: Object.fromEntries((new URLSearchParams(location.search).get('vegFlags') || '').split(',').filter((f) => f.startsWith('IMP')).map((f) => ['DBG_' + f, 1])),
+      alphaToCoverage: !(new URLSearchParams(location.search).get('vegFlags') || '').includes('IMPNOA2C'),
     });
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = quad.index;

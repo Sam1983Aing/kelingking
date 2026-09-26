@@ -239,14 +239,18 @@ export class PlantBuilder {
   // height. nb, nt: the normals at the bottom and the top (bent, so a flat card shades as a
   // rounded clump). c0, c1: colours at the bottom and the top. w0, w1: [branch amp, phase]
   // at the bottom and the top.
-  card(p, u, v, { cell, vr = [0, 1], nb, nt, c0, c1, w0, w1, leafPhase, shade, gloss = 0.5 }) {
+  // bulge: the corners' normals lean out from the middle by this much, so a card of a clump
+  // shades as a mound (light on the side toward the sun), not as a flat shingle.
+  card(p, u, v, { cell, vr = [0, 1], nb, nt, c0, c1, w0, w1, leafPhase, shade, gloss = 0.5, bulge = 0.6 }) {
     this.alphaLeaves = true;
     const L = [KIND.LEAF, shade, cell, gloss];
+    const un = norm(u);
+    const lean = (n, s) => (bulge ? norm(madd(n, un, s * bulge)) : n);
     const ids = [
-      this.vertex(madd(p, u, -1), nb, [0, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
-      this.vertex(madd(p, u, 1), nb, [1, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
-      this.vertex(add(madd(p, u, 1), v), nt, [1, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
-      this.vertex(add(madd(p, u, -1), v), nt, [0, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
+      this.vertex(madd(p, u, -1), lean(nb, -1), [0, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
+      this.vertex(madd(p, u, 1), lean(nb, 1), [1, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
+      this.vertex(add(madd(p, u, 1), v), lean(nt, 1), [1, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
+      this.vertex(add(madd(p, u, -1), v), lean(nt, -1), [0, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
     ];
     this.quad(ids[0], ids[1], ids[2], ids[3]);
   }
