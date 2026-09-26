@@ -11,7 +11,7 @@ wet sand that shines, and the sheet of water that runs up the beach and slides b
 - `references/03-trail/trail-low-beach-close.jpg`: the beach from above, the dark shade under
   the overhang.
 
-## What is wrong in v1
+## What is wrong (seen at v1, still true after v4)
 
 - In the `beach` frame the sand reads as a smooth dune that climbs to the left. The real
   beach is flat and wide, rising gently to the cliff foot.
@@ -40,7 +40,9 @@ settings in `src/terrain/layout.js`, the swash parts of `src/water/water-shader.
 
 ## Done when
 
-- `beach` and `shoreBreak` side by side read as the photos' beach.
+- `beach` side by side reads as the photos' beach, and a new shot standing on the sand at
+  the water's edge (v4 moved `shoreBreak` into the water, 10 m from the break) reads as
+  `beach-white-sand-surf.jpg`.
 - A clip of a wave running up the sand and back reads as real to Sam.
 - Frame budget holds.
 

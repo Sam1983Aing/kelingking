@@ -9,7 +9,7 @@ version. A session works on its element only, and goes deep on it.
 | v1 | Shape, sea, surfaces, first scans and trees | [history](../gallery/history/README.md) | done, tag `v1` |
 | v2 | Light and atmosphere | [v2-light.md](v2-light.md) | done, tag `v2` |
 | v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
-| v4 | Water | [v4-water.md](v4-water.md) | in review, branch `v4-water` |
+| v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | next |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | |
@@ -26,15 +26,15 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v4-water.md, then start v4.
+> Read docs/versions/README.md and docs/versions/v5-sand.md, then start v5.
 
 ## Rules for every version
 
 1. **One element.** Work only on what the brief covers. If you find a problem that belongs to
    another version, write it into that version's brief under "Found by other versions", do
    not fix it.
-2. **Branch.** Start from `main` with `git switch -c v4-water` (version and element). Commit at
-   each checkpoint. Merge into `main` and tag `v4` only when Sam says the version is done.
+2. **Branch.** Start from `main` with `git switch -c v5-sand` (version and element). Commit at
+   each checkpoint. Merge into `main` and tag `v5` only when Sam says the version is done.
 3. **Judge against the photos, not by eye in the browser.** Use `tools/capture.mjs`
    (side by side, outline, clips). The browser pane stops rendering when it is hidden and its
    screenshots go stale. Read numbers back from the page when a picture is ambiguous.
@@ -54,9 +54,11 @@ Open a new chat in this folder and paste:
 
 ## Finishing a version
 
-1. `node tools/hero.mjs v4`: renders the hero frames into `docs/gallery/v4/`, times them
+1. `node tools/hero.mjs v5`: renders the hero frames into `docs/gallery/v5/`, times them
    against the previous version, and puts side by sides with the photos in
-   `captures/compare-v4/` (local only).
+   `captures/compare-v5/` (local only). Frame times swing a lot on this Mac, so also run
+   `node tools/ab.mjs --hero` (both versions side by side in one browser) before judging
+   the budget.
 2. Add a section to `PROCESS.md`: what changed, what went wrong and how it was fixed, what
    is still weak. This log is the raw material for the public write-up.
 3. Update the status table above, and the README if the way something works changed.
@@ -95,6 +97,9 @@ node tools/capture.mjs viewpoint --measure           # colour per region, render
 node tools/capture.mjs viewpoint --set="hour=17"     # any page switch, ; between several
 node tools/capture.mjs viewpoint --eval="expr"       # read from the page (a PNG data URL is saved)
 node tools/hero.mjs v2                               # finish a version
+node tools/ab.mjs beach --rounds=16                  # this build against the previous tag, side by side
+node tools/capture.mjs cove --console                # print the page's shader errors and warnings
+node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings
 node tools/preview-height.mjs 1024                   # top-down shaded height map
 ```
 
@@ -103,7 +108,8 @@ Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,pl
 `haze=`, `seaHaze=`, `ev=` (exposure compensation), `clouds=0`, `bounce=0`. From v3:
 `cam=e,n,h,yaw,pitch[,fov]` (any camera, in a shot's frame), `clay=2` (the bare triangles),
 `terrainDebug=1..5` (the ground's shadow, sky share, overhang horizon, lit ground, carving),
-`faceStep=` (face strip spacing). Keys: `1` to `9`
+`faceStep=` (face strip spacing). From v4: `debug=1..9` (water views, see `src/main.js`),
+`sprayDebug=1..4`, and `w.`, `o.`, `s.` for any water, spectrum or foam setting. Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light
