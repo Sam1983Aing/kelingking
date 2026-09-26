@@ -49,7 +49,9 @@ float windPush(vec2 xz) {
 // Needs SKY_PARS (uSunDir, uSunIrr, uSkySH, skyRadiance).
 export const FOLIAGE_LIGHT_GLSL = /* glsl */ `
 const vec3 LEAF_TT = vec3(1.0, 1.08, 0.5);
-vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss, float spread) {
+// The same, split: the light falling on the leaf (diffE: its colour is albedo / pi times
+// this) and its sheen (spec), for lighting per vertex.
+void foliageLightSplit(vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss, float spread, out vec3 diffE, out vec3 spec) {
   vec3 L = uSunDir;
   float NdL = dot(N, L);
   float NoV = max(dot(N, V), 0.04);
@@ -68,7 +70,8 @@ vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans,
   // the side facing down (and through the leaf from below).
   vec3 Eg = uSunIrr * max(uSunDir.y, 0.0) + uSkyUp;
   sky += (vec3(0.1, 0.095, 0.05) - vec3(0.07, 0.09, 0.1)) * Eg * (0.5 - 0.5 * N.y + (0.5 + 0.5 * N.y) * trans * 0.5) * ao;
-  vec3 col = alb / PI * (sunD + sky);
+  diffE = sunD + sky;
+  spec = vec3(0.0);
   float rough = mix(mix(0.62, 0.28, gloss), 0.9, spread);
   float F0 = 0.035;
   if (sunVis * NdL > 0.0) {
@@ -79,15 +82,19 @@ vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans,
     float F = F0 + (1.0 - F0) * pow(1.0 - max(dot(Hh, V), 0.0), 5.0);
     float k = rough * rough * 0.5;
     float G = (NdL / (NdL * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
-    col += uSunIrr * sunVis * D * F * G / (4.0 * NoV);
+    spec += uSunIrr * sunVis * D * F * G / (4.0 * NoV);
   }
   // The sky in the sheen, where the mirror direction points up out of the plant.
   vec3 R = reflect(-V, N);
   float open = smoothstep(-0.05, 0.35, R.y) * ao * ao;
   if (open > 0.01) {
     float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
-    col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss) * (1.0 - 0.6 * spread);
+    spec += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss) * (1.0 - 0.6 * spread);
   }
-  return col;
+}
+vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss, float spread) {
+  vec3 diffE, spec;
+  foliageLightSplit(N, V, sunVis, ao, trans, gloss, spread, diffE, spec);
+  return alb / PI * diffE + spec;
 }
 `;

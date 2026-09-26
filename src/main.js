@@ -30,6 +30,7 @@
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
 //   cam=e,n,h,yaw,pitch[,fov[,roll]]  any camera, in the frame of the chosen shot
 //   trail=0            no path (v6): the ground uncarved, no steps, rails or plants cleared for it
+//   vegDetail=1        (v7) how far the full plants reach before their lighter level (0: none)
 //   lab=x,y[,gap]      (v7) instead of the scattered plants, one of every species and variant in
 //                      a row across the map from (x, y) east, gap metres apart (for looking at them)
 //   terrainDebug=1..5  ground debug views: sun shadow, sky share, overhang horizon, lit
@@ -220,7 +221,7 @@ terrain.uniforms.uClay.value = state.clay;
 const sunShadow = createSunShadow(renderer);
 let texturesReady = false;
 let plants = null, plantsReady = false;
-createVegetation(renderer, { ...lightUniforms, ...grade.uniforms })
+createVegetation(renderer, { ...lightUniforms, ...grade.uniforms }, { detailScale: +(params.get('vegDetail') ?? 1) })
   .then((p) => {
     plants = p;
     plants.group.visible = !hidden.has('plants');

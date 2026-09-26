@@ -1,13 +1,18 @@
 // The material for plants drawn as real geometry (near the camera): bark, leaves on the leaf
 // atlas, and strap leaves and grass blades coloured per vertex. Instanced: each instance is
-// a plant at a world position with a size, a heading, a colour shift and a fade (for the
-// hand-over to the impostors further off, and between levels of detail).
+// a plant at a world position with a size, a heading, a colour shift, and the band of a
+// stipple pattern it keeps (for the hand-overs, near.js).
 //
 // It moves in the wind in three layers: the whole plant leans and sways with the push of the
 // wind where it stands (gusts included), each branch sways on its own, and leaves flutter.
 // Light passing through the crown to a leaf is cut by the leaves in front of it: the crown
 // is an ellipsoid, and the path from each vertex out of it toward the sun sets how much
 // sunlight gets there.
+//
+// VERTEX_LIGHT (the lighter level of detail further off, and all grass): the light is worked
+// out per vertex, as the light falling on the leaf and its sheen, and the fragment shader
+// only multiplies in the leaf's texture. A leaf is a few centimetres to a few pixels across
+// there; the cost of lighting every pixel of thousands of overlapping leaves is not.
 
 import * as THREE from 'three';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
@@ -17,6 +22,35 @@ import { WIND_GLSL, FOLIAGE_LIGHT_GLSL } from './foliage-glsl.js';
 import { ATLAS_GLSL } from './grow/leaves.js';
 
 const VERT = /* glsl */ `
+#include <common>
+#ifdef VERTEX_LIGHT
+${SKY_PARS}
+uniform vec3 uExtent;
+${SUN_SHADOW_GLSL}
+${CLOUD_SHADOW_GLSL}
+${FOLIAGE_LIGHT_GLSL}
+varying vec3 vDiffE;         // light falling on the leaf (times albedo / pi gives its colour)
+varying vec3 vSpec;          // its sheen
+varying vec4 vAp;
+// (The haze per vertex, as AERIAL_VERT_PACKED does it; SKY_PARS already declares its inputs.)
+vec4 aerialSliceA(float k, vec2 uv) {
+  vec2 tile = vec2(mod(k, AP_COLS), floor(k / AP_COLS));
+  vec2 px = tile * AP_RES + clamp(uv * AP_RES, 0.5, AP_RES - 0.5);
+  return texture(uAerialLUT, px / AP_ATLAS);
+}
+void aerialVertex(vec3 wp) {
+  vec2 uv = clamp(gl_Position.xy / max(gl_Position.w, 1e-6) * 0.5 + 0.5, 0.0, 1.0);
+  float dKm = distance(wp, uCamPos) * 0.001;
+  float s = sqrt(clamp(dKm / uApMaxKm, 0.0, 1.0)) * AP_SLICES - 0.5;
+  vec4 a;
+  if (s < 0.0) { float w = (s + 0.5) / 0.5; a = mix(vec4(0.0, 0.0, 0.0, 1.0), aerialSliceA(0.0, uv), w * w); }
+  else { float k = floor(s); a = mix(aerialSliceA(k, uv), aerialSliceA(min(k + 1.0, AP_SLICES - 1.0), uv), s - k); }
+  vAp = vec4(a.rgb * uSunE, a.a);
+}
+#else
+uniform vec3 uSunDir;
+${AERIAL_VERT_PACKED}
+#endif
 attribute vec4 aColor;
 attribute vec4 aWind;
 attribute vec4 aLeaf;
@@ -28,7 +62,6 @@ uniform vec3 uCrownR;
 uniform float uDensity;      // extinction in the crown, per metre
 uniform vec4 uWindShape;     // sway frequency, stiffness, branch amplitude (m), branch frequency
 uniform vec2 uLeafWind;      // leaf flutter amplitude (m), frequency
-uniform vec3 uSunDir;
 ${WIND_GLSL}
 varying vec2 vUv;
 varying vec3 vN;
@@ -38,8 +71,6 @@ varying vec4 vLeaf;
 varying vec2 vKeep;
 varying float vSelf;         // sunlight left after the crown
 varying float vTint;
-${AERIAL_VERT_PACKED}
-#include <common>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
@@ -91,6 +122,17 @@ void main() {
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mv;
   aerialVertex(wp);
+#ifdef VERTEX_LIGHT
+  {
+    float kind = floor(aLeaf.x * 255.0 + 0.5);
+    vec3 V = normalize(cameraPosition - wp);
+    vec3 N = normalize(Nw);
+    N *= dot(N, V) < 0.0 ? -1.0 : 1.0;
+    float sunVis = bakedShadow(wp, 0.3) * cloudShadow(wp, uSunDir) * vSelf;
+    float trans = kind == 0.0 ? 0.0 : aColor.a;
+    foliageLightSplit(N, V, sunVis, mix(0.25, 1.0, aLeaf.y), trans, kind == 0.0 ? 0.1 : aLeaf.w, 0.7, vDiffE, vSpec);
+  }
+#endif
 }
 `;
 
@@ -108,9 +150,14 @@ varying vec4 vLeaf;
 varying vec2 vKeep;
 varying float vSelf;
 varying float vTint;
+#ifdef VERTEX_LIGHT
+varying vec3 vDiffE;
+varying vec3 vSpec;
+#else
 ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
 ${FOLIAGE_LIGHT_GLSL}
+#endif
 ${ATLAS_GLSL}
 
 float pHash(vec2 p) {
@@ -150,6 +197,10 @@ void main() {
   alb *= kind == 0.0 ? vec3(1.0) : mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), vTint * 0.5 + 0.5);
 
   vec3 P = vWorld;
+#ifdef VERTEX_LIGHT
+  vec3 col = alb / PI * vDiffE + vSpec;
+  float lit = 1.0;
+#else
   vec3 V = normalize(cameraPosition - P);
   // Two-sided: the face turned toward the camera is the one lit as the front.
   vec3 N = normalize(vN);
@@ -160,20 +211,22 @@ void main() {
   // How many leaves a pixel covers: from the footprint of a pixel on a leaf of about 10 cm.
   float spread = smoothstep(0.02, 0.12, length(fwidth(P)));
   vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, shade), trans, kind == 0.0 ? 0.1 : vLeaf.w, spread);
+  float lit = sunVis * max(dot(N, uSunDir), 0.0);
+#endif
 
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) {
     float dist = log2(max(distance(P, cameraPosition), 1.0)) / 20.0;
-    gl_FragColor = vec4(6.0 / 255.0, dist, sunVis * max(dot(N, uSunDir), 0.0) > 0.3 ? 1.0 : 0.0, 1.0);
+    gl_FragColor = vec4(6.0 / 255.0, dist, lit > 0.3 ? 1.0 : 0.0, 1.0);
   }
 }
 `;
 
 // shared: uniforms shared by every plant material (light, haze, wind, shadow).
-export function plantMaterial(shared, info, leafTex) {
-  const m = new THREE.ShaderMaterial({
+export function plantMaterial(shared, info, leafTex, { vertexLight = false } = {}) {
+  return new THREE.ShaderMaterial({
     uniforms: {
       ...shared,
       uLeafTex: { value: leafTex },
@@ -184,25 +237,10 @@ export function plantMaterial(shared, info, leafTex) {
       uWindShape: { value: new THREE.Vector4(info.wind.freq, info.wind.stiff, info.wind.branchAmp, info.wind.branchFreq) },
       uLeafWind: { value: new THREE.Vector2(info.wind.leafAmp, info.wind.leafFreq) },
     },
+    defines: vertexLight ? { VERTEX_LIGHT: 1 } : {},
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: THREE.DoubleSide,
     alphaToCoverage: true,
   });
-  // Shared uniform objects stay shared (the spread above copies references).
-  return m;
-}
-
-// Depth only, for the pass before the ground: the ground's expensive shader then skips what
-// the plants hide. Same vertex shader, so the depths match the colour pass exactly.
-export function plantDepthMaterial(colorMaterial) {
-  const m = new THREE.ShaderMaterial({
-    uniforms: colorMaterial.uniforms,
-    vertexShader: VERT,
-    fragmentShader: FRAG,
-    side: THREE.DoubleSide,
-    alphaToCoverage: true,
-    colorWrite: false,
-  });
-  return m;
 }

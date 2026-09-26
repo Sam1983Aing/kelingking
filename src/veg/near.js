@@ -27,7 +27,8 @@ export function createNearPlants({ species, shared, leafTex }) {
     g.setAttribute('iPosScale', posScale);
     g.setAttribute('iYawTint', yawTint);
     g.instanceCount = 0;
-    const mesh = new THREE.Mesh(g, plantMaterial(shared, v.info, leafTex));
+    // Lit per vertex: the lighter version, and grass, whose blades are a few millimetres wide.
+    const mesh = new THREE.Mesh(g, plantMaterial(shared, v.info, leafTex, { vertexLight: level === 1 || sp.id === 'grass' }));
     mesh.frustumCulled = false;
     // Before the ground's colour pass (and after its depth pass), so the ground's shader
     // skips what the plants hide.
@@ -61,13 +62,22 @@ export function createNearPlants({ species, shared, leafTex }) {
   const last = { x: NaN, y: 0, z: 0, q: new THREE.Quaternion(), fov: 0, lod: 1 };
   const reach = Math.max(...species.map((s) => s.lod.far)) * 1.6;
   const stats = { picked: 0, checked: 0, full: 0, light: 0 };
-  const put = (M, o, lo, hi) => {
-    if (M.n >= M.cap) return;
-    const a = M.posScale.array, b = M.yawTint.array, q = M.n * 4;
-    a[q] = data[o]; a[q + 1] = data[o + 1]; a[q + 2] = data[o + 2]; a[q + 3] = data[o + 3];
-    b[q] = data[o + 4]; b[q + 1] = data[o + 7] * 2 - 1; b[q + 2] = lo; b[q + 3] = hi;
-    M.n++;
-  };
+  // Picked this frame: which mesh, which plant, its band, its distance. Written out nearest
+  // first, so the depth test turns away the hidden leaves behind (alpha to coverage and
+  // discard keep the GPU from doing that itself).
+  const picks = [];
+  const put = (M, o, lo, hi, d) => { if (M.n < M.cap) { M.n++; picks.push({ M, o, lo, hi, d }); } };
+  function write() {
+    picks.sort((a, b) => a.d - b.d);
+    for (const vs of meshes) for (const pair of vs) for (const m of pair) if (m) m.n = 0;
+    for (const { M, o, lo, hi } of picks) {
+      const a = M.posScale.array, b = M.yawTint.array, q = M.n * 4;
+      a[q] = data[o]; a[q + 1] = data[o + 1]; a[q + 2] = data[o + 2]; a[q + 3] = data[o + 3];
+      b[q] = data[o + 4]; b[q + 1] = data[o + 7] * 2 - 1; b[q + 2] = lo; b[q + 3] = hi;
+      M.n++;
+    }
+    picks.length = 0;
+  }
 
   // lodScale: how much further a plant counts as than it is (a narrow lens brings things close).
   function update(camera, lodScale = 1) {
@@ -107,14 +117,15 @@ export function createNearPlants({ species, shared, leafTex }) {
         const top = 1 - smoothstep(S.lod.near, S.lod.far, d);
         if (pair[1] && S.lod.detail) {
           const t = smoothstep(S.lod.detail - 2, S.lod.detail, d);
-          if (t < 1) { put(M, o, 0, Math.min(top, 1 - t)); stats.full++; }
-          if (t > 0) { put(pair[1], o, 1 - t, top); stats.light++; }
+          if (t < 1) { put(M, o, 0, Math.min(top, 1 - t), d); stats.full++; }
+          if (t > 0) { put(pair[1], o, 1 - t, top, d); stats.light++; }
         } else {
-          put(M, o, 0, top);
+          put(M, o, 0, top, d);
           stats.full++;
         }
       }
     }
+    write();
     stats.picked = 0;
     for (const vs of meshes) for (const pair of vs) for (const m of pair) {
       if (!m) continue;

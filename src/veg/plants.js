@@ -21,8 +21,11 @@ const LOD = {
   creeper: { near: 26, far: 36 },
 };
 
-export async function createVegetation(renderer, lightUniforms, { wind = {} } = {}) {
+// detailScale scales the full plants' reach (0: the lighter level everywhere, for looking at
+// it; main.js vegDetail=).
+export async function createVegetation(renderer, lightUniforms, { wind = {}, detailScale = 1 } = {}) {
   const t0 = performance.now();
+  for (const l of Object.values(LOD)) if (l.detail) l.detail = Math.max(2.01, l.detail * detailScale);
   const shared = {
     ...lightUniforms,
     uExtent: { value: new THREE.Vector3() },

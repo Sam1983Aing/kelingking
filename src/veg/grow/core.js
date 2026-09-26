@@ -57,19 +57,15 @@ export const srgb = (r, g, b) => [r, g, b].map((v) => { v /= 255; return v <= 0.
 export const KIND = { BARK: 0, LEAF: 1, STRAP: 2 };
 
 // light: the lighter level of detail, for further off. Built from the same calls (so the
-// plant has the same shape): every other leaf and blade left out and the rest made bigger to
-// cover the same area, fewer sides on the stems, the thinnest twigs left out, blades with
-// fewer segments.
+// plant has the same shape): fewer sides on the stems and the thinnest twigs left out here;
+// the growers draw leaves as cards with painted sprites (card(), grow/leaves.js).
 export class PlantBuilder {
   constructor({ light = false } = {}) {
     this.pos = []; this.nrm = []; this.uv = []; this.col = []; this.wind = []; this.leaf = []; this.idx = [];
     this.count = 0;
     this.tris = 0;
     this.light = light;
-    this.nth = 0;
   }
-  // In the light version, whether to skip this leaf (every other one).
-  skip() { return this.light && (this.nth++ & 1) === 1; }
   // w: [branchAmp, branchPhase, leafAmp, leafPhase] (0..1); l: [kind, shade, cell, gloss]; c: [r, g, b, trans]
   vertex(p, n, uv, c, w, l) {
     this.pos.push(p[0], p[1], p[2]);
@@ -137,8 +133,6 @@ export class PlantBuilder {
   // cup and arch tilt the normals further than the shape does (across the leaf and along
   // it), so the light runs over each leaf as over a curved one, without the vertices.
   leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35 }) {
-    if (this.skip()) return;
-    if (this.light) { l *= 1.41; w *= 1.41; droop *= 1.41; }
     const d = norm(dir);
     let side = norm(cross(d, up));
     let u = cross(side, d);
@@ -182,14 +176,6 @@ export class PlantBuilder {
   // flat: two vertices across instead of three (grass blades), the normals tilted apart by
   // cup so the blade still shades as a rounded one.
   strap(pts, widths, faces, { colors, wind, leafPhase, shade, gloss = 0.3, fold = 0.3, trans = 0.5, flat = false, cup = 0.5 }) {
-    if (this.skip()) return;
-    if (this.light && pts.length > 3) {
-      // Every other point (keeping the ends), and twice the width.
-      const keep = pts.map((_, i) => i).filter((i) => i % 2 === 0 || i === pts.length - 1);
-      const pick = (a) => (Array.isArray(a) ? keep.map((i) => a[i]) : a);
-      pts = pick(pts); faces = pick(faces); colors = pick(colors); wind = pick(wind); shade = pick(shade);
-      widths = keep.map((i) => widths[i] * 2);
-    } else if (this.light) widths = widths.map((w) => w * 2);
     const n = pts.length;
     const verts = [];
     let along = 0;
@@ -234,6 +220,22 @@ export class PlantBuilder {
       this.quad(a[0], b[0], b[1], a[1]);
       this.quad(a[1], b[1], b[2], a[2]);
     }
+  }
+
+  // A card with a sprite from the leaf atlas (a rosette, a tuft): base at p, u the half-width
+  // across (a vector), v the height (a vector), the sprite from vr[0] to vr[1] of its cell's
+  // height. nb, nt: the normals at the bottom and the top (bent, so a flat card shades as a
+  // rounded clump). c0, c1: colours at the bottom and the top. w0, w1: [branch amp, phase]
+  // at the bottom and the top.
+  card(p, u, v, { cell, vr = [0, 1], nb, nt, c0, c1, w0, w1, leafPhase, shade, gloss = 0.5 }) {
+    const L = [KIND.LEAF, shade, cell, gloss];
+    const ids = [
+      this.vertex(madd(p, u, -1), nb, [0, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
+      this.vertex(madd(p, u, 1), nb, [1, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
+      this.vertex(add(madd(p, u, 1), v), nt, [1, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
+      this.vertex(add(madd(p, u, -1), v), nt, [0, vr[1]], c1, [w1[0], w1[1], 0.6, leafPhase], L),
+    ];
+    this.quad(ids[0], ids[1], ids[2], ids[3]);
   }
 
   // Pack into a three.js geometry.

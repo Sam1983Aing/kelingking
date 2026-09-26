@@ -74,7 +74,7 @@ export function scaevola(seed, o = {}) {
   // Real leaves are greyer than they look: about 0.05 red, 0.11 green, 0.04 blue.
   const green = o.green ?? lin(70, 96, 54);
   const deep = lin(54, 78, 44);
-  const yellow = lin(150, 132, 62);
+  const yellow = lin(140, 128, 70);
   const leafLen = o.leafLen ?? 0.15;
   let area = 0;
   for (const t of tips) {
@@ -82,6 +82,28 @@ export function scaevola(seed, o = {}) {
     const n = Math.round(rand.range(11, 17));
     const rot0 = rand() * Math.PI * 2;
     const side0 = perp(axis);
+    if (b.light) {
+      // The lighter level: the rosette as three cards (grow/leaves.js paints it from above
+      // and from the side), about as wide as the leaves reach.
+      // (Size and colour matched to the full plant at 10 and 14 m: coverage and mean colour
+      // of the frame, tools in PROCESS.md, v7.)
+      const S = leafLen * 1.8;
+      const tint = rand.range(-1, 1);
+      const c = [...scalec(mixc(mixc(green, deep, clamp01(0.45 - 0.45 * tint)), lin(84, 108, 56), 0.2), 0.75), 0.3];
+      const w = [t.amp, t.phase];
+      const side1 = cross(axis, side0);
+      const base = madd(t.p, axis, -0.03);
+      // From above: square, across the axis, its middle on the stem.
+      b.card(madd(base, side1, -S / 2), mul(side0, S / 2), mul(side1, S), {
+        cell: LEAF.ROSETTE_TOP, vr: [0, 0.5], nb: axis, nt: axis, c0: c, c1: c, w0: w, w1: w, leafPhase: rand(), shade: t.shade, gloss: 0.75 });
+      for (const sd of [side0, side1]) {
+        const nrm = norm(add(cross(sd, axis), mul(axis, 0.6)));
+        b.card(madd(base, axis, -0.02), mul(sd, S / 2), mul(axis, S), {
+          cell: LEAF.ROSETTE_SIDE, vr: [0, 0.5], nb: nrm, nt: norm(add(nrm, mul(axis, 1.5))), c0: c, c1: c, w0: w, w1: w, leafPhase: rand(), shade: t.shade, gloss: 0.75 });
+      }
+      area += S * S * 0.5;
+      continue;
+    }
     for (let k = 0; k < n; k++) {
       const age = k / (n - 1);                   // 0 youngest (inner), 1 oldest (outer)
       const az = rot0 + k * GOLDEN;
@@ -95,11 +117,11 @@ export function scaevola(seed, o = {}) {
       const Wl = L * rand.range(0.38, 0.46);
       // Upper face up and toward the light, turned a little at random.
       const faceUp = norm(add(add(mul(axis, 0.8), [0, 0.6, 0]), [rand.gauss() * 0.15, 0, rand.gauss() * 0.15]));
-      const old = age > 0.88 && rand() < 0.18;
+      const old = age > 0.9 && rand() < 0.1;
       const tint = rand.range(-1, 1);
       let c = mixc(green, deep, clamp01(0.45 - 0.45 * tint));
       c = mixc(c, lin(84, 108, 56), (1 - age) * 0.4);      // young leaves are brighter
-      if (old) c = mixc(c, yellow, rand.range(0.3, 0.75));
+      if (old) c = mixc(c, yellow, rand.range(0.25, 0.6));
       b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L, Wl, {
         color: [...c, 0.3], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade * (0.8 + 0.2 * (1 - age)),
         cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, rows: 2,
@@ -160,6 +182,24 @@ export function grass(seed, o = {}) {
       gloss: 0.3, trans: 0.55, flat: true, cup: 0.45,
     });
   };
+  if (b.light) {
+    // The lighter level: three crossed cards with a painted tuft (grow/leaves.js).
+    const Hc = H * 1.35, Wc = Hc * 0.5;
+    const c0 = scalec(mixc(baseCol, green, 0.6), 0.55), c1 = scalec(mixc(mixc(green, green2, 0.5), dry, dryShare * 0.8), 0.55);
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI + rand() * 0.3;
+      const u = [Math.cos(a) * Wc / 2, 0, Math.sin(a) * Wc / 2];
+      const f = [-Math.sin(a), 0, Math.cos(a)];
+      b.card(add([0, 0, 0], mul(lean, 0)), u, add([0, Hc, 0], mul(lean, Hc)), {
+        cell: dryShare > 0.35 ? LEAF.TUFT_DRY : LEAF.TUFT, vr: [0, 1], nb: norm(add(f, [0, 0.8, 0])), nt: norm(add(f, [0, 2.5, 0])),
+        c0: [...c0, 0.55], c1: [...c1, 0.55], w0: [0, k / 3], w1: [1.2, k / 3 + 0.1], leafPhase: rand(), shade: 0.8, gloss: 0.3,
+      });
+    }
+    return {
+      builder: b, height: H * 1.3, radius: H * 1.1, crownC: [0, H * 0.4, 0], crownR: [H * 0.75, H * 0.5, H * 0.75], density: 3.0,
+      wind: { freq: 2.1, stiff: 0.22, branchAmp: 0.07, branchFreq: 2.8, leafAmp: 0.006, leafFreq: 9 },
+    };
+  }
   for (let i = 0; i < n; i++) {
     const az = rand() * Math.PI * 2;
     const out = [Math.cos(az), 0, Math.sin(az)];
