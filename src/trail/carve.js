@@ -17,7 +17,7 @@
 
 const CELL = 0.25;
 
-export function buildCarve(route, heightAt, bank) {
+export function buildCarve(route, heightAt, bank, pads = []) {
   const t0 = performance.now();
   const R = bank.reach;
   const [bx0, by0, bx1, by1] = route.bbox;
@@ -34,28 +34,47 @@ export function buildCarve(route, heightAt, bank) {
       const px = x0 + i * CELL;
       let dmin = Infinity;
       route.near(px, py, R, (k, d) => { if (d < dmin) dmin = d; });
-      if (dmin >= R) continue;
+      // Pads (the viewpoint platform): distance past their edge.
+      let pd = Infinity, pad = null;
+      for (const q of pads) { const d = padDistance(q, px, py); if (d < pd) { pd = d; pad = q; } }
+      if (dmin >= R && pd >= R) continue;
       cells++;
-      let sw = 0, sh = 0, sb = 0;
-      route.near(px, py, dmin + 1.6, (k, d) => {
-        const wt = Math.exp(-(d - dmin) / 0.3);
-        sw += wt; sh += wt * hg[k]; sb += wt * w[k];
-      });
-      const hb = sh / sw;                                  // the bench's height here
-      const half = sb / sw / 2 + bank.shoulder;            // and its half width
       const h = heightAt(px, py);
-      // Metres past the edge of the bench, eased in over 15 cm either side of it.
-      const e = softPos(dmin - half, 0.15);
-      const soft = Math.min(bank.soft, e);
-      const c = hb + softClamp(h - hb, -bank.fill * e, bank.cut * e, soft);
-      const fade = 1 - smooth(R - 2, R, dmin);
+      let c = h, fade = 0, benchW = 0, cPath = h, onBench = 0;
+      if (dmin < R) {
+        let sw = 0, sh = 0, sb = 0;
+        route.near(px, py, dmin + 1.6, (k, d) => {
+          const wt = Math.exp(-(d - dmin) / 0.3);
+          sw += wt; sh += wt * hg[k]; sb += wt * w[k];
+        });
+        const hb = sh / sw;                                  // the bench's height here
+        const half = sb / sw / 2 + bank.shoulder;            // and its half width
+        // Metres past the edge of the bench, eased in over 15 cm either side of it.
+        const e = softPos(dmin - half, 0.15);
+        const soft = Math.min(bank.soft, e);
+        c = hb + softClamp(h - hb, -bank.fill * e, bank.cut * e, soft);
+        fade = 1 - smooth(R - 2, R, dmin);
+        c = h + (c - h) * fade;
+        benchW = 1 - smooth(half - 0.1, half + 0.35, dmin);
+        cPath = c; onBench = benchW;
+      }
+      if (pad && pd < R) {
+        // The pad is level, its edges banked the same way. Where it meets the path the lower
+        // of the two wins on the path's shelf, so the steps can go on down beside it.
+        const e = softPos(pd, 0.15);
+        const cp = pad.h - bank.clearanceUnder + softClamp(c - pad.h, -bank.fill * e, bank.cut * e, Math.min(bank.soft, e));
+        const f2 = 1 - smooth(R - 2, R, pd);
+        c = c + (cp - c) * f2;
+        c = c + (Math.min(c, cPath) - c) * onBench;
+        fade = Math.max(fade, f2);
+        benchW = Math.max(benchW, 1 - smooth(-0.1, 0.35, pd));
+      }
       const k = j * nx + i;
-      D[k] = (c - h) * fade;
-      const benchW = 1 - smooth(half - 0.1, half + 0.35, dmin);
+      D[k] = c - h;
       mask[k * 4] = Math.round(255 * benchW);
       mask[k * 4 + 1] = Math.round(255 * Math.min(Math.abs(D[k]) / 1.5, 1));
       // Distance to the middle of the path (0..8 m), for the trodden strip and plants.
-      mask[k * 4 + 2] = Math.round(255 * Math.min(dmin / R, 1));
+      mask[k * 4 + 2] = Math.round(255 * Math.min(Math.min(dmin, Math.max(pd, 0)) / R, 1));
       mask[k * 4 + 3] = 255;
     }
   }
@@ -76,6 +95,15 @@ export function buildCarve(route, heightAt, bank) {
     return 1 - smooth(2, 5, (mask[k * 4 + 2] / 255) * R + (mask[k * 4 + 3] ? 0 : R));
   }
   return { at, near, D, mask, x0, y0, nx, ny, cell: CELL, cells, ms: Math.round(performance.now() - t0) };
+}
+
+// Signed distance past the edge of a pad: a rectangle (centre, half sizes, heading of its long
+// side in compass degrees) with rounded corners.
+export function padDistance(q, x, y) {
+  const a = (q.heading * Math.PI) / 180, ux = Math.sin(a), uy = Math.cos(a);
+  const dx = x - q.at[0], dy = y - q.at[1];
+  const u = Math.abs(dx * ux + dy * uy) - (q.half[0] - q.round), v = Math.abs(-dx * uy + dy * ux) - (q.half[1] - q.round);
+  return Math.hypot(Math.max(u, 0), Math.max(v, 0)) + Math.min(Math.max(u, v), 0) - q.round;
 }
 
 // max(x, 0), rounded over +-q.

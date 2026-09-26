@@ -148,6 +148,7 @@ try {
         // Ablations: SKIP_* defines on the ground material, or whole parts of the frame.
         const parts = {
           SKIP_plants: [() => A.plants && (A.plants.group.visible = false), () => A.plants && (A.plants.group.visible = true)],
+          SKIP_trail: [() => A.trail && (A.trail.group.visible = false), () => A.trail && (A.trail.group.visible = true)],
           SKIP_sky: [() => (A.scene.getObjectByProperty('renderOrder', 10).visible = false), () => (A.scene.getObjectByProperty('renderOrder', 10).visible = true)],
           SKIP_passes: [() => (A.__draw = draw), () => {}],
         };

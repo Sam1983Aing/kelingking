@@ -242,19 +242,39 @@ function gauss(a, sigma) {
 }
 
 // The line at eye height for walking it (v8's scroll): every `step` metres, the position
-// (east, north, height) and the heading (compass degrees) and grade looking ahead, with the
-// ups and downs of the steps smoothed out of it.
-export function walkLine(route, { eye = 1.6, step = 0.5, look = 4 } = {}) {
+// (east, north, height), the direction of travel (compass degrees) and the grade looking a few
+// metres ahead, with the ups and downs of single steps smoothed out of it. It can start off
+// the path (the viewpoint, on the platform) and walk straight to it at `join` metres along.
+export function walkLine(route, { eye = 1.6, step = 0.5, look = 4, from = null, fromH = null, join = 0 } = {}) {
   const { n, x, y, ht } = route;
   const hs = gauss(ht, 0.6 / DS);
+  const pts = [];
+  const j0 = Math.min(n - 1, Math.round(join / DS));
+  if (from) {
+    // Level across the platform, then onto the path.
+    const L = Math.hypot(x[j0] - from[0], y[j0] - from[1]);
+    const m = Math.max(1, Math.round(L / step));
+    for (let k = 0; k < m; k++) {
+      const u = k / m;
+      pts.push([from[0] + (x[j0] - from[0]) * u, from[1] + (y[j0] - from[1]) * u, fromH + (hs[j0] - fromH) * smooth01(u)]);
+    }
+  }
+  const every = Math.max(1, Math.round(step / DS));
+  for (let i = j0; i < n; i += every) pts.push([x[i], y[i], hs[i]]);
+  if ((n - 1 - j0) % every) pts.push([x[n - 1], y[n - 1], hs[n - 1]]);
+  // Along-line distance, direction and grade.
+  const S = [0];
+  for (let k = 1; k < pts.length; k++) S.push(S[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
   const out = [];
-  const every = Math.max(1, Math.round(step / DS)), ahead = Math.round(look / DS);
-  for (let i = 0; i < n; i += every) {
-    const j = Math.min(n - 1, i + ahead), a = Math.max(0, i - ahead);
-    const dx = x[j] - x[a], dy = y[j] - y[a];
+  let a = 0, b = 0;
+  for (let k = 0; k < pts.length; k++) {
+    while (a < k && S[k] - S[a + 1] >= look) a++;
+    while (b < pts.length - 1 && S[b] - S[k] < look) b++;
+    const dx = pts[b][0] - pts[a][0], dy = pts[b][1] - pts[a][1];
     const heading = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-    const grade = (hs[j] - hs[a]) / Math.max(Math.hypot(dx, dy), 1e-3);
-    out.push({ s: +(i * DS).toFixed(2), pos: [+x[i].toFixed(2), +y[i].toFixed(2), +(hs[i] + eye).toFixed(2)], heading: +heading.toFixed(1), grade: +grade.toFixed(3) });
+    const grade = (pts[b][2] - pts[a][2]) / Math.max(S[b] - S[a], 1e-3);
+    out.push({ s: +S[k].toFixed(2), pos: [+pts[k][0].toFixed(2), +pts[k][1].toFixed(2), +(pts[k][2] + eye).toFixed(2)], heading: +heading.toFixed(1), grade: +grade.toFixed(3) });
   }
   return out;
 }
+const smooth01 = (t) => t * t * (3 - 2 * t);

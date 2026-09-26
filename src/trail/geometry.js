@@ -17,6 +17,7 @@
 // World coordinates as three.js has them: x east, y up, z south.
 
 import { DS } from './route.js';
+import { padDistance } from './carve.js';
 
 const SKIRT = 0.45;   // how far the dirt runs out past the tread's edge, down to the ground
 
@@ -125,6 +126,39 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     }
   }
 
+  // ---------------------------------------------------------------- pads
+  // A level concrete slab (the viewpoint platform), its edge rounded, its sides running down
+  // into the ground.
+  for (const q of spec.pads ?? []) {
+    const a = (q.heading * Math.PI) / 180, ux = Math.sin(a), uy = Math.cos(a), vx = -uy, vy = ux;
+    // The outline: round the corners every 15 degrees.
+    const ring = [];
+    const cu = q.half[0] - q.round, cv = q.half[1] - q.round;
+    for (const [su, sv, a0] of [[1, 1, 0], [-1, 1, 90], [-1, -1, 180], [1, -1, 270]]) {
+      for (let k = 0; k <= 6; k++) {
+        const t = ((a0 + k * 15) * Math.PI) / 180;
+        const pu = su * cu + q.round * Math.cos(t), pv = sv * cv + q.round * Math.sin(t);
+        ring.push([q.at[0] + ux * pu + vx * pv, q.at[1] + uy * pu + vy * pv]);
+      }
+    }
+    // Top: a fan of rings from the middle, so the edge band can darken (across = 1 at the edge).
+    const rings = [0, 0.55, 0.8, 0.93, 1];
+    const pt = (k, f) => [q.at[0] + (ring[k][0] - q.at[0]) * f, q.h, q.at[1] + (ring[k][1] - q.at[1]) * f, f];
+    for (let r = 0; r + 1 < rings.length; r++) {
+      for (let k = 0; k < ring.length; k++) {
+        const k2 = (k + 1) % ring.length;
+        concrete.quad(pt(k, rings[r]), pt(k, rings[r + 1]), pt(k2, rings[r + 1]), pt(k2, rings[r]), [0, 0, 0], [0, 0, 0]);
+      }
+    }
+    for (let k = 0; k < ring.length; k++) {
+      const k2 = (k + 1) % ring.length;
+      const [x1, y1] = ring[k], [x2, y2] = ring[k2];
+      const g1 = Math.min(heightAt(x1, y1), q.h) - 0.3, g2 = Math.min(heightAt(x2, y2), q.h) - 0.3;
+      concrete.quad([x1, q.h, y1, 1], [x1, g1, y1, 1], [x2, g2, y2, 1], [x2, q.h, y2, 1], [1, 0, 0], [1, 0, 0]);
+    }
+  }
+  const onPad = (x, y, m) => (spec.pads ?? []).some((q) => padDistance(q, x, y) < m);
+
   // ---------------------------------------------------------------- logs across the dirt risers
   const logs = instances();
   for (const st of R.steps) {
@@ -158,7 +192,8 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       const off = f.w / 2 + (bamboo ? 0.12 : 0.1);
       const px = f.x + f.nx * side * off, py = f.y + f.ny * side * off;
       const step = bamboo ? 1.45 + 0.6 * rand() : 2.0 + 0.2 * rand();
-      if (clashes(px, py, q)) { prev = null; q += step; continue; }
+      // (No handrail across another stretch of the path, or on the platform.)
+      if (clashes(px, py, q) || onPad(px, py, 0.4)) { prev = null; q += step; continue; }
       if (prev && prev.bamboo !== bamboo) prev = null;
       const ground = heightAt(px, py);
       const base = Math.min(ground, f.hd) - 0.35;

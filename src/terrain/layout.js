@@ -165,7 +165,14 @@ export function defaultLayout() {
       // level shelf reaches past each edge of the tread (wider than the tread by more than
       // one cell of the ground grid, so no triangle that touches the tread reaches the bank),
       // and how far out the carve can reach.
-      bank: { cut: 2.2, fill: 2.6, soft: 0.3, shoulder: 0.7, reach: 8 },
+      bank: { cut: 2.2, fill: 2.6, soft: 0.3, shoulder: 0.7, reach: 8, clearanceUnder: 0.03 },
+      // The viewpoint platform: a level concrete pad beside the top of the steps, where the
+      // viewpoint photo was taken (its camera is 1.6 m over it, near its south-west edge).
+      // at, half sizes (m), heading of the long side, corner radius, height of its surface.
+      // It stops at the west edge of the steps, which come down beside it to its level and on,
+      // and the camera stands at its south-west corner: in the photo the ground drops away
+      // below the lens (the slab across the bottom of the frame was the first try).
+      pads: [{ name: 'viewpoint', at: [229.5, 237.95], half: [2.8, 1.95], heading: 175, round: 0.7, h: 150.4 }],
       sections: [
         { kind: 'concrete', rails: 'timber', path: TRAIL.pavedSteps, width: 1.3, rise: 0.21, going: 0.26, grade: 1.15, flat: 0.03, jitter: 0 },
         { kind: 'ridge', rails: 'timber', path: [...TRAIL.ridgeSteps, [160.57, 121.87], [155.5, 118.2]],

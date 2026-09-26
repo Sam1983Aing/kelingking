@@ -264,6 +264,18 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
   const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 1, false);
   const unitRope = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+  // Depth first, with the ground's own depth pass (terrain-mesh.js), so the ground's shader,
+  // the most expensive on screen, does not run under the treads only to be painted over.
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+  const withPrepass = (m) => {
+    const p = m.isInstancedMesh ? new THREE.InstancedMesh(m.geometry, depthOnly, m.count) : new THREE.Mesh(m.geometry, depthOnly);
+    if (m.isInstancedMesh) p.instanceMatrix = m.instanceMatrix;
+    p.renderOrder = -2;
+    p.frustumCulled = m.frustumCulled;
+    if (m.boundingSphere) p.boundingSphere = m.boundingSphere;
+    p.name = m.name + '-depth';
+    group.add(p);
+  };
 
   function update(data) {
     for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitRope && c.geometry.dispose(); }
@@ -279,6 +291,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       const m = new THREE.Mesh(g, mats[k]);
       m.name = 'trail-' + k;
       group.add(m);
+      withPrepass(m);
     }
     const inst = (k, geo, mat) => {
       const d = data.inst[k];
@@ -290,6 +303,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       m.computeBoundingSphere();
       m.name = 'trail-' + k;
       group.add(m);
+      withPrepass(m);
     };
     inst('logs', unitCyl, mats.log);
     inst('timberPosts', unitBox, mats.timber);

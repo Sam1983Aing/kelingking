@@ -130,7 +130,7 @@ export function generateHeightfield(layout, N = 2048) {
   if (layout.trail) {
     const natural = heightAt;
     const route = buildRoute(layout.trail, natural);
-    const carve = buildCarve(route, natural, layout.trail.bank);
+    const carve = buildCarve(route, natural, layout.trail.bank, layout.trail.pads);
     heightAt = (x, y) => natural(x, y) + carve.at(x, y);
     trail = { route, carve, natural };
   }

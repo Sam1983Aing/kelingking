@@ -8,6 +8,7 @@
 //   x, height, z (world), scale, yaw, species, tint (0..1, colour variation)
 
 import { makeNoise, fbm } from '../terrain/heightfield.js';
+import { padDistance } from '../trail/carve.js';
 
 export const STRIDE = 7;
 
@@ -20,6 +21,7 @@ export function scatterPlants(hf, layout, species, surfaceShift = null) {
   const rand = mulberry32(cfg.seed * 7919);
   const out = [];
   const route = hf.trail?.route;
+  const pads = layout.trail?.pads ?? [];
   const sample = (a, x, y) => {
     const fi = (x - f.x0) / f.cell - 0.5, fj = (y - f.y0) / f.cell - 0.5;
     const i = Math.max(0, Math.min(f.N - 2, Math.floor(fi))), j = Math.max(0, Math.min(f.N - 2, Math.floor(fj)));
@@ -44,6 +46,7 @@ export function scatterPlants(hf, layout, species, surfaceShift = null) {
       // Keep the path clear (v6: the real corridor, src/trail/): nothing on the tread, and no
       // canopy over it or the handrail. The biggest a plant here can be sets how far off it
       // stands (trailClear metres per unit of scale, beyond the handrail).
+      if (pads.some((p) => padDistance(p, px, py) < 0.8)) continue;   // nor on the platform
       if (route) {
         const q = route.nearest(px, py, 8);
         const most = lerp(cfg.nearScale, cfg.farScale, far) * 1.5;
