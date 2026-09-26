@@ -52,3 +52,19 @@ debug tools.
 - The atmosphere tables and the cloud pass run every frame in `renderFrame()` in `main.js`.
   Call that, not `renderer.render`, from the scroll loop.
 
+**From v4 (water).**
+
+- The sea moves with the scene clock (`simTime` in `main.js`, `?t=` freezes it). The wave
+  spectrum (`src/water/ocean.js`), the foam simulation (`surf-sim.js`) and the breaker's
+  column pass (`breaker.js`) only run when the clock moves, from `water.update()` in the
+  animation loop. Keep calling it once a frame with the scene clock.
+- A jump of the clock (backwards, or more than half a second forward) makes the foam
+  simulation replay the last 30 s so the trails look as they would, which is 450 steps and a
+  visible hitch (see the v9 notes for its cost). If the scroll scrubs time, let the clock run
+  forward on its own instead and keep jumps for cuts.
+- The foam simulation covers a 640 m square around the bay (`rect` in `surf-sim.js`), and
+  the breaking wave only exists along the beaches. Every point on the planned descent is
+  inside it. A camera path further out would need the square moved or grown.
+- `shoreBreak` stands in the water now, 10 m from the break. The last frame of the scroll,
+  standing on the sand, is `beach`.
+

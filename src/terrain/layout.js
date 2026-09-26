@@ -68,6 +68,7 @@ export function defaultLayout() {
     //   pf    face profile (< 1 bulges and stays sheer, > 1 is a slope that flattens out)
     //   L, D  seabed: how far out it takes to get deep, and how deep
     //   murk  sand hanging in the water, which turns shallow bays milky turquoise
+    //   surf  (water only) more white water where the swell hits the rock than its exposure gives
     defaults: { sand: 0, murk: 0, face: 12, pf: 0.8, L: 18, D: 34 },
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
@@ -84,9 +85,21 @@ export function defaultLayout() {
       { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
-      { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.35 },
-      { name: 'east bay shelf', at: [430, 10], r: 150, L: 260, D: 12, murk: 1 },
+      { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },
+      { name: 'east bay shelf', at: [430, 10], r: 150, L: 260, D: 12, murk: 0.55 },
       { name: 'channel along the neck', at: [175, 25], r: 85, L: 22, D: 32 },
+      // Milky plumes over deep water (murk only): sand from the east bay drifting south-west,
+      // and a faint one past the islet. The drone photo
+      // (aerial-high-whole-bay.jpg, 2026) has a big plume right past the islet; none of the
+      // five viewpoint photos, on other days, show one there, so it stays faint where the
+      // viewpoint looks and strong in the east bay, which the viewpoint cannot see.
+      { name: 'east bay plume', at: [420, -50], r: 150, murk: 1 },
+      { name: 'plume past the islet', at: [260, -260], r: 120, murk: 0.25 },
+      // Extra white water at the rock (surf only, read by the water in worker.js): the swell
+      // wraps round the jaw and runs right into the arch under it (aerial-side-from-sea.jpg,
+      // and the white round the jaw's tip from the viewpoint).
+      { name: 'surf into the arch', at: [8, 86], r: 40, surf: 1 },
+      { name: 'surf round the jaw tip', at: [35, 105], r: 30, surf: 0.7 },
     ],
 
     beach: { top: 4.6, spread: 24, shift: 8 },

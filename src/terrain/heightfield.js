@@ -288,7 +288,7 @@ function fill(rings, N, x0, y0, cell) {
 }
 
 // Largest value within a square of radius r texels (separable running maximum).
-function dilate(src, N, r) {
+export function dilate(src, N, r) {
   const out = new Float32Array(N * N), tmp = new Float32Array(N * N);
   const pass = (a, b, stride, step) => {
     const q = new Int32Array(N);
@@ -313,7 +313,7 @@ function dilate(src, N, r) {
 }
 
 // Two passes of a separable box blur of radius r texels (close to a Gaussian).
-function blur(f, N, r) {
+export function blur(f, N, r) {
   const tmp = new Float32Array(N);
   const w = 2 * r + 1;
   for (let pass = 0; pass < 2; pass++) {
@@ -343,7 +343,7 @@ function blur(f, N, r) {
 // Signed distance in metres, positive inside the mask. Exact Euclidean transform
 // (Felzenszwalb and Huttenlocher), run once for each side. For pixels outside the mask
 // it also records the index of the nearest pixel inside it.
-function signedDistance(mask, N, cell) {
+export function signedDistance(mask, N, cell) {
   const inside = new Float32Array(N * N);
   const outside = new Float32Array(N * N);
   for (let k = 0; k < mask.length; k++) {

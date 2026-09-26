@@ -62,7 +62,9 @@ export const SHOTS = {
   shoreBreak: {
     label: 'Shore break, eye level',
     ref: 'references/05-water/wave-breaking-closeup.jpg',
-    pos: [101, 222, 1.9], yaw: 282, pitch: -1.5, roll: -2, fov: 26,
+    // v4 moved it into the water, about 10 m from where the waves break and level with their
+    // crests, as the photo was taken (it stood on the sand 20 m back until v3).
+    pos: [88, 223.3, 1.3], yaw: 282, pitch: -4, roll: -2, fov: 26,
   },
   eastCove: {
     label: 'East cove, same hour',

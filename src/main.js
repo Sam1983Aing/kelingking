@@ -11,7 +11,13 @@
 //                      silhouettes (yellow) traced over it
 //   capture=1          hide the UI and set window.__ready once the frame is final
 //   t=12               freeze the clock at this many seconds (the sea animates)
-//   debug=1..5         water debug view: sediment, see-through, foam, underwater light, normals
+//   debug=1..9         water debug view: sediment, see-through, foam (surf, whitecaps, fresh),
+//                      underwater light, normals, unseen slope spread, rock coast (near,
+//                      exposure, openness), foam simulation (foam, sand, travel), breaker
+//                      (across, stage, thickness). Skips the tone curve.
+//   sprayDebug=1..4    spray: at each breaker column's crest, at its site, as it flies, rock sites
+//   w.name=value       any water setting (src/water/water.js), o.name= the wave spectrum
+//                      (ocean.js), s.name= the foam simulation (surf-sim.js)
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
 //   clay=1             plain grey ground, to judge the shape on its own (2: flat triangles)
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
@@ -126,7 +132,17 @@ const clouds = createClouds(renderer, atmosphere, cloudOpts);
 if (params.get('clouds') === '0') clouds.uniforms.uCloudShadow.value = 0;
 // What every lit material shares: sun, sky light, haze, cloud shadows.
 const lightUniforms = { ...atmosphere.uniforms, ...clouds.shadowUniforms };
-const water = createWater(lightUniforms, grade.uniforms);
+// w.name=value sets a water parameter, o.name=value an ocean spectrum one (src/water/),
+// numbers or comma-separated lists.
+const urlParams = (prefix) => {
+  const o = {};
+  const parse = (v) => (v === 'true' ? true : v === 'false' ? false : v.includes(',') ? v.split(',').map(Number) : isNaN(+v) ? v : +v);
+  for (const [k, v] of params) if (k.startsWith(prefix)) o[k.slice(prefix.length)] = parse(v);
+  return o;
+};
+const water = createWater(renderer, lightUniforms, grade.uniforms, urlParams('o.'), urlParams('s.'));
+Object.assign(water.params, urlParams('w.'));
+water.applyParams();
 const skyDome = createSkyDome(atmosphere, grade.uniforms);
 const sky = skyDome.mesh;
 scene.add(sky);
@@ -173,6 +189,7 @@ placeSun();
 
 scene.add(water.mesh);
 water.uniforms.uDebug.value = +(params.get('debug') || 0);
+water.spray.uniforms.uSprayDebug.value = +(params.get('sprayDebug') || 0);
 
 const terrain = createTerrain(lightUniforms, grade.uniforms);
 scene.add(terrain.mesh);
@@ -233,9 +250,15 @@ worker.onmessage = (e) => {
   dir.minFilter = THREE.LinearFilter;
   dir.magFilter = THREE.LinearFilter;
   dir.needsUpdate = true;
+  const coast = new THREE.DataTexture(hf.coast, hf.N, hf.N, THREE.RGBAFormat, THREE.HalfFloatType);
+  coast.minFilter = THREE.LinearFilter;
+  coast.magFilter = THREE.LinearFilter;
+  coast.needsUpdate = true;
   water.uniforms.uData.value?.dispose();
   water.uniforms.uShoreDir.value?.dispose();
-  water.setData(tex, dir, hf.extent);
+  water.uniforms.uCoast.value?.dispose();
+  water.setData(tex, dir, hf.extent, coast);
+  if (hf.breakers) water.setBreakers(hf.breakers, hf.rockSites);
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
   shadowDirty = true;
@@ -451,14 +474,19 @@ wf.add(wp, 'swell', 0, 3, 0.01).name('swell height (m)').onChange(wa);
 wf.add(wp, 'breakAt', 4, 60, 0.5).name('break distance (m)').onChange(wa);
 wf.add(wp, 'surge', 0, 1.5, 0.01).name('swash run-up (m)').onChange(wa);
 wf.add(wp, 'swellHeading', 0, 360, 1).name('swell heading').onChange(wa);
-wf.add(wp, 'windHeading', 0, 360, 1).name('wind heading').onChange(wa);
-wf.add(wp, 'chop', 0, 3, 0.01).name('wind chop').onChange(wa);
 wf.add(wp, 'foam', 0, 2, 0.01).onChange(wa);
+wf.add(wp, 'whitecaps', 0, 3, 0.01).onChange(wa);
+wf.add(wp, 'murk', 0, 3, 0.01).name('milky plumes').onChange(wa);
+wf.add(wp, 'gust', 0, 1, 0.01).name('gusts').onChange(wa);
+wf.add(wp, 'gordonF', 0.05, 1, 0.01).name('deep water brightness').onChange(wa);
 wf.add(wp, 'turbidity', 0, 2, 0.01).name('stirred sand').onChange(wa);
 wf.add(wp.absorb, 0, 0.05, 1.5, 0.005).name('absorb red').onChange(wa);
 wf.add(wp.absorb, 1, 0.005, 0.5, 0.001).name('absorb green').onChange(wa);
 wf.add(wp.absorb, 2, 0.005, 0.5, 0.001).name('absorb blue').onChange(wa);
-wf.addColor(wp, 'scatter').name('scatter colour').onChange(wa);
+wf.add(wp.backscatter, 0, 0, 0.02, 0.0001).name('backscatter red').onChange(wa);
+wf.add(wp.backscatter, 1, 0, 0.02, 0.0001).name('backscatter green').onChange(wa);
+wf.add(wp.backscatter, 2, 0, 0.02, 0.0001).name('backscatter blue').onChange(wa);
+wf.add(wp, 'sedBack', 0, 0.3, 0.001).name('sand backscatter').onChange(wa);
 wf.addColor(wp, 'sandAlbedo').name('seabed sand').onChange(wa);
 wf.addColor(wp, 'reefAlbedo').name('seabed reef').onChange(wa);
 wf.close();
@@ -584,7 +612,7 @@ renderer.setAnimationLoop(() => {
   const dt = clock.getDelta();
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
-  water.update(simTime, camera);
+  water.update(simTime, camera, renderer);
   if (plants) {
     plants.update(hf?.extent);
     plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;

@@ -61,4 +61,11 @@ under the flat v1 light and they get redone once the light changes.
 
 ## Found by other versions
 
-(nothing yet)
+**From v4 (water).**
+
+- With the sea measured against the photos (v4 in `PROCESS.md`), the open sea from 400 m to
+  15 km is within about 0.25 stops of `viewpoint-midday-a.jpg`, and beyond 15 km it stays
+  0.6 stops dark. The sky just above the horizon is 0.3 dark in the same photo. That band is
+  the haze and the sky at the horizon, not the water: the sea there is mostly reflected sky.
+  Worth a look if the light is ever revisited.
+- Clouds are still not in the sea's reflection.

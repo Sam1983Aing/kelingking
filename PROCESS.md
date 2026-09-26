@@ -621,3 +621,249 @@ raycast from the offending pixel gave the map point.
   in some views (v5).
 - Frames close to the rock (`stairs`, `trailTop`, `beach`) came out +3 to +16% against v2
   on a busy machine (see Speed). Logged in v9.
+
+## v4: water (2026-09-25)
+
+### The open sea is a wave spectrum now
+
+v1's open sea was three sine swells with fourteen wind wave trains as a slope field. From the
+air that read as a smooth sheet with a regular sheen, and it never broke. Now it is a spectrum
+turned into surfaces by an inverse FFT on the GPU (Tessendorf, "Simulating Ocean Water"):
+
+- A 13 s swell from the south-west (1.2 m significant height, long crests) and the local wind
+  sea (JONSWAP for 7 m/s over 60 km, 0.9 m, Donelan-Banner spreading), in four cascades with
+  patches of 757, 107, 15 and 2.2 m. The ratios are near 7 so the tiles never line up, and
+  each cascade keeps its own band of the spectrum so nothing is counted twice.
+- Choppy displacement sharpens the crests, and where it folds the surface (the Jacobian
+  drops) the crest is breaking: whitecaps, carried from one update to the next and fading
+  over a few seconds.
+- The mipmaps of the squared slopes give, for any pixel, the spread of the slopes too small
+  to draw (mean of the squares minus the square of the mean). That spread is what makes a
+  distant rough sea look rough: it widens the sun glint and it tilts the reflection.
+- Gusts, drifting patches a few hundred metres across where the small waves are stronger or
+  weaker. They are what the drone photo's sea texture is made of, and they hide the tiles.
+
+I checked the FFT on the CPU before writing any shader: the gather form of a Stockham FFT
+against a plain DFT, to 1e-15, and radix 4 the same way later. An FFT bug on the GPU looks
+like plausible noise, so this is worth the ten minutes. The passes are plain WebGL2 on
+three.js's context (a three.js render call per pass costs more than the pass). All four
+cascades update in about 0.35 ms, only when the clock moves.
+
+### Colour, measured
+
+v2 found the sea giving twice the photo's blue from under the surface. The old model had one
+hand-picked "scatter colour". It is now absorption and backscattering per metre, close to
+pure sea water (red 0.30, green 0.06, blue 0.04 absorbed, and 0.004 to 0.0085 scattered back), and
+the brightness of deep water from Gordon's relation, F times backscatter over absorption plus
+backscatter. Sand in the water is two kinds: coarse sand stirred up in the surf backscatters
+and absorbs a little blue (beige), fine silt in the plumes only backscatters (pale turquoise).
+The seabed sand under water is greyer than the dry beach.
+
+The reflection far out took two goes:
+
+1. v2's trick (lift the reflected ray by the unseen slope spread, cut the Fresnel at grazing
+   angles) could be made to match, but only by tuning two numbers per distance band.
+2. Four little mirrors per pixel instead: the corners of the unseen slope spread, each
+   weighted by how much of it faces the camera, each with its own Fresnel and its own patch
+   of sky, and the ones that would reflect below the horizon see other waves. One number
+   (the spread's scale) sets it, and it holds from 400 m to 15 km.
+
+Region by region on `viewpoint` and `eastCove` (`--measure`, render against photo):
+
+| Region | v3 | v4 | Photo sRGB | v3 sRGB | v4 sRGB |
+|---|---|---|---|---|---|
+| viewpoint, sea under 400 m | +0.86 | -0.13 | 37 98 122 | 4 124 207 | 18 92 134 |
+| viewpoint, sea 0.4 to 1.5 km | +0.28 | -0.11 | 55 104 153 | 30 111 197 | 53 100 146 |
+| viewpoint, sea 1.5 to 5 km | +0.14 | 0.00 | 75 124 182 | 71 130 199 | 80 125 173 |
+| viewpoint, sea 5 to 15 km | -0.29 | -0.26 | 110 161 221 | 103 147 199 | 110 149 191 |
+| viewpoint, sea beyond 15 km | -0.63 | -0.57 | 135 184 237 | 112 151 193 | 119 154 190 |
+| viewpoint, shallows | +0.75 | +0.25 | 99 161 163 | 107 208 225 | 118 172 184 |
+| eastCove, sea 0.4 to 1.5 km | +0.13 | -0.06 | 59 111 163 | 35 114 197 | 62 109 154 |
+| eastCove, shallows | +0.46 | 0.00 | 138 171 177 | 82 206 237 | 102 176 191 |
+
+The stops only compare brightness. The colours say more: v3's near sea was a saturated royal
+blue (4, 124, 207) where the photo has a dark teal (37, 98, 122).
+
+Beyond 15 km it is still 0.6 stops dark, which is v2's horizon band (the sky just above the
+horizon is 0.3 dark too).
+
+A sweep of the reflection settings came back with three identical answers. zsh does not split
+a variable into words, so `set -- $cfg` in the loop saw one argument, and every run used the
+same broken values. And `--set=o.halfFFT=false` turned `false` into the string "false",
+which is true. The page's parser knows `true` and `false` now.
+
+### Plumes
+
+The milky plumes are drifting, warped noise inside zones on the map, billowing at their edges
+and thicker in the middle, instead of a noise threshold. One judgement call: the drone photo
+(2026) has a big plume running past the islet, and none of the five viewpoint photos (other
+days) show one there. So the strong plume stays in the east bay, which the viewpoint cannot
+see, and only a faint one reaches past the islet.
+
+### Surf, foam and the coast
+
+- **Wavelengths.** v1's surf had a wavelength of 10 m plus a fifth of the distance offshore,
+  which put three or four parallel crests in the surf zone. For 9 s waves the depth gives
+  about 23 m in 0.7 m of water and 44 m at 2.5 m, so one or two crests, as in
+  `waves-from-cliff.jpg`. Each crest also wobbles along the shore on its own, the gaps between
+  waves vary, the heights come in sets, and bigger waves break further out.
+- **Foam with a memory.** A heightfield shader knows where a wave is breaking now, not what
+  the last one left. A 1024 by 1024 simulation over the bay carries foam and stirred-up sand
+  with the water (semi-Lagrangian): up the beach with each bore, back out with the backwash
+  and harder in rip channels, off the rock after each hit, downwind, and in eddies (the curl
+  of a noise field, so it swirls without piling up). Thick foam thins to lace within a few
+  seconds, lace lingers for twenty. A frozen capture replays the last 30 s first.
+- **Lace that moves with the water.** The first lace was a fixed pattern that the foam
+  amount thresholded, and it read as marbled paper and then as crackle glaze. The
+  simulation now also carries how far each bit of foam has travelled, and the lace is drawn
+  where the foam started from, so it stretches into streaks along the backwash and the rips.
+- **The rock's real foot.** v3 carved a notch and an arch, and the white water still followed
+  the map's coastline, in places metres in front of the rock. The worker now reads the foot
+  off the mesh itself (where the face strips cross sea level) into a distance field, with how
+  exposed each bit of foot is: facing the swell, and open to it along rays 1.5 km out to sea.
+  Bursts of white water come when a crest of the ocean's own swell reaches the foot, so they
+  arrive with the waves you see, in sets. Two zones in `layout.js` (`surf`, water only) add
+  white water where the swell wraps round the jaw into the arch, as
+  `aerial-side-from-sea.jpg` shows.
+- **Wind rows.** Off the exposed rock, old foam lies in streaks along the wind, as it does in
+  the drone photo.
+
+Bugs worth remembering:
+
+- A band of brown speckles along every waterline in the cove, seen from above. It looked like
+  stirred-up sand. It was the foam's relief shading (dark crevices between lumps) at a
+  distance where the lumps are smaller than a pixel. Relief now fades with pixel size.
+- Bright blocks in the foam up close: value noise rotated between octaves stops its grid from
+  showing.
+
+### The breaking wave
+
+A height per map point cannot fold over, so the lip is its own mesh: a ribbon along each
+beach's waterline, a column every half metre, each column a cross-section of the wave from its
+back to a little in front. Each column finds the crest of the wave breaking there and bends
+into that wave's stage: steepening, the lip thrown forward, the tube, the lip landing, the
+collapse. Neighbouring columns are at slightly different stages, so the wave peels along the
+beach. While a wave breaks, the sea tucks its own crest under the ribbon.
+
+I plotted the cross-section in node at six stages (a PNG, no browser) before writing the
+shader. The first shape had the face as a tube from the start and a floor that crossed it.
+
+What went wrong:
+
+1. **A dark slab where the wave should be.** Each column stepped along the waterline's normal
+   to find its crest. On a curved beach the shore distance grows along a different line, so
+   the search landed on the phase of another wave. A CPU copy of the surf function, run for
+   one column at 70 moments, printed the stage and the crest position and showed it at once.
+   The search now steps along the direction the shore distance grows.
+2. **Test views that showed nothing.** I set a "side view" camera assuming the beach ran
+   east to west. It faces 276 degrees. Read the direction off the geometry first.
+3. **A straight seam at the foot of the wave.** The ribbon's floor lay on a flat trough while
+   the sea in front of it still carried the last bore. First fix: clamp the foot above the
+   sea and fade the ribbon out at its edges. Later (see Speed) the ribbon became opaque and
+   the clamp drew flat water over the bore, so now the foot simply goes under the sea in
+   front where that is higher, as water in front of a breaking wave does.
+4. **Triangles stretched across the beach** where neighbouring columns found different waves.
+   Dropped when their crests are more than 4 m apart.
+5. **The crest search ran 96 times per column** (once per vertex) and again per spray
+   particle. It runs once per column per frame now, into a small float texture.
+
+6. **A pale, blotchy patch on the rising face** for a moment at the start of every break. It
+   took five wrong guesses: the ribbon's reflection being smoother than the sea's, light
+   seen through the back of the wave, sand in the water, the milky plume, the spray. Each
+   fix was real but changed nothing there. What found it was switching things off one at a
+   time (foam off: gone), then the foam debug view: the sea was still drawing v1's white lip
+   on its own crest, which the breaker has replaced, and at low strength it laid a veil over
+   the crest just before the breaker took over. On the way the ribbon and the sea came to
+   share one surface function (slopes, roughness, the four-mirror reflection), the spray lost
+   most of its haze (dozens of overlapping puffs up close were adding up to a sheet), and the
+   sand in the water thins out with height, as it does on a real rising face. Lesson: when a
+   patch looks wrong, turn things off until it goes, before theorising about why.
+7. **A flat pane after the collapse,** the top of the landed lip lying over a sea that had
+   not yet put its crest back. The sea now untucks sooner and the ribbon's top sinks with it.
+
+Debug views went through the exposure and the tone curve, so I spent a while reading a stage
+off colours that were compressed. They skip it now. And the spray was invisible at first
+because 2 to 7 cm droplets 30 m away are smaller than a pixel. They are puffs of droplets now.
+
+The `shoreBreak` camera moved into the water, about 10 m from where the waves break and level
+with their crests, as `wave-breaking-closeup.jpg` was taken. v3's camera stood on the sand 20 m
+back and could not see the lip. So `shoreBreak` is not comparable across v3 and v4 in the
+frame times.
+
+### Speed
+
+The first full `hero.mjs` run had `beach` at +49% against v3, and three runs gave numbers
+that swung by 20 to 40 points for the same frame (`sideFromSea` -16% in one, +36% in the
+next). So two new ways of measuring before changing anything:
+
+- **Parts, in one page.** Switch one thing off at a time (the sea, the breaker, the spray,
+  a define that skips the ocean displacement or the surf in the vertices, a flat colour for
+  the sea's pixels), alternate the variants, take medians.
+- **Both builds side by side** (`tools/ab.mjs`): v3 and v4 open in one headless Chrome at
+  the same time, their animation loops stopped, timed in alternation, the median of the
+  per-round ratios reported. Timed against itself it comes out within 2%. Two things
+  mattered: a page that is not in front gets no animation frames (so it never reports
+  ready), and each page is brought to the front before its turn.
+
+What the parts said at `beach`, and what was done about it:
+
+1. **The breaker cost 1.75 ms, all in its pixels,** for a small patch of wave. The camera
+   looks along the beach, so the ribbon is seen edge on and hundreds of its columns stack on
+   the same pixels. It was blended, in whatever order the columns run, so every layer was
+   shaded. Now it is opaque, drawn in 8 m chunks sorted near to far each frame, and hidden
+   layers fail the depth test before they are shaded. Its soft edges could not stay blended,
+   and a dither showed as a halftone band over the water, so the ribbon now hands over to
+   the sea by sinking under it: at its back, its front, and the start and end of each break.
+   Where the two are the same shape, whichever is higher shows. Its foam patterns only run
+   where there is foam. Columns that are not breaking bail out at the top of the vertex
+   shader. From 1.75 ms to below what this measure can tell apart (a few tenths).
+2. **The vertices.** Half the resolution did not make the sea any cheaper at `beach`, so it
+   was the vertices: the ring grid is drawn only in the wedge the camera sees, with 480 rings
+   near the camera instead of 960 (side by side at the shore break I could not tell them
+   apart), a cascade is fetched only where it adds detail (the swell is gone in the surf
+   zone), and the surf's slope is worked out per vertex instead of per pixel.
+
+The water's own share, v3 and v4 side by side, sea on and off: `beach` 1.90 against 2.18 ms,
+`trailTop` 1.02 against 1.19 ms.
+
+Whole frames. Side by side (`tools/ab.mjs --hero`, 16 rounds) twice, the second after the
+breaker came to share the sea's surface and reflection, and the official `hero.mjs` runs:
+
+| Frame | Side by side, final | Side by side, before | `hero.mjs` final (gallery) | Earlier `hero.mjs` runs |
+|---|---|---|---|---|
+| overview | +7% | +6% | -8% | -5, +9, +2, +14% |
+| viewpoint | +16% | +9% | +5% | -23, -37, -20, -27% |
+| stairs | +19% | +2% | -4% | -11, -18, -19, -15% |
+| trailTop | +19% | +22% | +10% | +2, +9, +33, +13% |
+| trailLow | +19% | +13% | -32% | -24, -25, -1, -21% |
+| beach | +26% | +8% | -7% | +49, +33, -1, +12% |
+| shoreBreak (camera moved) | -1% | -11% | +1% | -6, -19, +40, +8% |
+| sideFromSea | 0% | +16% | -26% | -16, +36, +6, +31% |
+
+The first two official runs were before the breaker and vertex work above.
+
+So the official check passes in its final run, and the side-by-side tool, which agrees with
+itself better but not well (`stairs` went from +2% to +19% with no change near it), puts
+five frames at +16 to +26%. Taken together: the water now costs a few tenths of a
+millisecond to about a millisecond more than v3's, most where the camera is near the surf
+(`beach`, `trailLow`), which is the breaking wave's pixels and the surf's work per vertex.
+The first burst of frames in a fresh page also came out up to 60% slower than the same frame
+a minute later (the GPU warming up), another reason single runs disagree. That cost is the
+realism this version is for, and it is logged in the v9 brief with the tool and the
+breakdown.
+
+Moving (the clock running, which the still hero frames never pay for): the spectrum 0.3 to
+0.4 ms, a foam step 0.11 ms every fourth frame, the breaker's columns 0.1 ms. A moving frame
+came out 1.7 to 2.3 ms slower than a still one, the rest being the sky and clouds redrawing.
+A jump of the clock replays 30 s of foam, about 440 ms.
+
+### Still weak
+
+- The eye-level photo is backlit by a low sun, and ours is noon with the sun behind the
+  camera, so the wave's face is bluer and brighter. The lip's white edge reads a little cut
+  out, and up close the droplets look a little like bokeh.
+- The bore is lumpy in its shading, not in its shape (it is still the heightfield).
+- The foam simulation covers a 640 m square around the bay. Outside it, the rock gets the
+  simpler band of white water and the wind rows.
+- The sea beyond 15 km is 0.6 stops dark, with v2's horizon band. Clouds are still not in the
+  reflection.

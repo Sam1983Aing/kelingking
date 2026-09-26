@@ -431,7 +431,7 @@ const hashKey = (x, y) => Math.floor(x / 2) * 65536 + Math.floor(y / 2);
 // ---------------------------------------------------------------- the middle of the faces
 
 // Contour lines of a field at 0 (marching squares), linked into chains of points.
-function contourChains(F, N, x0, y0, cell) {
+export function contourChains(F, N, x0, y0, cell) {
   const X = (i) => x0 + (i + 0.5) * cell, Y = (j) => y0 + (j + 0.5) * cell;
   const H = (i, j) => 2 * (j * N + i), V = (i, j) => 2 * (j * N + i) + 1;
   const pt = new Map(), links = new Map();
@@ -485,7 +485,7 @@ function contourChains(F, N, x0, y0, cell) {
 }
 
 // Smooth a chain a little and resample it evenly, `spacing(x, y)` metres apart.
-function resampleChain(pts, spacing) {
+export function resampleChain(pts, spacing) {
   let p = pts.map((q) => [q[0], q[1]]);
   for (let it = 0; it < 4; it++) {
     const s = p.map((q) => [q[0], q[1]]);
