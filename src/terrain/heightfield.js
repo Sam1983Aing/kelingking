@@ -61,13 +61,14 @@ export function generateHeightfield(layout, N = 2048) {
 
   // Zone parameters on the grid.
   const F = { sand: new Float32Array(N * N), murk: new Float32Array(N * N), face: new Float32Array(N * N),
-    pf: new Float32Array(N * N), D: new Float32Array(N * N), L: new Float32Array(N * N) };
+    pf: new Float32Array(N * N), D: new Float32Array(N * N), L: new Float32Array(N * N), btop: new Float32Array(N * N) };
+  const zoneDefaults = { ...defaults, btop: beach.top };
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const k = j * N + i;
-      const z = blendZones(zones, defaults, X(i), Y(j));
+      const z = blendZones(zones, zoneDefaults, X(i), Y(j));
       F.sand[k] = smooth(0, 0.7, z.sand);
-      F.murk[k] = z.murk; F.face[k] = z.face; F.pf[k] = z.pf; F.D[k] = z.D; F.L[k] = z.L;
+      F.murk[k] = z.murk; F.face[k] = z.face; F.pf[k] = z.pf; F.D[k] = z.D; F.L[k] = z.L; F.btop[k] = z.btop;
     }
   }
 
@@ -115,7 +116,10 @@ export function generateHeightfield(layout, N = 2048) {
   for (let k = 0; k < EDGE.length; k++) EDGE[k] = DK[k] < 0 ? TOP[cliff.nearestIn[k]] || TOP[k] : TOP[k];
   blur(EDGE, N, 3);
 
-  const fields = { N, cell, x0, y0, DC, DCR, DK, TOP, EDGE, ISLE, ...F };
+  // The foot of the wall behind the beach, where the drone photo says it is (beach.back).
+  const B = beachBack(layout.beach.back, N, x0, y0, cell);
+
+  const fields = { N, cell, x0, y0, DC, DCR, DK, TOP, EDGE, ISLE, ...B, ...F };
   const heightAt = makeHeightAt(fields, layout, noise);
 
   const H = new Float32Array(N * N);
@@ -198,6 +202,17 @@ export function makeHeightAt(f, layout, noise) {
     const pf = at(f.pf);
     const dk = at(f.DK) + noise(x / 15 + 3, y / 15) * nz.edgeJitter;
     const edge = at(f.EDGE);
+    const btop = f.btop ? at(f.btop) : beach.top;
+    // Behind the beach the wall comes down to the traced foot: its width is whatever lies
+    // between the cliff-top line and that foot, and it stays steep to the bottom (the zones'
+    // gentler profiles left a long toe that the sand ran up as a ramp).
+    let faceC = face, pfC = pf;
+    const wb = f.WB ? at(f.WB) * sandW : 0;
+    if (wb > 0) {
+      const db = at(f.DB) + noise(x / 9 + 7, y / 9 - 2) * 1.2;
+      faceC = lerp(face, Math.max(-dk - db, 3), wb);
+      pfC = lerp(pf, Math.min(pf, beach.backProfile), wb);
+    }
 
     // The profile across the face, at a shift s along it. Rock: the drop happens right at
     // the waterline. Beach zones: below the OSM cliff-top line the face falls from the
@@ -206,8 +221,8 @@ export function makeHeightAt(f, layout, noise) {
       const vv = Math.min(Math.max((dcr + s) / face, 0), 1);
       const rock = top * (1 - (1 - vv) ** (1 / pf));
       let cove = top;
-      if (dk + s < 0) cove = edge * (1 - Math.min(-(dk + s) / face, 1)) ** pf;
-      const sand = beach.top * (1 - Math.exp(-Math.max(dc + s, 0) / beach.spread));
+      if (dk + s < 0) cove = edge * (1 - Math.min(-(dk + s) / faceC, 1)) ** pfC;
+      const sand = btop * (1 - Math.exp(-Math.max(dc + s, 0) / beach.spread));
       cove = Math.max(cove, sand);
       return Math.min(lerp(rock, cove, sandW), (dc + s) * 40); // meet the water
     };
@@ -215,7 +230,7 @@ export function makeHeightAt(f, layout, noise) {
     // of metres across the face they become rounded edges, which a mesh can follow without
     // cutting teeth into them.
     // Not across the waterline, where the seabed takes over: faded out there instead.
-    const nearRim = dcr < face + 2.2 || (sandW > 0.01 && dk > -face - 2.2 && dk < 2.2);
+    const nearRim = dcr < face + 2.2 || (sandW > 0.01 && dk > -faceC - 2.2 && dk < 2.2);
     const h0 = profile(0);
     if (!nearRim || dc < 1.2) return h0;
     const d = 0.55;
@@ -225,6 +240,55 @@ export function makeHeightAt(f, layout, noise) {
 }
 
 // ---------------------------------------------------------------- helpers
+
+// Signed distance to the traced foot of the wall behind the beach (DB, positive on the sand
+// side, which is to the right walking along the line), and how much it applies (WB: fading
+// out over 15 m at each end of the line and from 45 to 70 m away from it). The line is
+// smoothed first (Chaikin), so the foot does not have corners.
+function beachBack(line, N, x0, y0, cell) {
+  if (!line || line.length < 2) return {};
+  let pts = line;
+  for (let it = 0; it < 3; it++) {
+    const q = [pts[0]];
+    for (let k = 0; k + 1 < pts.length; k++) {
+      const [a, b] = [pts[k], pts[k + 1]];
+      q.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    q.push(pts.at(-1));
+    pts = q;
+  }
+  const seg = [];
+  let total = 0;
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const [ax, ay] = pts[k], [bx, by] = pts[k + 1];
+    const len = Math.hypot(bx - ax, by - ay);
+    seg.push({ ax, ay, dx: (bx - ax) / len, dy: (by - ay) / len, len, at: total });
+    total += len;
+  }
+  const minX = Math.min(...pts.map((p) => p[0])) - 80, maxX = Math.max(...pts.map((p) => p[0])) + 80;
+  const minY = Math.min(...pts.map((p) => p[1])) - 80, maxY = Math.max(...pts.map((p) => p[1])) + 80;
+  const DB = new Float32Array(N * N), WB = new Float32Array(N * N);
+  for (let j = 0; j < N; j++) {
+    const y = y0 + (j + 0.5) * cell;
+    if (y < minY || y > maxY) continue;
+    for (let i = 0; i < N; i++) {
+      const x = x0 + (i + 0.5) * cell;
+      if (x < minX || x > maxX) continue;
+      let best = Infinity, side = 0, along = 0;
+      for (const g of seg) {
+        const t = Math.min(Math.max((x - g.ax) * g.dx + (y - g.ay) * g.dy, 0), g.len);
+        const px = x - (g.ax + g.dx * t), py = y - (g.ay + g.dy * t);
+        const d = px * px + py * py;
+        if (d < best) { best = d; side = g.dx * py - g.dy * px; along = g.at + t; }
+      }
+      const d = Math.sqrt(best);
+      const k = j * N + i;
+      DB[k] = side < 0 ? d : -d;
+      WB[k] = smooth(0, 15, along) * smooth(0, 15, total - along) * (1 - smooth(45, 70, d));
+    }
+  }
+  return { DB, WB };
+}
 
 const smooth = (a, b, x) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
@@ -243,7 +307,7 @@ function nearestIslet(islets, x, y) {
 
 // Gaussian-weighted blend of zone parameters. Each field only blends among the zones
 // that set it, and fades to the default away from them.
-const FIELDS = ['sand', 'murk', 'face', 'pf', 'L', 'D'];
+const FIELDS = ['sand', 'murk', 'face', 'pf', 'L', 'D', 'btop'];
 const zoneW = new Float64Array(64);
 const zoneOut = {};
 function blendZones(zones, defaults, x, y) {

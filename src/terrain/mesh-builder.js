@@ -241,6 +241,11 @@ export function buildTerrainMesh(hf, layout, M) {
     const ea = edgeOf(a), eb = edgeOf(b);
     if (ea > a) a = Math.min(ea + 3, -2);
     if (eb < b) b = Math.max(eb - 3, 2);
+    // A wall standing on the beach: stop a few metres out past its foot (more under an
+    // overhang, whose cave runs in behind it). Further out the lines across a curved wall
+    // converge and cross, and the strip folds over itself on the flat sand.
+    const foot = carve.footAlong(Fx, Fy, gx, gy, a);
+    if (foot && foot.onSand > 0.5) a = Math.max(a, Math.min(foot.t - foot.reach, -2));
     return { a, b };
   }
 
@@ -542,6 +547,7 @@ function refine(t, h, tooLong, hAt, c = null, cOf = null) {
 // Horizontal offsets into the rock (positive = inland) for points on a profile.
 export function makeCarver(hf, layout, sample) {
   const f = hf.fields;
+  const heightAt = hf.heightAt;
   const strata = buildStrata();
   const n3 = makeNoise3(layout.noise.seed + 17);
   const notch = layout.notch;
@@ -580,11 +586,39 @@ export function makeCarver(hf, layout, sample) {
     const tW = t[k - 1] + ((t[k] - t[k - 1]) * (level - h[k - 1])) / Math.max(h[k] - h[k - 1], 1e-6);
     const tFoot = tW - 1;
     const hFoot = at(tFoot);
-    const onSand = smooth(0.8, 2.4, at(tW - 3));
+    const onSand = sandOut(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy, at(tW - 3));
     // The top of the wall itself (the mapped cliff top), which on the beach is well below
     // the top of the profile: the ridge carries on up behind it as a slope.
     const hEdge = Math.min(sample(f.EDGE, Fx, Fy), hMax);
     return { wall, onSand, tFoot, hFoot, hRim: hMax, hEdge, maxIn };
+  }
+
+  // Whether the ground 3 m out from a wall's foot is beach: the zones say sand and it is above
+  // the water. (v5 lowered the south end of the beach to about a metre, so its height alone
+  // no longer says; until then this was the height, 0.8 to 2.4 m.)
+  function sandOut(x, y, hOut) {
+    return smooth(0.3, 0.8, sample(f.sand, x, y)) * smooth(-0.3, 0.5, hOut);
+  }
+
+  // Where a line across a face (from the middle of the face, going out) reaches its foot on
+  // the beach, how much that is sand, and how far out past it the strip must reach: the
+  // undercut's floor fades over 5 m, an overhang's cave floor further.
+  function footAlong(Fx, Fy, gx, gy, a) {
+    const level = layout.beach.top + 2;
+    let prev = heightAt(Fx, Fy);
+    if (prev < level) return null;
+    for (let tt = -0.5; tt >= a; tt -= 0.5) {
+      const hv = heightAt(Fx + tt * gx, Fy + tt * gy);
+      if (hv < level) {
+        const tW = tt + 0.5 * (level - hv) / Math.max(prev - hv, 1e-6);
+        const out = heightAt(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy);
+        const z = zoneAt(Fx, Fy);
+        const ov = (z.cave + z.bulge) * 0.6 + 4 * Math.min(z.w, 1);
+        return { t: tW - 1, onSand: sandOut(Fx + (tW - 3) * gx, Fy + (tW - 3) * gy, out), reach: 12 + ov };
+      }
+      prev = hv;
+    }
+    return null;
   }
 
   // Overhang and notch settings at a place, blended between the zones (layout.overhangs).
@@ -646,7 +680,7 @@ export function makeCarver(hf, layout, sample) {
       // Below the foot, the sand runs on in under the overhang.
       const zz = t < F.tFoot ? 0 : Math.max(h - F.hFoot, 0);
       let cw = under * (1 - smooth(underH, underH + 2.5, zz)) * (1 - Math.min(z.w, 1));
-      if (t < F.tFoot) cw *= smooth(F.tFoot - 10, F.tFoot, t);
+      if (t < F.tFoot) cw *= smooth(F.tFoot - 6, F.tFoot, t);
       c += cw * F.wall * F.onSand + overhang(z, t, h, F);
     }
 
@@ -663,7 +697,7 @@ export function makeCarver(hf, layout, sample) {
     return Math.min(c, F.maxIn) * taper;
   }
 
-  return { features, offset, strata, overhangAt: (Fx, Fy, t, h, F) => overhang(zoneAt(Fx, Fy), t, h, F) };
+  return { features, offset, strata, footAlong, overhangAt: (Fx, Fy, t, h, F) => overhang(zoneAt(Fx, Fy), t, h, F) };
 }
 
 // A bump that is 0 below lo, rises to 1 at peak and falls back to 0 at hi.

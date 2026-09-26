@@ -69,9 +69,14 @@ export function defaultLayout() {
     //   L, D  seabed: how far out it takes to get deep, and how deep
     //   murk  sand hanging in the water, which turns shallow bays milky turquoise
     //   surf  (water only) more white water where the swell hits the rock than its exposure gives
+    //   btop  (beaches) how high the sand gets toward the back of the beach (default beach.top)
     defaults: { sand: 0, murk: 0, face: 12, pf: 0.8, L: 18, D: 34 },
     zones: [
       { name: 'kelingking beach', at: [120, 215], r: 95, sand: 1 },
+      { name: 'beach south', at: [118, 135], r: 28, sand: 1 },
+      // The south end of the beach is low: the swash runs up to the foot of the rock under the
+      // overhang and leaves it wet (beach-white-sand-cliff.jpg, the viewpoint and trailLow photos).
+      { name: 'beach south, low', at: [78, 92], r: 45, btop: 1.6 },
       { name: 'beach south crescent', at: [70, 95], r: 30, sand: 1 },
       { name: 'beach south end', at: [60, 66], r: 20, sand: 1 },
       { name: 'emboo beach', at: [390, 205], r: 45, sand: 1 },
@@ -102,7 +107,15 @@ export function defaultLayout() {
       { name: 'surf round the jaw tip', at: [35, 105], r: 30, surf: 0.7 },
     ],
 
-    beach: { top: 4.6, spread: 24, shift: 8 },
+    // The beach. The sand rises from the waterline (shifted `shift` metres out from the mapped
+    // coast) toward `top` over `spread` metres. `back` is the foot of the wall behind it, north
+    // to south, traced from the registered drone photo (aerial-high-whole-bay.jpg): the walls
+    // come down to it, steep to the bottom (profile at most `backProfile`). Its south end runs
+    // along the foot the zones already give there, so it hands over without a corner; the
+    // overhang beyond is the mesh builder's.
+    beach: { top: 4.0, spread: 24, shift: 8, backProfile: 0.6,
+      back: [[119, 322], [126, 294], [150, 279], [161, 250], [161, 227], [141, 219], [129, 210], [128, 187],
+        [132, 163], [130, 141], [121, 119], [114, 102], [106, 95], [100, 89], [95, 82], [92, 76]] },
 
     // Mesh (mesh-builder.js). The ground is a grid whose rows and columns are `density`
     // times closer inside the focus ranges (metres east and north: the headland, the islet
