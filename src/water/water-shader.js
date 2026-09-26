@@ -788,8 +788,12 @@ void main() {
 #ifdef SKIP_SWFOAM
   swFoam = 0.0;
 #endif
+  // On the swash sheet even the thickest foam is a single layer of bubbles, with clear water
+  // showing between its clumps: it never closes up into a white carpet.
+  float onSheet = swFoam * sf.sheet;
   if (swFoam > 0.001 && amount > 0.002)
-    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount, fp), swFoam);
+    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.84, onSheet), fp), swFoam);
+  fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
   float lumps = 0.5;
   if (fresh > 0.01) {
@@ -798,7 +802,7 @@ void main() {
     lace = max(lace, fresh * smoothstep(0.18, 0.42, lumps + fresh * 0.25 + pattern * 0.2));
   }
   float foam = mix(lace, amount * 0.8, smoothstep(0.25, 1.5, fp)) * smoothstep(0.0, 0.06, amount);
-  foam = max(foam, smoothstep(0.9, 1.05, amount));
+  foam = max(foam, smoothstep(0.9, 1.05, amount) * (1.0 - onSheet));
   // Whitecaps: bright where the crest is breaking now, thinning into streaks as the foam ages.
   float capLace = smoothstep(1.0 - caps - 0.1, 1.0 - caps + 0.25, mix(pattern, 0.6, smoothstep(0.1, 0.6, fp)));
   foam = max(foam, capLace * smoothstep(0.02, 0.3, caps) * 0.9);
@@ -807,7 +811,7 @@ void main() {
   // Thick fresh foam is a heap of lumps that shade each other and face the sun or not;
   // old foam is a flat film with a little texture.
   // (Relief only where a pixel is small enough to show it: further off it is just noise.)
-  float relW = fresh * smoothstep(0.25, 0.04, fp);
+  float relW = fresh * smoothstep(0.25, 0.04, fp) * (1.0 - 0.75 * onSheet);
   vec3 rel = relW > 0.01 ? foamRelief(p - travel, fp, uTime) : vec3(1.0, 0.0, 0.0);
   vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * relW);
   float heap = mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
@@ -818,6 +822,13 @@ void main() {
   // clipping to a flat white.
   vec3 crevice = foamAlb / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
   foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
+  // Up close on the sheet, the bubbles themselves: bright rims and darker middles, a few
+  // millimetres to a couple of centimetres across.
+  if (onSheet > 0.01 && fp < 0.012) {
+    vec2 qb = (p - travel) * 38.0;
+    float bub = smoothstep(0.0, 0.35, cells(qb, uTime * 1.3)) * 0.6 + smoothstep(0.0, 0.3, cells(qb * 2.7 + 5.0, -uTime)) * 0.4;
+    foamRad *= mix(1.0, 0.72 + 0.45 * (1.0 - bub), onSheet * smoothstep(0.012, 0.005, fp));
+  }
   // Old foam is a thin film of bubbles: up close the water shows through it.
   float thinFilm = mix(mix(0.55, 0.75, smoothstep(0.01, 0.08, fp)), 1.0, max(fresh, smoothstep(0.3, 0.8, amount)));
   float fo = foam * thinFilm;
@@ -857,7 +868,10 @@ void main() {
   vec3 Xf = X * (1.0 - fo) + foamRad * fo;
   float alpha = 1.0 - dstK * (1.0 - fo);
   // The sheet's edge: where its edge height above the sand crosses zero, a little soft.
-  float edgeA = mix(smoothstep(0.0, 0.002, film), smoothstep(0.0, 0.0025, vSheetA.z + 0.0012 * fo), sf.sheet);
+  // Its edge is ragged: fingers and scallops a few centimetres to a few decimetres across.
+  float rag = sf.sheet > 0.0 && vSheetA.z > -0.03 && vSheetA.z < 0.03
+    ? (vnoise(p * 2.7 + uTime * 0.3) - 0.5) * 0.012 + (vnoise(p * 9.0 - uTime * 0.5) - 0.5) * 0.006 * smoothstep(0.05, 0.01, fp) : 0.0;
+  float edgeA = mix(smoothstep(0.0, 0.002, film), smoothstep(0.0, 0.0025, vSheetA.z + rag + 0.0012 * fo), sf.sheet);
   vec3 srcCol = Xf / max(alpha, 1e-3);
   alpha *= edgeA;
   // (No discard: it would stop the GPU from rejecting the sea's pixels under the ground early.)
@@ -870,6 +884,8 @@ void main() {
   if (uDebug == 2) gl_FragColor = vec4(vec3(through), 1.0);
   if (uDebug == 3) gl_FragColor = vec4(amount, caps, fresh, 1.0);
   if (uDebug == 8) gl_FragColor = vec4(sim.rg, length(sim.ba) * 0.05, 1.0);
+  // 10: the swash (v5): sheet, foam amount, the film's thickness / 10 cm.
+  if (uDebug == 10) gl_FragColor = vec4(sf.sheet, amount, sf.film * 10.0, 1.0);
   if (uDebug == 4) gl_FragColor = vec4(under, 1.0);
   if (uDebug == 5) gl_FragColor = vec4(N * 0.5 + 0.5, 1.0);
   if (uDebug == 6) gl_FragColor = vec4(vec3(sub * 4.0), 1.0);

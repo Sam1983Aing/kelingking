@@ -867,3 +867,52 @@ A jump of the clock replays 30 s of foam, about 440 ms.
   simpler band of white water and the wind rows.
 - The sea beyond 15 km is 0.6 stops dark, with v2's horizon band. Clouds are still not in the
   reflection.
+
+## v5: sand and the waterline (2026-09-25, in progress)
+
+Not finished yet. Where it stands, so the next session can pick it up.
+
+### Done
+
+- **Beach shape.** The foot of the wall behind the beach is traced from the registered drone
+  photo (`beach.back` in `layout.js`), and the walls come down to it steep at the base. The
+  sand ramp at the south end is gone, the south end is low (`btop` zones) so the swash reaches
+  the rock, and the beach has a steep face up to a berm. Outline checks on `viewpoint` and
+  `overview` still pass.
+- **Cameras.** `beach` was refitted from the people in its photo (the man at the water's edge
+  is about 14 m off and 3.5 m below the eye). New shot `swash` at the water's edge for
+  `beach-white-sand-surf.jpg`.
+- **Sand.** About 0.5 reflectance and pinker (coral sand), measured within 0.01 stops of the
+  viewpoint photo. Close range from two CC0 scans (`sand_02`, `damp_beach_sand`, Sam approved
+  the download). Maroon band, grit and dust along the wall foot.
+- **Swash.** `src/water/swash.js`: each wave sends a sheet up the sand that slows, stops and
+  drains back, with lobes and a foamy front. Worked out once per frame into a map
+  (`swash-map.js`). The sea draws the sheet as a thin film over the ground's wet sand, the
+  sand is soaked, glossy just after, then damp, and the foam simulation moves with it.
+- **Tools.** `tools/parts.mjs` times parts of a frame in one page. Water debug view 10
+  (sheet, foam amount, film thickness).
+
+### Things that cost time
+
+- Working the swash out per vertex in the ground cost 1.2 ms at `beach`, even though only a
+  few vertices are on the wet sand: the ground's vertex shader runs for every vertex of the
+  island. A map made once per frame fixed it.
+- A GLSL ternary choosing between two structs hung Chrome's GPU process (the page never became
+  ready). Plain if/else works.
+- The sea's shaders sit at 16 texture units. The sea's vertex shader now takes three
+  displacement cascades as their own uniform (`uOceanV`): three.js allocates units by the
+  length of the JavaScript array, not the shader's.
+- `ab.mjs` picks the second newest gallery folder as the previous version, so before
+  `docs/gallery/v5` exists it times against v3. Pass `--a=v4`.
+- Face strips reaching out over flat sand folded where the lines across a concave wall cross
+  (dark specks in `trailLow`). They now stop before crossing and only a few metres past the foot.
+
+### Open
+
+- The white carpet in the uprush at `swash` is not the sheet: debug view 10 shows it is the
+  sea's own surf surface lying over the lower beach, fully foamed by the simulation. The surf's
+  height and foam on the beach face should hand over to the sheet sooner.
+- Frame times against v4 (`ab.mjs --hero --a=v4`): all within 10% except `beach` +16%, whose
+  camera moved and now sees mostly close sand.
+- Not done: hero frames and gallery, the final swash clip, `swash` in `HERO` (hero.mjs and
+  ab.mjs need to skip shots the previous version lacks), README and status table.
