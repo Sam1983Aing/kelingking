@@ -11,7 +11,7 @@ version. A session works on its element only, and goes deep on it.
 | v3 | Rock | [v3-rock.md](v3-rock.md) | done, tag `v3` |
 | v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
-| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, waiting for Sam's OK |
+| v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | next |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |

@@ -22,7 +22,7 @@ moving on. The plan, the rules and a brief per version are in
 | v3 | Rock | done |
 | v4 | Water | done |
 | v5 | Sand and the waterline | done |
-| v6 | Trail and stairs | done, in review |
+| v6 | Trail and stairs | done |
 | v7 | Plants | next |
 | v8 | The scroll descent | |
 | v9 | Speed and the shareable build | |
