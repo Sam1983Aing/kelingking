@@ -30,6 +30,8 @@
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
 //   cam=e,n,h,yaw,pitch[,fov[,roll]]  any camera, in the frame of the chosen shot
 //   trail=0            no path (v6): the ground uncarved, no steps, rails or plants cleared for it
+//   lab=x,y[,gap]      (v7) instead of the scattered plants, one of every species and variant in
+//                      a row across the map from (x, y) east, gap metres apart (for looking at them)
 //   terrainDebug=1..5  ground debug views: sun shadow, sky share, overhang horizon, lit
 //                      ground share, carved depth (terrain-shader.js)
 //
@@ -50,6 +52,7 @@ import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
 import { loadSurfaceTextures } from './terrain/surface-textures.js';
 import { createVegetation } from './veg/plants.js';
+import { SPECIES } from './veg/scatter.js';
 import { createTrail } from './trail/trail.js';
 
 const params = new URLSearchParams(location.search);
@@ -253,6 +256,8 @@ let hf = null;
 let genId = 0;
 let terrainFrames = -1;
 const worker = new Worker(new URL('./terrain/worker.js', import.meta.url), { type: 'module' });
+// Errors in the worker do not reach the page's console on their own.
+worker.onerror = (e) => console.error('terrain worker failed:', e.message, e.filename, e.lineno);
 worker.onmessage = (e) => {
   if (e.data.id !== genId) return;
   hf = e.data;
@@ -275,6 +280,7 @@ worker.onmessage = (e) => {
   water.setData(tex, dir, hf.extent, coast);
   if (hf.breakers) water.setBreakers(hf.breakers, hf.rockSites);
   terrain.setData(tex, hf.extent, layout.beach.top);
+  if (params.has('lab')) hf.plants = labPlants(hf);
   plants?.setInstances(hf.plants);
   trail.update(hf.trail);
   shadowDirty = true;
@@ -286,6 +292,19 @@ function regenerate() {
   genId++;
   statusEl.textContent = 'generating terrain…';
   worker.postMessage({ id: genId, layout, N: state.quality, M: state.quality >= 2048 ? 2049 : 1025 });
+}
+// lab=x,y[,gap]: every species and variant in a row, for looking at them one by one.
+function labPlants(h) {
+  const [x0, y0, gap = 8] = params.get('lab').split(',').map(Number);
+  const out = [];
+  let x = x0;
+  SPECIES.forEach((sp, k) => sp.heights.forEach((_, v) => {
+    const y = y0;
+    // (Hanging plants hang in the air, to be seen whole.)
+    out.push(x, sample(h.heights, h.N, h.cell, h.extent.x0, h.extent.y0, x, y) - 0.05 + (sp.id === 'creeper' ? 4 : 0), -y, 1, 0.6, k, v, 0.5);
+    x += gap * (sp.id === 'palm' ? 1.5 : sp.id === 'grass' ? 0.5 : 1);
+  }));
+  return { data: new Float32Array(out), count: out.length / 8, shrubs: out.length / 8 };
 }
 let regenTimer = 0;
 const regenerateSoon = () => { clearTimeout(regenTimer); regenTimer = setTimeout(regenerate, 250); };
@@ -562,6 +581,7 @@ controls.addEventListener('change', () => { status(); outlineDirty = true; });
 // Handles for poking at the scene from the console or a test script.
 window.__app = { THREE, scene, camera, renderer, terrain, water, trail, layout, SHOTS, state, groundAt, atmosphere, grade, clouds,
   get plants() { return plants; },
+  get hf() { return hf; },
   setTime(t) { simTime = t; },
   // Move the sun to a local time on the photo day (for time-of-day clips).
   setHour(h) { state.hour = h; placeSun(); },

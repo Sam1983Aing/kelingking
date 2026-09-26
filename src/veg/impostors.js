@@ -17,7 +17,7 @@ import { WIND_GLSL, FOLIAGE_LIGHT_GLSL } from './foliage-glsl.js';
 const VERT = /* glsl */ `
 ${HEMI_OCT_GLSL}
 attribute vec4 iPosScale;     // x, height, z, scale
-attribute vec4 iYawTint;      // heading, colour shift (-1..1), 1 if a 3D plant takes over near the camera, seed
+attribute vec4 iYawTint;      // heading, colour shift (-1..1), 1 if a 3D plant takes over near the camera, unused
 uniform vec3 uCenter;         // centre of the bounding sphere, relative to the plant's foot
 uniform float uRadius;
 uniform float uGrid;
@@ -60,7 +60,8 @@ void main() {
   vec3 card = cW + (xW * position.x + yW * position.y) * uRadius * s;
   // The wind leans the plant as it leans the 3D one: the card's top moves, its foot stays.
   float push = windPush(iPosScale.xz);
-  float t = uWindTime, seed = iYawTint.w;
+  float t = uWindTime;
+  float seed = fract(sin(dot(iPosScale.xz, vec2(12.9898, 78.233))) * 43758.5453);   // as the 3D plant's
   float sway = sin(t * uWindShape.x + seed * 6.2832) * 0.6 + sin(t * uWindShape.x * 2.13 + seed * 17.0) * 0.25;
   float H = uHeight * s;
   float hf = clamp((card.y - iPosScale.y) / max(H, 0.05), 0.0, 1.6);
@@ -121,8 +122,15 @@ float pHash(vec2 p) {
 void main() {
   if (vFade < 0.999 && pHash(gl_FragCoord.xy) < 1.0 - vFade) discard;
   vec4 c = texture2D(uColor, vUv);
-  // Crisp edge, coverage kept as the atlas shrinks (alpha to coverage takes it from there).
-  float alpha = (c.a - 0.45) / max(fwidth(c.a), 1e-3) + 0.5;
+  // Close up a crisp edge. Further off, where a texel of the smaller mip levels averages
+  // leaves and the gaps between them, the average itself is the coverage, handed to alpha to
+  // coverage as it is (a threshold there ate the fine leaves of the palms: the groves went
+  // dark from 1 km, the shaded ground showing through).
+  vec2 sz = vec2(textureSize(uColor, 0));
+  vec2 tdx = dFdx(vUv * sz), tdy = dFdy(vUv * sz);
+  float mip = max(0.0, 0.5 * log2(max(dot(tdx, tdx), dot(tdy, tdy))));
+  float crisp = (c.a - 0.45) / max(fwidth(c.a), 1e-3) + 0.5;
+  float alpha = mix(crisp, c.a * 1.6, smoothstep(0.5, 2.0, mip));
   if (alpha < 0.02) discard;
   vec4 dt = texture2D(uData, vUv);
   vec3 N = rotY(octDecode(dt.rg), vYaw);
@@ -140,7 +148,9 @@ void main() {
   float disc = b * b - a * cc;
   float tt = disc > 0.0 ? max((-b + sqrt(disc)) / a, 0.0) : 0.0;
   float sunVis = bakedShadow(P, 0.5) * cloudShadow(P, uSunDir) * exp(-uDensity * tt * vScale);
-  vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, dt.a), uLeafLook.x, uLeafLook.y);
+  // A texel of the atlas covers several leaves already; more as the card shrinks.
+  float spread = mix(0.55, 1.0, smoothstep(0.03, 0.2, length(fwidth(vCard))));
+  vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, dt.a), uLeafLook.x, uLeafLook.y, spread);
 
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
   #include <tonemapping_fragment>

@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 
 export const CELL_W = 128, CELL_H = 256, COLS = 4, ROWS = 2;
-export const LEAF = { SPOON: 0, ELLIPTIC: 1, OVATE: 2, LANCE: 3, SPOON_OLD: 4, ROUND: 5 };
+export const LEAF = { SPOON: 0, ELLIPTIC: 1, OVATE: 2, LANCE: 3, SPOON_OLD: 4, ROUND: 5, SPRAY: 6, SPRAY_SMALL: 7 };
 
 // Half-width along the leaf, t from base (0) to tip (1), peaking at 1.
 const shapes = {
@@ -34,6 +34,13 @@ function halfWidth(s, t) {
   if (s.teeth) w *= 1 - 0.06 * Math.abs(Math.sin(t * s.teeth * Math.PI)) * Math.sin(t * Math.PI);
   return Math.min(1, w);
 }
+
+// Sprays: a twig up the middle of the cell with leaves along it, for crowns too big to build
+// leaf by leaf. Each leaf its own shade, as leaves turned different ways to the light are.
+const sprays = {
+  [LEAF.SPRAY]: { shape: LEAF.ELLIPTIC, n: 17, len: 0.56, aspect: 0.44, angle: 1.0, seed: 3 },
+  [LEAF.SPRAY_SMALL]: { shape: LEAF.OVATE, n: 26, len: 0.42, aspect: 0.5, angle: 1.1, seed: 9 },
+};
 
 let cached = null;
 export function leafAtlas() {
@@ -94,6 +101,62 @@ export function leafAtlas() {
         px[k + 2] = Math.min(255, Math.round((b / cover) * 0.5 * 255));
       } else {
         px[k] = px[k + 1] = px[k + 2] = 128;   // unchanged colour outside, so mips do not darken the rim
+      }
+      px[k + 3] = Math.round((cover / (SS * SS)) * 255);
+    }
+  }
+  // Sprays.
+  for (const [key, sp] of Object.entries(sprays)) {
+    const cell = +key;
+    const cx0 = (cell % COLS) * CELL_W, cy0 = Math.floor(cell / COLS) * CELL_H;
+    const s = shapes[sp.shape];
+    let seed = sp.seed * 9301 + 49297;
+    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    // Leaves in cell units (x across 0..1, y up 0..1, the cell twice as tall as wide).
+    const leaves = [];
+    for (let k = 0; k < sp.n; k++) {
+      const t = 0.12 + 0.8 * (k / (sp.n - 1));                    // along the twig
+      const sideS = k % 2 ? 1 : -1;
+      const a = sideS * sp.angle * (1 - 0.35 * t) * (0.7 + 0.5 * rnd()) + (rnd() - 0.5) * 0.25;   // from straight up
+      const L = sp.len * (0.75 + 0.35 * rnd()) * (1 - 0.4 * t);
+      leaves.push({ x: 0.5 + (rnd() - 0.5) * 0.04, y: t * 0.92, a, L, W: L * sp.aspect, shade: 0.72 + 0.5 * rnd() });
+    }
+    // The tip leaf.
+    leaves.push({ x: 0.5, y: 0.9, a: (rnd() - 0.5) * 0.2, L: sp.len * 0.7, W: sp.len * 0.7 * sp.aspect, shade: 1.05 });
+    const SS = 3;
+    for (let y = 0; y < CELL_H; y++) for (let x = 0; x < CELL_W; x++) {
+      let cover = 0, r = 0, gg = 0, b = 0;
+      for (let sy = 0; sy < SS; sy++) for (let sx = 0; sx < SS; sx++) {
+        const px_ = (x + (sx + 0.5) / SS) / CELL_W;                   // 0..1 across
+        const py_ = (1 - (y + (sy + 0.5) / SS) / CELL_H) * 2;          // 0..2 up (cell is 2 wide units tall)
+        let hit = null;
+        // Later leaves are drawn over earlier ones.
+        for (let k = leaves.length - 1; k >= 0 && !hit; k--) {
+          const l = leaves[k];
+          const dx = px_ - l.x, dy = py_ - l.y * 2;
+          const ca = Math.cos(l.a), sa = Math.sin(l.a);
+          const along = dx * sa + dy * ca, across = dx * ca - dy * sa;
+          const t = along / l.L;
+          if (t <= 0 || t >= 1) continue;
+          const hw = halfWidth(s, t) * l.W * 0.5;
+          if (Math.abs(across) > hw) continue;
+          const au = Math.abs(across) / Math.max(hw, 1e-4);
+          let m = l.shade * (0.93 + 0.1 * t);
+          const rib = Math.max(0, 1 - Math.abs(across) / (l.W * 0.03 + 0.002));
+          hit = [m * (1 + rib * 0.25) * (1 - 0.08 * smooth(0.75, 1, au)), m * (1 + rib * 0.28) * (1 - 0.06 * smooth(0.75, 1, au)), m * (1 + rib * 0.1)];
+        }
+        // The twig.
+        if (!hit && Math.abs(px_ - 0.5) < 0.012 && py_ > 0 && py_ < 1.85) hit = [1.1, 0.8, 0.75];
+        if (!hit) continue;
+        cover++; r += hit[0]; gg += hit[1]; b += hit[2];
+      }
+      const k = ((cy0 + y) * W + cx0 + x) * 4;
+      if (cover) {
+        px[k] = Math.min(255, Math.round((r / cover) * 0.5 * 255));
+        px[k + 1] = Math.min(255, Math.round((gg / cover) * 0.5 * 255));
+        px[k + 2] = Math.min(255, Math.round((b / cover) * 0.5 * 255));
+      } else {
+        px[k] = px[k + 1] = px[k + 2] = 128;
       }
       px[k + 3] = Math.round((cover / (SS * SS)) * 255);
     }

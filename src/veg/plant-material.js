@@ -21,7 +21,7 @@ attribute vec4 aColor;
 attribute vec4 aWind;
 attribute vec4 aLeaf;
 attribute vec4 iPosScale;    // world x, y, z of the foot, scale
-attribute vec4 iYawTint;     // heading, colour shift (-1..1), fade (0..1), seed (0..1)
+attribute vec4 iYawTint;     // heading, colour shift (-1..1), the band of the stipple pattern kept (near.js)
 uniform float uHeight;       // the plant's height at scale 1
 uniform vec3 uCrownC;        // the crown's ellipsoid, plant space
 uniform vec3 uCrownR;
@@ -35,7 +35,7 @@ varying vec3 vN;
 varying vec3 vWorld;
 varying vec4 vCol;
 varying vec4 vLeaf;
-varying float vFade;
+varying vec2 vKeep;
 varying float vSelf;         // sunlight left after the crown
 varying float vTint;
 ${AERIAL_VERT_PACKED}
@@ -44,7 +44,8 @@ ${AERIAL_VERT_PACKED}
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
 void main() {
-  float s = iPosScale.w, yaw = iYawTint.x, seed = iYawTint.w;
+  float s = iPosScale.w, yaw = iYawTint.x;
+  float seed = fract(sin(dot(iPosScale.xz, vec2(12.9898, 78.233))) * 43758.5453);
   vec3 P = rotY(position * s, yaw);
   vec3 Nw = rotY(normal, yaw);
   float H = uHeight * s;
@@ -85,7 +86,7 @@ void main() {
   vWorld = wp;
   vCol = aColor;
   vLeaf = aLeaf;
-  vFade = iYawTint.z;
+  vKeep = iYawTint.zw;
   vTint = iYawTint.y;
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mv;
@@ -104,7 +105,7 @@ varying vec3 vN;
 varying vec3 vWorld;
 varying vec4 vCol;
 varying vec4 vLeaf;
-varying float vFade;
+varying vec2 vKeep;
 varying float vSelf;
 varying float vTint;
 ${SUN_SHADOW_GLSL}
@@ -119,9 +120,12 @@ float pHash(vec2 p) {
 }
 
 void main() {
-  // Fading out (to the impostor, or between levels of detail): a stipple, the other side
-  // fills in the rest.
-  if (vFade < 0.999 && pHash(gl_FragCoord.xy) > vFade) discard;
+  // Handing over (to the impostor, or between levels of detail): a stipple, each side keeps
+  // its band of it.
+  if (vKeep.x > 0.001 || vKeep.y < 0.999) {
+    float hsh = pHash(gl_FragCoord.xy);
+    if (hsh < vKeep.x || hsh >= vKeep.y) discard;
+  }
   float kind = floor(vLeaf.x * 255.0 + 0.5);
   vec3 alb = vCol.rgb * vCol.rgb;
   float alpha = 1.0;
@@ -153,7 +157,9 @@ void main() {
   float shade = vLeaf.y;
   float sunVis = bakedShadow(P, 0.3) * cloudShadow(P, uSunDir) * vSelf;
   float trans = kind == 0.0 ? 0.0 : vCol.a;
-  vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, shade), trans, kind == 0.0 ? 0.1 : vLeaf.w);
+  // How many leaves a pixel covers: from the footprint of a pixel on a leaf of about 10 cm.
+  float spread = smoothstep(0.02, 0.12, length(fwidth(P)));
+  vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, shade), trans, kind == 0.0 ? 0.1 : vLeaf.w, spread);
 
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
   #include <tonemapping_fragment>

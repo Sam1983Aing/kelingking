@@ -43,10 +43,13 @@ float windPush(vec2 xz) {
 //   ao      how much of the sky it sees (1 on the outside of a crown)
 //   trans   how much light the leaf lets through, compared with what it reflects
 //   gloss   0 matte .. 1 glossy
+//   spread  0 .. 1: how many leaves a pixel covers. One leaf has one sharp highlight; a pixel
+//           of canopy averages the highlights of leaves turned every way, which is a broad,
+//           low lobe (seen from 1 km a glossy canopy is not a mirror).
 // Needs SKY_PARS (uSunDir, uSunIrr, uSkySH, skyRadiance).
 export const FOLIAGE_LIGHT_GLSL = /* glsl */ `
 const vec3 LEAF_TT = vec3(1.0, 1.08, 0.5);
-vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss) {
+vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss, float spread) {
   vec3 L = uSunDir;
   float NdL = dot(N, L);
   float NoV = max(dot(N, V), 0.04);
@@ -60,8 +63,13 @@ vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans,
             + uSkySH[8] * 0.429043 * (N.x * N.x - N.y * N.y);
   vec3 odd = (uSkySH[1] * N.y + uSkySH[2] * N.z + uSkySH[3] * N.x) * 1.023328;
   vec3 sky = (max(even + odd, 0.0) + max(even - odd, 0.0) * trans * LEAF_TT) * ao;
+  // The harmonics carry a generic ground below the horizon (atmosphere.js, albedo 0.07, 0.09,
+  // 0.1: the sea's); under a plant the ground is scrub and earth, warmer. The difference, on
+  // the side facing down (and through the leaf from below).
+  vec3 Eg = uSunIrr * max(uSunDir.y, 0.0) + uSkyUp;
+  sky += (vec3(0.1, 0.095, 0.05) - vec3(0.07, 0.09, 0.1)) * Eg * (0.5 - 0.5 * N.y + (0.5 + 0.5 * N.y) * trans * 0.5) * ao;
   vec3 col = alb / PI * (sunD + sky);
-  float rough = mix(0.62, 0.28, gloss);
+  float rough = mix(mix(0.62, 0.28, gloss), 0.9, spread);
   float F0 = 0.035;
   if (sunVis * NdL > 0.0) {
     float a2 = rough * rough * rough * rough;
@@ -78,7 +86,7 @@ vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans,
   float open = smoothstep(-0.05, 0.35, R.y) * ao * ao;
   if (open > 0.01) {
     float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
-    col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss);
+    col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss) * (1.0 - 0.6 * spread);
   }
   return col;
 }

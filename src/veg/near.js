@@ -1,8 +1,11 @@
 // Plants near the camera as real geometry. Every frame the camera moves, the plants within
 // reach are picked from a grid over the island, checked against the view, and written into
-// one instanced mesh per species and variant. Each carries a fade: fully there up close,
-// stippled out across the hand-over band, where the impostor stipples in (impostors.js
-// works out the same fade from the same numbers).
+// one instanced mesh per species, variant and level of detail.
+//
+// Each instance carries the band of a stipple pattern it keeps (lo <= hash < hi, in the
+// shader): the full plant up close, a lighter one (fewer leaves, a little bigger) further
+// off, and the impostor beyond that (impostors.js keeps the rest of the pattern), so every
+// hand-over is a dissolve and each pixel belongs to one of them.
 
 import * as THREE from 'three';
 import { plantMaterial } from './plant-material.js';
@@ -12,12 +15,13 @@ const CELL = 8;
 
 export function createNearPlants({ species, shared, leafTex }) {
   const group = new THREE.Group();
-  // species[k] = { id, lod: { near, far }, variants: [{ info, geometry }] }
-  const meshes = species.map((sp) => sp.variants.map((v) => {
+  // species[k] = { id, lod: { near, far, detail }, variants: [{ info, geometry, light? }] }
+  // detail: where the full plant hands over to the light one (a 2 m band ending there).
+  const make = (sp, v, geometry, level) => {
     const cap = sp.capacity ?? 2048;
     const g = new THREE.InstancedBufferGeometry();
-    for (const [k, a] of Object.entries(v.geometry.attributes)) g.setAttribute(k, a);
-    g.index = v.geometry.index;
+    for (const [k, a] of Object.entries(geometry.attributes)) g.setAttribute(k, a);
+    g.index = geometry.index;
     const posScale = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     const yawTint = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     g.setAttribute('iPosScale', posScale);
@@ -28,14 +32,14 @@ export function createNearPlants({ species, shared, leafTex }) {
     // Before the ground's colour pass (and after its depth pass), so the ground's shader
     // skips what the plants hide.
     mesh.renderOrder = -1;
-    mesh.name = `near:${sp.id}:${v.info.variant ?? 0}`;
+    mesh.name = `near:${sp.id}:${v.info.variant ?? 0}:${level}`;
     group.add(mesh);
     return { mesh, g, posScale, yawTint, cap, n: 0, radius: v.info.radius, height: v.info.height };
-  }));
+  };
+  const meshes = species.map((sp) => sp.variants.map((v) => [make(sp, v, v.geometry, 0), v.light ? make(sp, v, v.light, 1) : null]));
 
   let data = null, count = 0;
   let grid = new Map();
-  const lists = [];   // per species: which plant indices are in which cell
 
   function setPlants(plants) {
     data = plants.data; count = plants.count;
@@ -56,7 +60,14 @@ export function createNearPlants({ species, shared, leafTex }) {
   const sphere = new THREE.Sphere();
   const last = { x: NaN, y: 0, z: 0, q: new THREE.Quaternion(), fov: 0, lod: 1 };
   const reach = Math.max(...species.map((s) => s.lod.far)) * 1.6;
-  const stats = { picked: 0, checked: 0 };
+  const stats = { picked: 0, checked: 0, full: 0, light: 0 };
+  const put = (M, o, lo, hi) => {
+    if (M.n >= M.cap) return;
+    const a = M.posScale.array, b = M.yawTint.array, q = M.n * 4;
+    a[q] = data[o]; a[q + 1] = data[o + 1]; a[q + 2] = data[o + 2]; a[q + 3] = data[o + 3];
+    b[q] = data[o + 4]; b[q + 1] = data[o + 7] * 2 - 1; b[q + 2] = lo; b[q + 3] = hi;
+    M.n++;
+  };
 
   // lodScale: how much further a plant counts as than it is (a narrow lens brings things close).
   function update(camera, lodScale = 1) {
@@ -68,11 +79,11 @@ export function createNearPlants({ species, shared, leafTex }) {
     last.x = p.x; last.y = p.y; last.z = p.z; last.q.copy(camera.quaternion); last.fov = camera.fov; last.lod = lodScale;
     m4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4, THREE.WebGLCoordinateSystem, camera.reversedDepth);
-    for (const vs of meshes) for (const m of vs) m.n = 0;
+    for (const vs of meshes) for (const pair of vs) for (const m of pair) if (m) m.n = 0;
     const R = reach / lodScale;
     const i0 = Math.floor((p.x - R) / CELL), i1 = Math.floor((p.x + R) / CELL);
     const j0 = Math.floor((p.z - R) / CELL), j1 = Math.floor((p.z + R) / CELL);
-    stats.checked = 0;
+    stats.checked = 0; stats.full = 0; stats.light = 0;
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
       const l = grid.get(cellKey(i, j));
       if (!l) continue;
@@ -81,8 +92,9 @@ export function createNearPlants({ species, shared, leafTex }) {
         const sp = data[o + 5], va = data[o + 6];
         const S = species[sp];
         if (!S) continue;
-        const M = meshes[sp][va];
-        if (!M) continue;
+        const pair = meshes[sp][va];
+        if (!pair) continue;
+        const M = pair[0];
         stats.checked++;
         const s = data[o + 3];
         const cy = data[o + 1] + M.height * s * 0.5;
@@ -91,16 +103,21 @@ export function createNearPlants({ species, shared, leafTex }) {
         sphere.center.set(data[o], cy, data[o + 2]);
         sphere.radius = Math.max(M.radius, M.height * 0.6) * s * 1.3;
         if (!frustum.intersectsSphere(sphere)) continue;
-        if (M.n >= M.cap) continue;
-        const fade = 1 - smoothstep(S.lod.near, S.lod.far, d);
-        const a = M.posScale.array, b = M.yawTint.array, q = M.n * 4;
-        a[q] = data[o]; a[q + 1] = data[o + 1]; a[q + 2] = data[o + 2]; a[q + 3] = s;
-        b[q] = data[o + 4]; b[q + 1] = data[o + 7] * 2 - 1; b[q + 2] = fade; b[q + 3] = (k * 0.618034) % 1;
-        M.n++;
+        // The impostor keeps the pattern from 1 - fade up; the 3D plant below it.
+        const top = 1 - smoothstep(S.lod.near, S.lod.far, d);
+        if (pair[1] && S.lod.detail) {
+          const t = smoothstep(S.lod.detail - 2, S.lod.detail, d);
+          if (t < 1) { put(M, o, 0, Math.min(top, 1 - t)); stats.full++; }
+          if (t > 0) { put(pair[1], o, 1 - t, top); stats.light++; }
+        } else {
+          put(M, o, 0, top);
+          stats.full++;
+        }
       }
     }
     stats.picked = 0;
-    for (const vs of meshes) for (const m of vs) {
+    for (const vs of meshes) for (const pair of vs) for (const m of pair) {
+      if (!m) continue;
       m.g.instanceCount = m.n;
       m.mesh.visible = m.n > 0;
       if (m.n) {

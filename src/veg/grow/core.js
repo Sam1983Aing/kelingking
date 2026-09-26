@@ -56,12 +56,20 @@ export const srgb = (r, g, b) => [r, g, b].map((v) => { v /= 255; return v <= 0.
 
 export const KIND = { BARK: 0, LEAF: 1, STRAP: 2 };
 
+// light: the lighter level of detail, for further off. Built from the same calls (so the
+// plant has the same shape): every other leaf and blade left out and the rest made bigger to
+// cover the same area, fewer sides on the stems, the thinnest twigs left out, blades with
+// fewer segments.
 export class PlantBuilder {
-  constructor() {
+  constructor({ light = false } = {}) {
     this.pos = []; this.nrm = []; this.uv = []; this.col = []; this.wind = []; this.leaf = []; this.idx = [];
     this.count = 0;
     this.tris = 0;
+    this.light = light;
+    this.nth = 0;
   }
+  // In the light version, whether to skip this leaf (every other one).
+  skip() { return this.light && (this.nth++ & 1) === 1; }
   // w: [branchAmp, branchPhase, leafAmp, leafPhase] (0..1); l: [kind, shade, cell, gloss]; c: [r, g, b, trans]
   vertex(p, n, uv, c, w, l) {
     this.pos.push(p[0], p[1], p[2]);
@@ -81,6 +89,10 @@ export class PlantBuilder {
   tube(pts, r, { color, wind, shade, sides = 5, capEnd = true }) {
     const n = pts.length;
     if (n < 2) return;
+    if (this.light) {
+      if (r[0] < 0.005) return;
+      sides = Math.max(3, sides - 2);
+    }
     // Parallel transport frames down the line.
     const T = [];
     for (let i = 0; i < n; i++) {
@@ -125,6 +137,8 @@ export class PlantBuilder {
   // cup and arch tilt the normals further than the shape does (across the leaf and along
   // it), so the light runs over each leaf as over a curved one, without the vertices.
   leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35 }) {
+    if (this.skip()) return;
+    if (this.light) { l *= 1.41; w *= 1.41; droop *= 1.41; }
     const d = norm(dir);
     let side = norm(cross(d, up));
     let u = cross(side, d);
@@ -165,7 +179,17 @@ export class PlantBuilder {
 
   // A strap leaf or a grass blade: a ribbon along a curve (pts), width tapering by widths,
   // keeled (folded) by fold, its upper face toward the side `face` at each point.
-  strap(pts, widths, faces, { colors, wind, leafPhase, shade, gloss = 0.3, fold = 0.3, trans = 0.5 }) {
+  // flat: two vertices across instead of three (grass blades), the normals tilted apart by
+  // cup so the blade still shades as a rounded one.
+  strap(pts, widths, faces, { colors, wind, leafPhase, shade, gloss = 0.3, fold = 0.3, trans = 0.5, flat = false, cup = 0.5 }) {
+    if (this.skip()) return;
+    if (this.light && pts.length > 3) {
+      // Every other point (keeping the ends), and twice the width.
+      const keep = pts.map((_, i) => i).filter((i) => i % 2 === 0 || i === pts.length - 1);
+      const pick = (a) => (Array.isArray(a) ? keep.map((i) => a[i]) : a);
+      pts = pick(pts); faces = pick(faces); colors = pick(colors); wind = pick(wind); shade = pick(shade);
+      widths = keep.map((i) => widths[i] * 2);
+    } else if (this.light) widths = widths.map((w) => w * 2);
     const n = pts.length;
     const verts = [];
     let along = 0;
@@ -182,7 +206,14 @@ export class PlantBuilder {
       const la = [wind[i][0], wind[i][1], t, leafPhase];
       const L = [KIND.STRAP, shade[i] ?? shade, 0, gloss];
       const nl = norm(madd(uu, s, Math.sin(fold))), nr = norm(madd(uu, s, -Math.sin(fold)));
-      if (half < 1e-4) {
+      if (flat) {
+        const ca = [col[0], col[1], col[2], trans];
+        if (half < 1e-4) { const v = this.vertex(pts[i], uu, [0.5, t], ca, la, L); verts.push([v, v]); continue; }
+        verts.push([
+          this.vertex(madd(pts[i], s, -half), norm(madd(uu, s, -Math.sin(cup))), [0, t], ca, la, L),
+          this.vertex(madd(pts[i], s, half), norm(madd(uu, s, Math.sin(cup))), [1, t], ca, la, L),
+        ]);
+      } else if (half < 1e-4) {
         const v = this.vertex(pts[i], uu, [0.5, t], [col[0], col[1], col[2], trans], la, L);
         verts.push([v, v, v]);
       } else {
@@ -195,6 +226,10 @@ export class PlantBuilder {
     }
     for (let i = 0; i < n - 1; i++) {
       const a = verts[i], b = verts[i + 1];
+      if (flat) {
+        if (b[0] === b[1]) this.tri(a[0], b[0], a[1]); else this.quad(a[0], b[0], b[1], a[1]);
+        continue;
+      }
       if (b[0] === b[1]) { this.tri(a[0], b[1], a[1]); this.tri(a[1], b[1], a[2]); continue; }
       this.quad(a[0], b[0], b[1], a[1]);
       this.quad(a[1], b[1], b[2], a[2]);

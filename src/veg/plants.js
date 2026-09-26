@@ -11,9 +11,14 @@ import { leafAtlas } from './grow/leaves.js';
 import { SPECIES, SP } from './scatter.js';
 
 // Where each species hands over from 3D to its impostor (metres, at the default lens).
+// detail: where the full plant has handed over to its lighter version (grow/core.js).
 const LOD = {
-  scaevola: { near: 22, far: 32 },
-  grass: { near: 16, far: 24 },
+  scaevola: { near: 22, far: 32, detail: 11 },
+  grass: { near: 16, far: 24, detail: 7 },
+  tree: { near: 40, far: 55 },
+  palm: { near: 50, far: 70 },
+  pandanus: { near: 30, far: 42 },
+  creeper: { near: 26, far: 36 },
 };
 
 export async function createVegetation(renderer, lightUniforms, { wind = {} } = {}) {
@@ -38,7 +43,13 @@ export async function createVegetation(renderer, lightUniforms, { wind = {} } = 
       const geometry = info.builder.geometry();
       info.tris = info.builder.tris;
       info.verts = info.builder.count;
-      return { info, geometry };
+      let light = null;
+      if (LOD[sp.id]?.detail) {
+        const li = grow(1000 + v * 17, { height: h, light: true });
+        light = li.builder.geometry();
+        info.lightTris = li.builder.tris;
+      }
+      return { info, geometry, light };
     });
     return { id: sp.id, lod: LOD[sp.id], variants, capacity: sp.id === 'grass' ? 6000 : 3000 };
   });
@@ -51,18 +62,14 @@ export async function createVegetation(renderer, lightUniforms, { wind = {} } = 
   species.forEach((sp, k) => {
     if (!sp || !SPECIES[k].impostor) return;
     sp.variants.forEach((v, j) => {
-      const bake = bakeImpostor(renderer, v.geometry, leafTex, { grid: 8, frame: 128 });
+      const bake = bakeImpostor(renderer, v.geometry, leafTex, { grid: 8, frame: sp.id === 'palm' || sp.id === 'tree' ? 192 : 128 });
       v.bake = bake;
-      imp.addKind(`${k}:${j}`, bake, { ...v.info, trans: 0.3, gloss: 0.75 }, sp.lod);
+      imp.addKind(`${k}:${j}`, bake, { ...v.info, trans: v.info.trans ?? 0.3, gloss: v.info.gloss ?? 0.6 }, sp.lod);
     });
   });
   const bakeMs = Math.round(performance.now() - t1);
   // Species without a grower of their own yet are drawn with one that has.
-  const pick = (sp, v) => {
-    if (sp === SP.TREE) return { key: `${SP.SCAEVOLA}:2`, scale: 2.2, near: false };
-    if (SPECIES[sp]?.impostor) return { key: `${sp}:${v}`, scale: 1, near: true };
-    return null;
-  };
+  const pick = (sp, v) => (SPECIES[sp]?.impostor ? { key: `${sp}:${v}`, scale: 1, near: true } : null);
 
   const group = new THREE.Group();
   group.add(imp.group, near.group);
