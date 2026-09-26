@@ -15,6 +15,8 @@
 // between grid samples that straddle it.
 
 import { COAST, ISLANDS, CLIFFS, PEAKS } from './geo.js';
+import { buildRoute } from '../trail/route.js';
+import { buildCarve } from '../trail/carve.js';
 
 const INF = 1e20;
 
@@ -120,7 +122,18 @@ export function generateHeightfield(layout, N = 2048) {
   const B = beachBack(layout.beach.back, N, x0, y0, cell);
 
   const fields = { N, cell, x0, y0, DC, DCR, DK, TOP, EDGE, ISLE, ...B, ...F };
-  const heightAt = makeHeightAt(fields, layout, noise);
+  let heightAt = makeHeightAt(fields, layout, noise);
+  // The path cut into it (src/trail/, v6): the route's design heights come from the ground as
+  // it was, and the carve is added on top, so everything built from heightAt after this (the
+  // grid, the faces, the plants) stands on the carved ground.
+  let trail = null;
+  if (layout.trail) {
+    const natural = heightAt;
+    const route = buildRoute(layout.trail, natural);
+    const carve = buildCarve(route, natural, layout.trail.bank);
+    heightAt = (x, y) => natural(x, y) + carve.at(x, y);
+    trail = { route, carve, natural };
+  }
 
   const H = new Float32Array(N * N);
   const SHORE = new Float32Array(N * N);
@@ -150,7 +163,7 @@ export function generateHeightfield(layout, N = 2048) {
   fields.PSIMAX = blur(dilate(fields.PSI, N, Math.round(45 / cell)), N, Math.round(8 / cell));
 
   const ms = Math.round(performance.now() - t0);
-  return { heights: H, shore: SHORE, sand: F.sand, murk: F.murk, fields, heightAt, N, cell, extent: layout.extent, land, ms };
+  return { heights: H, shore: SHORE, sand: F.sand, murk: F.murk, fields, heightAt, trail, N, cell, extent: layout.extent, land, ms };
 }
 
 // Height at any point, from the smooth fields. Same steps as described at the top.

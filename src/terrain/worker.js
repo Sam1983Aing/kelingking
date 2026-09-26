@@ -4,6 +4,7 @@
 import { generateHeightfield, signedDistance, blur } from './heightfield.js';
 import { buildTerrainMesh, contourChains, resampleChain } from './mesh-builder.js';
 import { scatterPlants } from '../veg/scatter.js';
+import { buildTrailGeometry } from '../trail/geometry.js';
 
 self.onmessage = (e) => {
   const { id, layout, N, M } = e.data;
@@ -15,10 +16,11 @@ self.onmessage = (e) => {
   const coast = coastData(hf, mesh, layout, N);
   const breakers = breakerLines(hf, N);
   const plants = scatterPlants(hf, layout, [0, 1, 2], mesh.surfaceShift);
+  const trail = trailData(hf, layout);
   self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms, breakers, rockSites: coast.sites,
-    plants: { data: plants.data, count: plants.count, ms: plants.ms },
+    plants: { data: plants.data, count: plants.count, ms: plants.ms }, trail: trail?.data,
     mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, ...(trail?.transfer ?? []), mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:
@@ -265,4 +267,26 @@ function normalMap(H, N, cell) {
     }
   }
   return out;
+}
+
+// The path (src/trail/, v6): its line, the carve's mask for the ground's shader, and the
+// geometry along it, as arrays the page can take over without copying.
+function trailData(hf, layout) {
+  if (!hf.trail) return null;
+  const { route: r, carve: c } = hf.trail;
+  const geo = buildTrailGeometry(r, hf.heightAt, layout.trail);
+  const transfer = [];
+  const take = (a) => { transfer.push(a.buffer); return a; };
+  const meshes = {};
+  for (const k of ['concrete', 'dirt']) meshes[k] = { position: take(geo[k].position), normal: take(geo[k].normal), trail: take(geo[k].trail), index: take(geo[k].index) };
+  const inst = {};
+  for (const k of ['logs', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'rope']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
+  const line = {};
+  for (const k of ['x', 'y', 's', 'hd', 'ht', 'w']) line[k] = Float32Array.from(r[k]);
+  for (const k in line) take(line[k]);
+  const mask = Uint8Array.from(c.mask);
+  take(mask);
+  return { transfer, data: { line, meshes, inst, mask: { data: mask, nx: c.nx, ny: c.ny, x0: c.x0, y0: c.y0, cell: c.cell },
+    steps: r.steps.length, length: r.length, ms: { carve: c.ms, geometry: geo.ms },
+    sectionEnds: [1, 2].map((k) => r.s[Math.max(0, r.sec.indexOf(k))]) } };
 }

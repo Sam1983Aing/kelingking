@@ -28,7 +28,8 @@
 //                      haze layer over the water, per km (more switches in src/sky/atmosphere.js)
 //   ev=0               exposure compensation in stops
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
-//   cam=e,n,h,yaw,pitch[,fov]  any camera, in the frame of the chosen shot
+//   cam=e,n,h,yaw,pitch[,fov[,roll]]  any camera, in the frame of the chosen shot
+//   trail=0            no path (v6): the ground uncarved, no steps, rails or plants cleared for it
 //   terrainDebug=1..5  ground debug views: sun shadow, sky share, overhang horizon, lit
 //                      ground share, carved depth (terrain-shader.js)
 //
@@ -49,6 +50,7 @@ import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
 import { loadSurfaceTextures } from './terrain/surface-textures.js';
 import { createPlants } from './veg/impostors.js';
+import { createTrail } from './trail/trail.js';
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
@@ -72,11 +74,13 @@ const state = {
 const layout = defaultLayout();
 // faceStep=0.55 sets the spacing of the face strips' vertices near the headland (metres).
 if (params.has('faceStep')) layout.mesh.faceStep[0] = +params.get('faceStep');
+// trail=0 leaves the path out altogether: no carve, no steps or rails (v6, for A/B checks).
+if (params.get('trail') === '0') layout.trail = null;
 // cam=east,north,height,yaw,pitch[,fov] puts the camera anywhere, keeping the shot's photo
 // and frame (for close-ups while working on something).
 if (params.has('cam')) {
-  const [e, n, h, yaw, pitch, fov] = params.get('cam').split(',').map(Number);
-  Object.assign(SHOTS[state.shot], { pos: [e, n, h], yaw, pitch, roll: 0 }, fov ? { fov } : {});
+  const [e, n, h, yaw, pitch, fov, roll] = params.get('cam').split(',').map(Number);
+  Object.assign(SHOTS[state.shot], { pos: [e, n, h], yaw, pitch, roll: roll || 0 }, fov ? { fov } : {});
 }
 const FIXED_T = params.has('t') ? +params.get('t') : null;
 const clock = new THREE.Clock();
@@ -230,8 +234,13 @@ terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked s
 // ground's wet sand through it.
 for (const k of ['uTime', 'uPeriod', 'uRunup', 'uSwashT', 'uSwashMap', 'uSwashRect']) terrain.uniforms[k] = water.uniforms[k];
 water.uniforms.uWetSandAlb.value.setRGB(...terrain.uniforms.uSandAlb.value.toArray().map((v, i) => v * terrain.uniforms.uWetTint.value.getComponent(i)));
+// The path and what stands along it (src/trail/, v6), lit like the ground.
+const trail = createTrail({ ...lightUniforms }, grade.uniforms, { uExtent: terrain.uniforms.uExtent, uSunShadow: water.uniforms.uSunShadow });
+scene.add(trail.group);
+trail.uniforms.uClayT.value = state.clay ? 1 : 0;
 const hidden = new Set((params.get('hide') || '').split(','));
 for (const name of hidden) {
+  if (name === 'trail') trail.group.visible = false;
   if (name === 'terrain') terrain.mesh.visible = false;
   if (name === 'water') water.mesh.visible = false;
   if (name === 'sky') sky.visible = false;
@@ -266,6 +275,7 @@ worker.onmessage = (e) => {
   if (hf.breakers) water.setBreakers(hf.breakers, hf.rockSites);
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
+  trail.update(hf.trail);
   shadowDirty = true;
   terrainFrames = 0;
   outlineDirty = true;
@@ -350,8 +360,8 @@ let outlineDirty = false;
 function drawOutline() {
   const w = renderer.domElement.width, h = renderer.domElement.height;
   const rt = new THREE.WebGLRenderTarget(w, h);
-  const keep = { water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible };
-  water.mesh.visible = false; sky.visible = false;
+  const keep = { water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible, trail: trail.group.visible };
+  water.mesh.visible = false; sky.visible = false; trail.group.visible = false;
   if (plants) plants.group.visible = false;
   scene.overrideMaterial = maskMaterial;
   renderer.setRenderTarget(rt);
@@ -362,7 +372,7 @@ function drawOutline() {
   renderer.toneMapping = tm;
   renderer.setRenderTarget(null);
   scene.overrideMaterial = null;
-  water.mesh.visible = keep.water; sky.visible = keep.sky;
+  water.mesh.visible = keep.water; sky.visible = keep.sky; trail.group.visible = keep.trail;
   if (plants) plants.group.visible = keep.plants;
   const px = new Uint8Array(w * h * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
@@ -549,7 +559,7 @@ function status() {
 controls.addEventListener('change', () => { status(); outlineDirty = true; });
 
 // Handles for poking at the scene from the console or a test script.
-window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, state, groundAt, atmosphere, grade, clouds,
+window.__app = { THREE, scene, camera, renderer, terrain, water, trail, layout, SHOTS, state, groundAt, atmosphere, grade, clouds,
   get plants() { return plants; },
   setTime(t) { simTime = t; },
   // Move the sun to a local time on the photo day (for time-of-day clips).
@@ -571,6 +581,95 @@ window.__app = { THREE, scene, camera, renderer, terrain, water, layout, SHOTS, 
   project(x, y, h) {
     const v = new THREE.Vector3(x, h ?? groundAt(x, y), -y).project(camera);
     return [+((v.x * 0.5 + 0.5) * 1400).toFixed(0), +((0.5 - v.y * 0.5) * (1400 / camera.aspect)).toFixed(0), +v.z.toFixed(3)];
+  },
+  // Several cameras in one go, as one PNG (a row of frames, `width` each): [{ pos, yaw, pitch,
+  // roll, fov }] in the shot's frame, or { s, side, eye, ... } to stand on the path.
+  async contactSheet(cams, width = 420, perRow = 4) {
+    const { makeFitter } = await import('./fit.js');
+    const fitter = makeFitter({ THREE, renderer, scene, camera, maskMaterial, hide: () => () => {}, route: hf?.trail?.line });
+    const h = Math.round(width / camera.aspect);
+    const rows = Math.ceil(cams.length / perRow);
+    const out = document.createElement('canvas');
+    out.width = width * Math.min(perRow, cams.length); out.height = h * rows;
+    const g = out.getContext('2d');
+    for (let k = 0; k < cams.length; k++) {
+      const c = cams[k];
+      if (c.s !== undefined) fitter.place({ side: 0, eye: 1.6, roll: 0, ...c });
+      else fitter.place({ x: c.pos[0], y: c.pos[1], h: c.pos[2], roll: 0, ...c });
+      for (let i = 0; i < 3; i++) { water.update(simTime, camera, renderer); renderFrame(); }
+      g.drawImage(renderer.domElement, (k % perRow) * width, Math.floor(k / perRow) * h, width, h);
+      g.fillStyle = '#fff'; g.font = '13px sans-serif';
+      g.fillText(c.label ?? String(k), (k % perRow) * width + 6, Math.floor(k / perRow) * h + 16);
+    }
+    applyShot();
+    return out.toDataURL('image/png');
+  },
+  // Fit the camera to the shot's photo by traced outlines, standing on the path (src/fit.js).
+  async fitCamera(opts) {
+    const { makeFitter } = await import('./fit.js');
+    const hide = () => {
+      const keep = { water: water.mesh.visible, sky: sky.visible, plants: plants?.group.visible, trail: trail.group.visible };
+      water.mesh.visible = false; sky.visible = false; trail.group.visible = false;
+      if (plants) plants.group.visible = false;
+      return () => { water.mesh.visible = keep.water; sky.visible = keep.sky; trail.group.visible = keep.trail; if (plants) plants.group.visible = keep.plants; };
+    };
+    const fitter = makeFitter({ THREE, renderer, scene, camera, maskMaterial, hide, route: hf?.trail?.line });
+    return opts.scoreOnly ? fitter.score(opts.start, opts.points) : fitter.fit(opts);
+  },
+  // Where the ray through a point of the frame (u, v from 0 to 1, top left) meets the ground:
+  // [east, north, height, distance], marched through the heightfield.
+  rayToGround(u, v) {
+    const d = new THREE.Vector3(u * 2 - 1, 1 - v * 2, 0.5).unproject(camera).sub(camera.position).normalize();
+    const p = camera.position.clone();
+    let t = 0, prev = 0;
+    for (let i = 0; i < 4000; i++) {
+      const step = Math.max(0.05, 0.004 * t);
+      const q = p.clone().addScaledVector(d, t + step);
+      const above = q.y - groundAt(q.x, -q.z);
+      if (above < 0) {
+        // Bisect the last step.
+        let a = t, b = t + step;
+        for (let k = 0; k < 20; k++) {
+          const m = 0.5 * (a + b), r = p.clone().addScaledVector(d, m);
+          if (r.y - groundAt(r.x, -r.z) < 0) b = m; else a = m;
+        }
+        const r = p.clone().addScaledVector(d, a);
+        return [+r.x.toFixed(2), +(-r.z).toFixed(2), +r.y.toFixed(2), +a.toFixed(1)];
+      }
+      prev = above;
+      t += step;
+    }
+    return null;
+  },
+  // Map lines drawn over the shot's photo (or the render, with render: true), as a PNG data
+  // URL for capture.mjs --eval. lines: [{ pts: [[e, n, h?], ...], color, width }]; a point
+  // without a height sits on the ground, lifted by `lift` metres.
+  traceOnPhoto(lines, { width = 1400, render = false, lift = 0 } = {}) {
+    const h = Math.round(width / camera.aspect);
+    const c = document.createElement('canvas');
+    c.width = width; c.height = h;
+    const g = c.getContext('2d');
+    g.drawImage(render ? renderer.domElement : refImg, 0, 0, width, h);
+    const v = new THREE.Vector3();
+    for (const L of lines) {
+      g.strokeStyle = L.color || '#f0f'; g.lineWidth = L.width || 2; g.beginPath();
+      let pen = false;
+      for (const p of L.pts) {
+        v.set(p[0], p[2] ?? groundAt(p[0], p[1]) + lift, -p[1]).project(camera);
+        if (v.z > 1 || v.z < -1) { pen = false; continue; }
+        const X = (v.x * 0.5 + 0.5) * width, Y = (0.5 - v.y * 0.5) * h;
+        if (pen) g.lineTo(X, Y); else g.moveTo(X, Y);
+        pen = true;
+        if (L.dots) g.fillRect(X - 2, Y - 2, 4, 4);
+      }
+      g.stroke();
+      if (L.text) {
+        v.set(L.pts[0][0], L.pts[0][2] ?? groundAt(L.pts[0][0], L.pts[0][1]) + lift, -L.pts[0][1]).project(camera);
+        g.fillStyle = L.color || '#fff'; g.font = `${L.size || 12}px sans-serif`;
+        g.fillText(L.text, (v.x * 0.5 + 0.5) * width + 3, (0.5 - v.y * 0.5) * h - 3);
+      }
+    }
+    return c.toDataURL('image/png');
   },
 };
 

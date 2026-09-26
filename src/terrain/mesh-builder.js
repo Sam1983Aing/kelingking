@@ -31,6 +31,12 @@ export function buildTerrainMesh(hf, layout, M) {
   const fc = cfg.focus;
   const sample = makeSampler(f);
   const carve = makeCarver(hf, layout, sample);
+  // No carving of the rock across the path (v6): it is cut into the ground as a level bench
+  // (src/trail/carve.js), and the buttresses and beds would push that sideways off its line.
+  const onTrail = hf.trail ? hf.trail.carve.near : null;
+  const keep = (x, y) => (onTrail ? 1 - onTrail(x, y) : 1);
+  const route = hf.trail?.route ?? null;
+  const pathMargin = layout.trail ? layout.trail.bank.shoulder + 0.8 : 0;
   // Finer faces when the whole mesh is finer (the page runs 1025 or 2049 vertices a side).
   const q = (M - 1) / 2048;
 
@@ -139,7 +145,7 @@ export function buildTerrainMesh(hf, layout, M) {
         const sl = P.sl[lo] + (P.sl[hi] - P.sl[lo]) * u;
         const bx = col.x + t * col.gx, by = col.y + t * col.gy;
         let h = heightAt(bx, by);
-        const c = carve.offset(col.x, col.y, t, h, P.feat, P.a, P.b, sl) * col.fade;
+        const c = carve.offset(col.x, col.y, t, h, P.feat, P.a, P.b, sl) * col.fade * keep(bx, by);
         // At both ends of the profile the strip tucks half a metre under the ground, so
         // where it meets the plain ground there is a clean crossing, not two surfaces
         // fighting.
@@ -261,6 +267,17 @@ export function buildTerrainMesh(hf, layout, M) {
     const ea = edgeOf(a), eb = edgeOf(b);
     if (ea > a) a = Math.min(ea + 3, -2);
     if (eb < b) b = Math.max(eb - 3, 2);
+    // The path (v6) runs on the plain ground grid, not on a strip: the strips' rows are zipped
+    // column to column by how far up the face they are, and a shelf running across the face
+    // puts them at different heights, so the triangles between two columns cut over the tread
+    // (up to 0.7 m). Stop the window a few metres short of the path, where the strip tucks
+    // under and the grid takes over; no column at all whose middle is on it.
+    if (route) {
+      const clear = (t) => { const q = route.nearest(Fx + t * gx, Fy + t * gy, 8); return !q || q.d > route.lerpAt(route.w, q) / 2 + pathMargin; };
+      if (!clear(0)) return null;
+      for (let t = -0.5; t >= a; t -= 0.5) if (!clear(t)) { a = Math.min(t + 3, -2); break; }
+      for (let t = 0.5; t <= b; t += 0.5) if (!clear(t)) { b = Math.max(t - 3, 2); break; }
+    }
     // A wall standing on the beach: stop a few metres out past its foot (more under an
     // overhang, whose cave runs in behind it). Further out the lines across a curved wall
     // converge and cross, and the strip folds over itself on the flat sand.
@@ -365,7 +382,7 @@ export function buildTerrainMesh(hf, layout, M) {
             // down is out into the cave.
             const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
             const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
-            const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade;
+            const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
             const inward = (cl + 1.2) * w;
             cover[v] = w;
             px += inward * gx; py += inward * gy;
@@ -403,7 +420,7 @@ export function buildTerrainMesh(hf, layout, M) {
     const col = nearestColumn(x - psi * gx, y - psi * gy);
     if (!col || col.dist > 2.5 || psi <= col.P.a || psi >= col.P.b) return null;
     const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
-    return { c: carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade, gx, gy };
+    return { c: carve.offset(col.x, col.y, psi, h, col.P.feat, col.P.a, col.P.b, sl) * col.fade * keep(x, y), gx, gy };
   }
 
   const gridIdx = gridIndex(M, pos, cfg.cull, cover);

@@ -23,8 +23,9 @@ export function defaultLayout() {
     spine: [
       { at: [233, 262], h: 151, w: 60, p: 1.8 },
       { at: [231, 246], h: 150, w: 58, p: 1.9 },
-      { at: [233, 224], h: 127, w: 52, p: 1.6 },
-      { at: [228, 200], h: 101, w: 50, p: 1.6 },
+      // (v6 raised 233,224 from 127 and 228,200 from 101: see the platform in `dips`.)
+      { at: [233, 224], h: 136, w: 52, p: 1.6 },
+      { at: [228, 200], h: 108, w: 50, p: 1.6 },
       { at: [221, 184], h: 92, w: 50, p: 1.6 },
       { at: [175, 131], h: 93, w: 48, p: 1.5 },
       { at: [109, 70], h: 94, w: 46, p: 1.4 },
@@ -47,7 +48,12 @@ export function defaultLayout() {
 
     // Local lowering of the plateau. The corner where the paved steps run down to the
     // ridge slopes away south-west, so the view from the platform is open.
-    dips: [{ at: [220, 178], r: 50, dh: -55 }],
+    // v6: and a rise for the platform at the top of the steps, where the viewpoint photo was
+    // taken. Its camera (calibrated in stage 1) stood 10 m above v5's ground, and the photo
+    // nine minutes later (eastCove) has a GPS altitude of 110 m at (223, 197), 8 m above it:
+    // the ground there was low, not the camera. Centred just behind the camera, so the ground
+    // still falls away in front of it.
+    dips: [{ at: [220, 178], r: 50, dh: -55 }, { at: [231.5, 239.5], r: 15, dh: 9.6 }],
 
     // Island plateau height away from the finger: a base plus the OSM hills.
     // Near a cliff top the plateau rounds down by shoulder (fraction) over shoulderW metres.
@@ -143,6 +149,39 @@ export function defaultLayout() {
       { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
     ],
 
+    // The way down (src/trail/, v6), from the top of the concrete steps to the sand.
+    //   width  of the tread; rise  the usual riser; going  the shortest tread; grade  the
+    //   steepest the design line may get (rise over run); rails  what the handrail is made of.
+    // The steps and the ridge path are the mapped ones (geo.js). The descent is not the
+    // mapped zigzag: on this model's slope its legs ran straight down the fall line at 50 to 70
+    // degrees, and its bottom climbed a bump and dropped 32 m to the sand. It was laid out
+    // again across the slope at about 1 in 2, in the same corridor: the first leg a long
+    // diagonal from the neck, where the viewpoint photo shows it (its pixels traced onto this
+    // ground), three switchbacks, and a steep last stretch reaching the sand at the foot of
+    // the wall, where the drone photo shows the path (aerial-high-whole-bay.jpg, traced).
+    trail: {
+      smooth: 1.5, clearance: 0.05,
+      // bank: the cut and fill slopes (rise over run), how soft their edges are, how far the
+      // level shelf reaches past each edge of the tread (wider than the tread by more than
+      // one cell of the ground grid, so no triangle that touches the tread reaches the bank),
+      // and how far out the carve can reach.
+      bank: { cut: 2.2, fill: 2.6, soft: 0.3, shoulder: 0.7, reach: 8 },
+      sections: [
+        { kind: 'concrete', rails: 'timber', path: TRAIL.pavedSteps, width: 1.3, rise: 0.21, going: 0.26, grade: 1.15, flat: 0.03, jitter: 0 },
+        { kind: 'ridge', rails: 'timber', path: [...TRAIL.ridgeSteps, [160.57, 121.87], [155.5, 118.2]],
+          width: 1.5, rise: 0.24, going: 0.34, grade: 0.75, flat: 0.16, jitter: 0.25 },
+        // (It leaves the ridge in a hairpin of 1.5 m radius, turning right onto the slope.)
+        { kind: 'descent', rails: 'bamboo', width: 1.05, rise: 0.27, going: 0.27, grade: 1.25, flat: 0.13, jitter: 0.3, path: [
+          [155.5, 118.2], [154.6, 117.9], [153.74, 118.17], [153.19, 118.89], [153.15, 119.79], [153.28, 120.1],
+          [154.4, 122.6], [156.2, 126.0], [158.3, 130.0], [160.8, 132.6], [163.9, 139.9], [165.3, 147.8],
+          [167.9, 155.4], [168.4, 159.3], [167.8, 163.0], [166.6, 166.5], [166.2, 169.3], [165.0, 171.0],
+          [160.7, 171.4], [156.0, 171.2], [151.5, 171.0], [149.0, 170.6], [148.3, 172.5], [149.5, 174.8],
+          [153.0, 176.5], [156.5, 178.4], [158.2, 181.0], [157.3, 183.8], [155.3, 185.6], [152.8, 184.4],
+          [149.6, 181.8], [146.0, 180.5], [142.0, 180.0], [138.6, 179.3], [135.6, 180.6], [132.6, 183.6],
+          [129.8, 186.3], [127.4, 188.2]] },
+      ],
+    },
+
     // Plants (src/veg/scatter.js). Spacing and scale blend from near to far with distance
     // from focus. Scale multiplies the scanned tree (3.4 to 5 m tall), so 0.35 is a bush.
     plants: {
@@ -150,7 +189,9 @@ export function defaultLayout() {
       nearRadius: 260, farRadius: 520,
       nearSpacing: 1.35, farSpacing: 3.6,
       nearScale: 0.45, farScale: 0.95,
-      density: 0.95, ledgeChance: 0.07, trailClear: 5.5,
+      // trailClear: metres kept clear beyond the handrail per unit of the biggest scale a plant
+      // can have there (about its canopy's radius), v6.
+      density: 0.95, ledgeChance: 0.07, trailClear: 1.4,
     },
     noise: { seed: 7, broad: 5, fine: 1.4, faceJitter: 0.35, edgeJitter: 2.5 },
   };
