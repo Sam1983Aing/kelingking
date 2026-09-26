@@ -1,34 +1,52 @@
-// Draws the plants as impostors: one card per plant, showing the baked view of the scan
-// (impostor-bake.js) closest to the direction you look at it from, lit live by the sun.
-// One instanced mesh per species.
+// Draws plants as impostors: one card per plant, showing the baked view of the plant
+// (impostor-bake-rt.js) closest to the direction you look at it from, lit live by the same
+// light as the 3D plants (foliage-glsl.js) and swaying with the same wind. One instanced mesh
+// per baked variant.
+//
+// Near the camera a 3D plant takes over (near.js): both stipple across the same band, the
+// impostor out as the plant comes in.
 
 import * as THREE from 'three';
-import { IMPOSTOR, HEMI_OCT_GLSL } from './impostor-common.js';
+import { HEMI_OCT_GLSL } from './impostor-common.js';
 import { STRIDE } from './scatter.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
+import { WIND_GLSL, FOLIAGE_LIGHT_GLSL } from './foliage-glsl.js';
 
 const VERT = /* glsl */ `
 ${HEMI_OCT_GLSL}
 attribute vec4 iPosScale;     // x, height, z, scale
-attribute vec3 iYawSpTint;    // yaw, species (unused here), tint
-uniform vec3 uCenter;         // centre of the bounding sphere, relative to the plant's origin
+attribute vec4 iYawTint;      // heading, colour shift (-1..1), 1 if a 3D plant takes over near the camera, seed
+uniform vec3 uCenter;         // centre of the bounding sphere, relative to the plant's foot
 uniform float uRadius;
 uniform float uGrid;
+uniform vec3 uLod;            // the hand-over to 3D plants: from near to far (m), and the lens factor
+uniform float uHeight;
+uniform vec4 uWindShape;      // as the 3D plant's (plant-material.js)
+${WIND_GLSL}
 varying vec2 vUv;
-varying vec3 vWorld;
-varying float vYaw;
-varying float vTint;
+varying vec3 vCard;           // the point on the card, before it is nudged toward the camera
 varying vec3 vFrameDir;       // world direction the chosen frame was baked from
+varying vec3 vFoot;
+varying float vYaw;
+varying float vScale;
+varying float vTint;
+varying float vFade;
 ${AERIAL_VERT_PACKED}
 #include <common>
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
 void main() {
-  float s = iPosScale.w, yaw = iYawSpTint.x;
+  float s = iPosScale.w, yaw = iYawTint.x;
   vec3 cW = iPosScale.xyz + rotY(uCenter * s, yaw);
+  vFade = 1.0;
+  if (iYawTint.z > 0.5) {
+    float dl = distance(cameraPosition, iPosScale.xyz + vec3(0.0, uHeight * s * 0.5, 0.0)) * uLod.z;
+    vFade = smoothstep(uLod.x, uLod.y, dl);
+    if (vFade <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  }
   vec3 viewW = normalize(cameraPosition - cW);
   vec3 viewL = rotY(viewW, -yaw);
   // Nearest baked view.
@@ -39,12 +57,23 @@ void main() {
   vec3 xL = normalize(cross(up, d));
   vec3 yL = cross(d, xL);
   vec3 xW = rotY(xL, yaw), yW = rotY(yL, yaw);
+  vec3 card = cW + (xW * position.x + yW * position.y) * uRadius * s;
+  // The wind leans the plant as it leans the 3D one: the card's top moves, its foot stays.
+  float push = windPush(iPosScale.xz);
+  float t = uWindTime, seed = iYawTint.w;
+  float sway = sin(t * uWindShape.x + seed * 6.2832) * 0.6 + sin(t * uWindShape.x * 2.13 + seed * 17.0) * 0.25;
+  float H = uHeight * s;
+  float hf = clamp((card.y - iPosScale.y) / max(H, 0.05), 0.0, 1.6);
+  vec2 lean = uWind.xy * push * uWindShape.y * (0.7 + 0.5 * sway) * hf * hf * H;
+  card.xz += lean;
   // Nudge the card toward the viewer so a slope does not cut through the bottom of it.
-  vec3 wp = cW + (xW * position.x + yW * position.y) * uRadius * s + viewW * uRadius * s * 0.45;
+  vec3 wp = card + viewW * uRadius * s * 0.45;
   vUv = (cell + position.xy * 0.5 + 0.5) / uGrid;
-  vWorld = wp;
+  vCard = card;
   vYaw = yaw;
-  vTint = iYawSpTint.z;
+  vScale = s;
+  vTint = iYawTint.y;
+  vFoot = iPosScale.xyz;
   vFrameDir = rotY(d, yaw);
   vec4 mvPosition = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mvPosition;
@@ -53,19 +82,28 @@ void main() {
 `;
 
 const FRAG = /* glsl */ `
+#include <common>
 ${SKY_PARS}
 ${AERIAL_FRAG_PACKED}
 uniform sampler2D uColor;
 uniform sampler2D uData;
 uniform vec3 uExtent;
+uniform float uRadius;
+uniform vec3 uCrownC;
+uniform vec3 uCrownR;
+uniform float uDensity;
+uniform vec2 uLeafLook;       // how much light the leaves let through, gloss
 varying vec2 vUv;
-varying vec3 vWorld;
-varying float vYaw;
-varying float vTint;
+varying vec3 vCard;
 varying vec3 vFrameDir;
+varying vec3 vFoot;
+varying float vYaw;
+varying float vScale;
+varying float vTint;
+varying float vFade;
 ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
-#include <common>
+${FOLIAGE_LIGHT_GLSL}
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 vec3 octDecode(vec2 e) {
@@ -74,145 +112,107 @@ vec3 octDecode(vec2 e) {
   if (n.y < 0.0) n.xz = (1.0 - abs(n.zx)) * vec2(n.x >= 0.0 ? 1.0 : -1.0, n.z >= 0.0 ? 1.0 : -1.0);
   return normalize(n);
 }
+float pHash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
 
 void main() {
+  if (vFade < 0.999 && pHash(gl_FragCoord.xy) < 1.0 - vFade) discard;
   vec4 c = texture2D(uColor, vUv);
-  if (c.a < 0.35) discard;
+  // Crisp edge, coverage kept as the atlas shrinks (alpha to coverage takes it from there).
+  float alpha = (c.a - 0.45) / max(fwidth(c.a), 1e-3) + 0.5;
+  if (alpha < 0.02) discard;
   vec4 dt = texture2D(uData, vUv);
   vec3 N = rotY(octDecode(dt.rg), vYaw);
-  // Canopy shading from the bake, eased: the scans' interiors are very dark.
-  float crown = mix(0.42, 1.0, dt.a);
   // Where this pixel really is: in front of or behind the card, from the baked depth.
-  vec3 P = vWorld;
-
-  vec3 albedo = pow(c.rgb, vec3(2.2)) * 1.45;
-  // Plants vary: some greener, some yellower, some darker.
-  albedo *= mix(vec3(0.78, 0.95, 0.72), vec3(1.2, 1.12, 0.8), vTint);
-
+  vec3 P = vCard + vFrameDir * (dt.b * 2.0 - 1.0) * uRadius * vScale;
   vec3 V = normalize(cameraPosition - P);
-  float sh = bakedShadow(P, 0.5) * cloudShadow(P, uSunDir);
-  float NdL = dot(N, uSunDir);
-  float NoV = max(dot(N, V), 0.05);
-  // A leaf reflects light on the side it is lit from and passes some through to the other
-  // side, yellower (chlorophyll lets green and a little red through). TRANS is how much
-  // gets through compared with what is reflected, about 0.6 for thin tropical leaves.
-  const float TRANS = 0.6;
-  const vec3 TRANS_TINT = vec3(1.05, 1.1, 0.55);
-  float front = max(NdL, 0.0);
-  float back = max(-NdL, 0.0);
-  // Looking toward the sun through the canopy: forward scattering through the leaves.
-  float through = pow(max(dot(-V, uSunDir), 0.0), 3.0) * 0.6;
-  vec3 sunD = uSunIrr * sh * (front * mix(0.35, 1.0, crown) + (back * TRANS * mix(0.35, 1.0, crown) + through * crown) * TRANS_TINT);
-  // Sky light from the atmosphere on the side the leaf faces, and some through from behind.
-  // One pass for both sides: the even bands are the same for N and -N, the odd band flips.
-  vec3 even = uSkySH[0] * 0.886227 + uSkySH[4] * 0.858086 * N.x * N.y + uSkySH[5] * 0.858086 * N.y * N.z
-            + uSkySH[6] * (0.743125 * N.z * N.z - 0.247708) + uSkySH[7] * 0.858086 * N.x * N.z
-            + uSkySH[8] * 0.429043 * (N.x * N.x - N.y * N.y);
-  vec3 odd = (uSkySH[1] * N.y + uSkySH[2] * N.z + uSkySH[3] * N.x) * 1.023328;
-  vec3 sky = (max(even + odd, 0.0) + max(even - odd, 0.0) * TRANS * TRANS_TINT) * crown;
-  vec3 col = albedo / PI * (sunD + sky);
-  // The waxy cuticle: a dielectric sheen (index about 1.45) that mirrors the sky and
-  // catches the sun, whatever the leaf's colour. Rough, because a canopy is thousands of
-  // leaves at slightly different angles. Only worked out where it can show.
-  const float ROUGH = 0.45;
-  const float F0 = 0.034;
-  float NoLc = max(NdL, 0.0);
-  if (sh * NoLc > 0.0) {
-    float a2 = ROUGH * ROUGH * ROUGH * ROUGH;
-    vec3 Hh = normalize(V + uSunDir);
-    float NoH = max(dot(N, Hh), 0.0);
-    float Dg = a2 / (PI * pow(NoH * NoH * (a2 - 1.0) + 1.0, 2.0));
-    float Fs = F0 + (1.0 - F0) * pow(1.0 - max(dot(Hh, V), 0.0), 5.0);
-    float k = ROUGH * ROUGH * 0.5;
-    float Gs = (NoLc / (NoLc * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
-    col += uSunIrr * sh * Dg * Fs * Gs / (4.0 * NoV) * mix(0.4, 1.0, crown);
-  }
-  // Reflected sky only where the mirror direction points up and out of the canopy;
-  // downward it sees the ground and other leaves (their light is in the diffuse terms).
-  vec3 R = reflect(-V, N);
-  float open = smoothstep(-0.05, 0.3, R.y) * crown * crown * crown;
-  if (open > 0.01) {
-    float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
-    col += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open;
-  }
+  N *= dot(N, V) < 0.0 ? -1.0 : 1.0;
+  vec3 alb = c.rgb * c.rgb;
+  alb *= mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), vTint * 0.5 + 0.5);
+  // Light through the crown to this point (as plant-material.js does per vertex).
+  vec3 pl = rotY(P - vFoot, -vYaw) / vScale;
+  vec3 sunL = rotY(uSunDir, -vYaw);
+  vec3 q = (pl - uCrownC) / uCrownR, dd = sunL / uCrownR;
+  float a = dot(dd, dd), b = dot(q, dd), cc = dot(q, q) - 1.0;
+  float disc = b * b - a * cc;
+  float tt = disc > 0.0 ? max((-b + sqrt(disc)) / a, 0.0) : 0.0;
+  float sunVis = bakedShadow(P, 0.5) * cloudShadow(P, uSunDir) * exp(-uDensity * tt * vScale);
+  vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, dt.a), uLeafLook.x, uLeafLook.y);
 
-  gl_FragColor = vec4(col * vAp.a + vAp.rgb, 1.0);
+  gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) {
     float dist = log2(max(distance(P, cameraPosition), 1.0)) / 20.0;
-    gl_FragColor = vec4(6.0 / 255.0, dist, sh * max(NdL, 0.0) > 0.3 ? 1.0 : 0.0, 1.0);
+    gl_FragColor = vec4(6.0 / 255.0, dist, sunVis * max(dot(N, uSunDir), 0.0) > 0.3 ? 1.0 : 0.0, 1.0);
   }
 }
 `;
 
-export async function createPlants(index, ids, lightUniforms = {}, base = 'assets/veg/') {
-  const loader = new THREE.ImageBitmapLoader();
-  // No premultiplication: the data atlas keeps shading in alpha, and the colour atlas keeps
-  // colour in its empty pixels so mipmaps do not darken the leaf edges.
-  loader.setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-  const load = (url) => new Promise((res, rej) => loader.load(url, (bmp) => {
-    const t = new THREE.Texture(bmp);
-    t.flipY = false;
-    t.colorSpace = THREE.NoColorSpace;
-    t.minFilter = THREE.LinearMipmapLinearFilter;
-    t.generateMipmaps = true;
-    t.anisotropy = 4;
-    t.needsUpdate = true;
-    res(t);
-  }, undefined, rej));
-
-  // The sun, sky light and haze are the atmosphere's uniforms, shared (src/sky/).
-  const shared = {
-    ...lightUniforms,
-    uExtent: { value: new THREE.Vector3() },
-    uSunShadow: { value: null },
-  };
+export function createImpostors(shared) {
   const quad = new THREE.PlaneGeometry(2, 2);
-  const species = await Promise.all(ids.map(async (id) => {
-    const meta = index[id];
-    const [color, data] = await Promise.all([load(`${base}${id}_color.png`), load(`${base}${id}_data.png`)]);
+  const group = new THREE.Group();
+  const kinds = new Map();
+
+  // One baked variant: its atlases and what it is (info from the grower).
+  function addKind(key, bake, info, lod) {
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        uColor: { value: color }, uData: { value: data },
-        uCenter: { value: new THREE.Vector3(...meta.center) }, uRadius: { value: meta.radius }, uGrid: { value: meta.grid },
+        ...shared,
+        uColor: { value: bake.color }, uData: { value: bake.data },
+        uCenter: { value: new THREE.Vector3(...bake.center) }, uRadius: { value: bake.radius }, uGrid: { value: bake.grid },
+        uLod: { value: new THREE.Vector3(lod?.near ?? 1e5, lod?.far ?? 1e5 + 1, 1) },
+        uHeight: { value: info.height },
+        uCrownC: { value: new THREE.Vector3(...info.crownC) },
+        uCrownR: { value: new THREE.Vector3(...info.crownR) },
+        uDensity: { value: info.density },
+        uWindShape: { value: new THREE.Vector4(info.wind.freq, info.wind.stiff, info.wind.branchAmp, info.wind.branchFreq) },
+        uLeafLook: { value: new THREE.Vector2(info.trans ?? 0.3, info.gloss ?? 0.6) },
       },
       vertexShader: VERT, fragmentShader: FRAG,
       alphaToCoverage: true,
     });
-    Object.assign(material.uniforms, shared);
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = quad.index;
     geo.setAttribute('position', quad.attributes.position);
     const mesh = new THREE.Mesh(geo, material);
     mesh.frustumCulled = false;
-    return { id, mesh, geo };
-  }));
-
-  const group = new THREE.Group();
-  species.forEach((s) => group.add(s.mesh));
+    // Before the ground's colour pass, so its shader skips what the plants hide.
+    mesh.renderOrder = -1;
+    mesh.name = `impostor:${key}`;
+    group.add(mesh);
+    kinds.set(key, { mesh, geo, material });
+  }
 
   return {
     group,
     uniforms: shared,
-    // Split the scattered plants by species into each mesh's instance attributes.
-    setInstances(plants) {
+    kinds,
+    addKind,
+    // Split the scattered plants into each variant's instance attributes. pick(species,
+    // variant) says which variant draws a plant ({ key, scale, near }), or null.
+    setInstances(plants, pick) {
       const d = plants.data;
-      species.forEach((s, k) => {
-        const posScale = [], yawSp = [];
-        for (let i = 0; i < plants.count; i++) {
-          const o = i * STRIDE;
-          if (d[o + 5] !== k) continue;
-          posScale.push(d[o], d[o + 1], d[o + 2], d[o + 3]);
-          yawSp.push(d[o + 4], d[o + 5], d[o + 6]);
-        }
-        s.geo.setAttribute('iPosScale', new THREE.InstancedBufferAttribute(new Float32Array(posScale), 4));
-        s.geo.setAttribute('iYawSpTint', new THREE.InstancedBufferAttribute(new Float32Array(yawSp), 3));
-        s.geo.instanceCount = posScale.length / 4;
-      });
+      const lists = new Map([...kinds.keys()].map((k) => [k, { a: [], b: [] }]));
+      for (let i = 0; i < plants.count; i++) {
+        const o = i * STRIDE;
+        const p = pick(d[o + 5], d[o + 6]);
+        if (!p) continue;
+        const l = lists.get(p.key);
+        if (!l) continue;
+        l.a.push(d[o], d[o + 1], d[o + 2], d[o + 3] * p.scale);
+        l.b.push(d[o + 4], d[o + 7] * 2 - 1, p.near ? 1 : 0, (i * 0.618034) % 1);
+      }
+      for (const [k, l] of lists) {
+        const { geo } = kinds.get(k);
+        geo.setAttribute('iPosScale', new THREE.InstancedBufferAttribute(new Float32Array(l.a), 4));
+        geo.setAttribute('iYawTint', new THREE.InstancedBufferAttribute(new Float32Array(l.b), 4));
+        geo.instanceCount = l.a.length / 4;
+      }
     },
-    update(extent) {
-      if (extent) shared.uExtent.value.set(extent.x0, extent.y0, extent.size);
-    },
+    setLodScale(v) { for (const k of kinds.values()) k.material.uniforms.uLod.value.z = v; },
   };
 }

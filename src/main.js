@@ -49,7 +49,7 @@ import { PHOTO_DAY, PHOTO_HOUR, sunAtHour } from './sky/sun.js';
 import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
 import { loadSurfaceTextures } from './terrain/surface-textures.js';
-import { createPlants } from './veg/impostors.js';
+import { createVegetation } from './veg/plants.js';
 import { createTrail } from './trail/trail.js';
 
 const params = new URLSearchParams(location.search);
@@ -217,8 +217,7 @@ terrain.uniforms.uClay.value = state.clay;
 const sunShadow = createSunShadow(renderer);
 let texturesReady = false;
 let plants = null, plantsReady = false;
-fetch('assets/veg/impostors.json').then((r) => r.json())
-  .then((index) => createPlants(index, ['island_tree_01', 'island_tree_02', 'tree_small_02'], { ...lightUniforms, ...grade.uniforms }))
+createVegetation(renderer, { ...lightUniforms, ...grade.uniforms })
   .then((p) => {
     plants = p;
     plants.group.visible = !hidden.has('plants');
@@ -700,6 +699,8 @@ function governResolution(dt) {
 // Everything a frame draws: the haze froxels and sky view, the clouds, then the scene. The
 // bench in capture.mjs times this.
 function renderFrame() {
+  // The plants near the camera are picked for where it is now (near.js).
+  if (plants) plants.update(hf?.extent, camera, simTime);
   atmosphere.update(camera);
   if (sky.visible && skyDome.material.uniforms.uHasClouds.value && skyInView()) clouds.render(simTime, camera);
   renderer.render(scene, camera);
@@ -720,10 +721,7 @@ renderer.setAnimationLoop(() => {
   governResolution(dt);
   if (FIXED_T === null && !timeCtl.paused) simTime += dt * timeCtl.speed;
   water.update(simTime, camera, renderer);
-  if (plants) {
-    plants.update(hf?.extent);
-    plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;
-  }
+  if (plants) plants.uniforms.uSunShadow.value = water.uniforms.uSunShadow.value;
   if (shadowDirty && hf) {
     shadowDirty = false;
     water.uniforms.uSunShadow.value = sunShadow.bake(water.uniforms.uData.value, hf.extent, water.uniforms.uSunDir.value, hf.N);

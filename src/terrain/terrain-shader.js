@@ -62,6 +62,7 @@ float tFineShadow = 1.0;   // shadow of the ledges above, on a bedded face
 float tLedgeSky = 1.0;     // share of the sky the ledges above leave
 float tWet = 0.0;          // sand wet from the swash (0..1)
 float tGloss = 0.0;        // a film of water on it, mirror-like (0..1)
+float tCanopy = 0.0;       // plants' crowns over this ground (0..1, v7), in shade under them
 
 // ---------------------------------------------------------------- bedding (strata.js)
 // Same formulas as strata.js, sines only, so the beds here are the beds in the mesh.
@@ -415,11 +416,16 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     Surf gr = triplanar(L_GROUND, uTile[L_GROUND], vec2(0.0));
     Surf g2 = triplanar(L_GROUND, uTile[L_GROUND] * 3.1, vec2(0.61, 0.13));
     mixSurf(gr, g2, smoothstep(0.35, 0.65, n2));
-    // Field-scale cover: darker, greener forest patches, brighter grass, the odd dry patch.
+    // Field-scale cover: greener patches, paler grass, straw where it has dried.
     float cover = tfbm(g * 0.009 + 3.7, 110.0, fp);
-    gr.color *= mix(vec3(1.0), vec3(0.55, 0.72, 0.5), smoothstep(0.52, 0.68, cover));
-    gr.color *= mix(vec3(1.0), vec3(1.25, 1.2, 1.1), smoothstep(0.42, 0.3, cover));
-    gr.color = mix(gr.color, gr.color * vec3(1.35, 1.1, 0.9), smoothstep(0.64, 0.8, n2) * 0.5);
+    gr.color *= mix(vec3(1.0), vec3(0.8, 0.88, 0.78), smoothstep(0.52, 0.68, cover));
+    gr.color *= mix(vec3(1.0), vec3(1.15, 1.12, 1.08), smoothstep(0.42, 0.3, cover));
+    gr.color = mix(gr.color, gr.color * vec3(1.9, 1.5, 1.35), smoothstep(0.6, 0.78, n2) * 0.6);
+    // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
+    // litter and bare earth, and shade, which the lighting takes from tCanopy.
+    float canopy = clamp(-D.a, 0.0, 1.0);
+    gr.color = mix(gr.color, gr.color * vec3(0.8, 0.66, 0.55), canopy);
+    tCanopy = canopy * veg;
     mixSurf(s, gr, veg);
   }
 
@@ -549,7 +555,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   tNormalW = normalize(N + s.dn * 0.9);
   tRough = clamp(s.rough, 0.2, 1.0);
-  tAO = s.ao;
+  tAO = s.ao * (1.0 - 0.55 * tCanopy);
   vec3 col = s.color;
 
   if (uClay > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); tNormalW = N; tAO = 1.0; tRough = 0.93; }
@@ -570,7 +576,7 @@ export const TERRAIN_COLOR = /* glsl */ `
   vec3 tN = normalize(vWorldNormal);
   float tFp = max(length(fwidth(vWorldPos)), 0.005);
   diffuseColor.rgb = terrainSurface(vWorldPos, tN, tFp);
-  tShadow = groundShadow(vWorldPos, tN) * tFineShadow;
+  tShadow = groundShadow(vWorldPos, tN) * tFineShadow * (1.0 - 0.9 * tCanopy);
   // Cloud shadows only reach the island when the clear sky over it is small (main.js sets
   // this); by default the island sits in sun, as on the photo day.
 #ifdef TERRAIN_CLOUDS

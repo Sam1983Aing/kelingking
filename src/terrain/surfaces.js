@@ -19,8 +19,10 @@ export const SURFACES = [
   // blue/red 0.80 to 0.87 on sunlit sand.
   { id: 'aerial_beach_01', scan: 30, tile: 24, use: 'the beach',
     avg: [0.568, 0.523, 0.479], target: [0.78, 0.725, 0.65] },
+  // v7: greyer, as grass really is (about 0.07 red, 0.09 green, 0.03 blue in the wet season);
+  // v1's was a saturated lawn green.
   { id: 'aerial_grass_rock', scan: 15, tile: 12, use: 'the ground under the plants',
-    avg: [0.448, 0.382, 0.141], target: [0.30, 0.36, 0.14] },
+    avg: [0.448, 0.382, 0.141], target: [0.345, 0.36, 0.17] },
   // v5, close range on the beach (the aerial scan above is only right from further off): the
   // dry sand trampled by people, and the firm sand the swash packs down. Both come out at the
   // beach's own colour; being wet is added on top.
