@@ -176,7 +176,8 @@ export function defaultLayout() {
       sections: [
         { kind: 'concrete', rails: 'timber', path: TRAIL.pavedSteps, width: 1.3, rise: 0.21, going: 0.26, grade: 1.15, flat: 0.03, jitter: 0 },
         { kind: 'ridge', rails: 'timber', path: [...TRAIL.ridgeSteps, [160.57, 121.87], [155.5, 118.2]],
-          width: 1.5, rise: 0.24, going: 0.34, grade: 0.75, flat: 0.16, jitter: 0.25 },
+          // (1.2 m: the handrails in trail-top-railing.jpg are about 1.4 m apart.)
+          width: 1.2, rise: 0.24, going: 0.34, grade: 0.75, flat: 0.16, jitter: 0.25 },
         // (It leaves the ridge in a hairpin of 1.5 m radius, turning right onto the slope.)
         { kind: 'descent', rails: 'bamboo', width: 1.05, rise: 0.27, going: 0.27, grade: 1.25, flat: 0.13, jitter: 0.3, path: [
           [155.5, 118.2], [154.6, 117.9], [153.74, 118.17], [153.19, 118.89], [153.15, 119.79], [153.28, 120.1],

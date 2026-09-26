@@ -2,13 +2,18 @@
 // (geometry.js), lit like the ground. Each material is three.js's standard one, patched as the
 // ground's is (terrain-mesh.js): the sun from the atmosphere, cut by the baked shadow of the
 // island and the clouds', the sky as a light probe, light bounced up from the ground below,
-// and the haze added before the tone curve. The surfaces are worked out in the shader in world
-// metres, so they need no texture coordinates.
+// and the haze added before the tone curve. The surfaces are scanned (surfaces.js, CC0), mapped
+// in world metres or in each piece's own frame, so they need no texture coordinates; until the
+// scans load, or without them, the shader's own noise stands in.
 
 import * as THREE from 'three';
 import { SKY_PARS, AERIAL_VERT_PACKED, AERIAL_FRAG_PACKED } from '../sky/atmosphere-glsl.js';
 import { CLOUD_SHADOW_GLSL } from '../sky/clouds.js';
 import { SUN_SHADOW_GLSL } from '../terrain/sun-shadow.js';
+import { TRAIL_SURFACES } from './surfaces.js';
+import { loadSurfaceTextures } from '../terrain/surface-textures.js';
+
+const srgbGain = (s) => s.target.map((t, i) => Math.pow(t, 2.2) / Math.pow(s.avg[i], 2.2));
 
 function patch(src, find, repl) {
   const n = src.split(find).length - 1;
@@ -20,6 +25,9 @@ const VERT_PARS = /* glsl */ `
 varying vec3 vWorldPos;
 varying vec4 vTrail;      // treads: across (-1..1, beyond on a skirt), metres along, face kind
 varying vec3 vLocal;      // instances: position in the shape's own frame, in metres
+varying vec3 vLocalN;     // and the normal in it
+varying vec3 vScale;      // the shape's size (m)
+varying mat3 vRot;        // its own axes in the world
 varying float vRand;
 attribute vec4 aTrail;
 attribute float aRand;
@@ -28,12 +36,17 @@ ${AERIAL_VERT_PACKED}
 
 const VERT_BEGIN = /* glsl */ `
 vTrail = aTrail;
+vLocalN = normal;
 #ifdef USE_INSTANCING
   vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
   vLocal = position * sc;
+  vScale = sc;
+  vRot = mat3(instanceMatrix[0].xyz / sc.x, instanceMatrix[1].xyz / sc.y, instanceMatrix[2].xyz / sc.z);
   vRand = aRand;
 #else
   vLocal = position;
+  vScale = vec3(1.0);
+  vRot = mat3(1.0);
   vRand = 0.0;
 #endif
 `;
@@ -57,14 +70,79 @@ uniform vec3 uSunDirW;
 uniform vec3 uGroundAlb;     // what the ground around the path sends back up
 uniform vec2 uSections;      // where the concrete ends and where the ridge path ends (m along)
 uniform float uClayT;
+precision highp sampler2DArray;
+uniform sampler2DArray uTrColor;
+uniform sampler2DArray uTrNormal;
+uniform sampler2DArray uTrMask;
+uniform vec3 uTrGain[${TRAIL_SURFACES.length}];
+uniform float uTrTile[${TRAIL_SURFACES.length}];
+uniform float uTrScans;      // 1 once the scans are in
 ${SUN_SHADOW_GLSL}
 varying vec3 vWorldPos;
 varying vec4 vTrail;
 varying vec3 vLocal;
+varying vec3 vLocalN;
+varying vec3 vScale;
+varying mat3 vRot;
 varying float vRand;
+#define T_CONCRETE 0
+#define T_DIRT 1
+#define T_WOOD 2
+#define T_BARK 3
+struct TS { vec3 color; vec3 dn; float rough; float ao; };
+// One read of a scan at uv (tiles), with explicit gradients; its normal turned into the world by
+// the directions of u and of the map's green (UDN).
+void tsRead(int L, vec2 uv, vec2 gx, vec2 gy, vec3 axU, vec3 axV, float w, inout TS s) {
+  vec3 c = textureGrad(uTrColor, vec3(uv, float(L)), gx, gy).rgb;
+  vec3 n = textureGrad(uTrNormal, vec3(uv, float(L)), gx, gy).xyz * 2.0 - 1.0;
+  vec2 m = textureGrad(uTrMask, vec3(uv, float(L)), gx, gy).rg;
+  s.color += c * uTrGain[L] * w; s.dn += (axU * n.x + axV * n.y) * w; s.rough += m.r * w; s.ao += m.g * w;
+}
+// World-space triplanar (as the ground's): x and z faces with v up, y faces seen from above.
+TS tsTri(int L, vec3 P, vec3 N, vec2 off) {
+  TS s = TS(vec3(0.0), vec3(0.0), 0.0, 0.0);
+  float k = 1.0 / uTrTile[L];
+  vec3 w = pow(abs(N), vec3(4.0)); w /= w.x + w.y + w.z; w = max(w - 0.05, 0.0); w /= w.x + w.y + w.z;
+  vec3 dx = dFdx(P), dy = dFdy(P);
+  if (w.x > 0.0) tsRead(L, vec2(P.z, -P.y) * k + off, vec2(dx.z, -dx.y) * k, vec2(dy.z, -dy.y) * k, vec3(0, 0, 1), vec3(0, 1, 0), w.x, s);
+  if (w.y > 0.0) tsRead(L, P.xz * k + off, dx.xz * k, dy.xz * k, vec3(1, 0, 0), vec3(0, 0, -1), w.y, s);
+  if (w.z > 0.0) tsRead(L, vec2(P.x, -P.y) * k + off, vec2(dx.x, -dx.y) * k, vec2(dy.x, -dy.y) * k, vec3(1, 0, 0), vec3(0, 1, 0), w.z, s);
+  return s;
+}
+// In a piece's own frame, with the grain (the map's v) along its longest side: timber posts and
+// rails. The face's other side is u. End grain gets a patch of the same scan.
+TS tsGrain(int L, float off) {
+  TS s = TS(vec3(0.0), vec3(0.0), 0.0, 0.0);
+  float k = 1.0 / uTrTile[L];
+  int g = vScale.x >= vScale.y && vScale.x >= vScale.z ? 0 : (vScale.y >= vScale.z ? 1 : 2);
+  vec3 G = g == 0 ? vec3(1, 0, 0) : (g == 1 ? vec3(0, 1, 0) : vec3(0, 0, 1));
+  vec3 aN = abs(vLocalN);
+  vec3 F = aN.x > aN.y && aN.x > aN.z ? vec3(1, 0, 0) : (aN.y > aN.z ? vec3(0, 1, 0) : vec3(0, 0, 1));
+  vec3 U = abs(dot(F, G)) > 0.5 ? (g == 1 ? vec3(1, 0, 0) : vec3(0, 1, 0)) : cross(F, G);
+  vec3 V = abs(dot(F, G)) > 0.5 ? cross(F, U) : G;
+  vec2 uv = vec2(dot(vLocal, U) + off, dot(vLocal, V) + off * 1.7) * k;
+  tsRead(L, uv, dFdx(uv), dFdy(uv), vRot * U, vRot * V, 1.0, s);
+  return s;
+}
+// Round a cylinder along its own y (logs): u around it, v along it.
+TS tsBark(int L, float off) {
+  TS s = TS(vec3(0.0), vec3(0.0), 0.0, 0.0);
+  float k = 1.0 / uTrTile[L];
+  float a = atan(vLocal.x, vLocal.z);
+  vec2 uv = vec2(a * vScale.x + off, vLocal.y + off * 3.1) * k;
+  // Gradients of the distance round it from the position's, not the angle's, which jumps where
+  // it wraps round (a line of the smallest mip level down the back of every log).
+  float r2 = max(dot(vLocal.xz, vLocal.xz), 1e-8);
+  vec2 gx = vec2(vScale.x * (vLocal.z * dFdx(vLocal.x) - vLocal.x * dFdx(vLocal.z)) / r2, dFdx(vLocal.y)) * k;
+  vec2 gy = vec2(vScale.x * (vLocal.z * dFdy(vLocal.x) - vLocal.x * dFdy(vLocal.z)) / r2, dFdy(vLocal.y)) * k;
+  vec3 around = normalize(vec3(vLocal.z, 0.0, -vLocal.x));
+  tsRead(L, uv, gx, gy, vRot * around, vRot * vec3(0, 1, 0), 1.0, s);
+  return s;
+}
 float trShadow = 1.0;
 vec3 trNormal = vec3(0.0, 1.0, 0.0);
 float trRough = 0.9;
+float trAO = 1.0;
 
 float th(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float th3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -93,96 +171,78 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   vec3 col = vec3(0.5);
   trNormal = N;
 #if defined(TR_CONCRETE)
-  // Grey cast concrete, a little warm, with the grime of a few years outdoors: lighter and
-  // smoother where feet wear the middle of each tread, darker towards the edges and in the
-  // corner at the back of each tread, splashed with soil low on the risers.
+  // Grey cast concrete (concrete_floor_02), a little warm, with the grime of a few years
+  // outdoors: lighter where feet wear the middle of each tread, darker towards the edges, the
+  // sides stained with soil.
   float kind = vTrail.z;
-  float n1 = fb(g * 1.3 + P.y * 0.7, 0.8, fp), n2 = fb(g * 0.21 + 3.0, 5.0, fp);
-  col = lin(vec3(0.60, 0.59, 0.56)) * (0.82 + 0.36 * n1) * (0.9 + 0.2 * n2);
   float edge = smoothstep(0.55, 1.0, abs(vTrail.x));
   float worn = (1.0 - edge) * step(kind, 0.5);
+  float n2 = fb(g * 0.21 + 3.0, 5.0, fp);
+  if (uTrScans > 0.5) {
+    TS t = tsTri(T_CONCRETE, P, N, vec2(0.0));
+    col = t.color * (0.9 + 0.2 * n2);
+    trNormal = normalize(N + t.dn * 0.8);
+    trRough = t.rough; trAO = t.ao;
+  } else {
+    float n1 = fb(g * 1.3 + P.y * 0.7, 0.8, fp);
+    col = lin(vec3(0.60, 0.59, 0.56)) * (0.82 + 0.36 * n1) * (0.9 + 0.2 * n2);
+    trRough = 0.88;
+  }
   col *= mix(1.0, 1.1, worn * 0.7);
   col *= mix(vec3(1.0), vec3(0.78, 0.76, 0.72), edge * 0.8);
-  // Pits and aggregate.
-  float pit = step(0.93, th(floor(g * 38.0 + P.y * 11.0))) * smoothstep(0.02, 0.006, fp);
-  col *= 1.0 - 0.35 * pit;
-  if (kind > 2.5) {
-    // Riser: soil splashed up from the tread below, and a dark line under the nosing.
-    col *= mix(vec3(1.0), vec3(0.7, 0.62, 0.52), 0.5 * n2);
-  }
-  if (kind > 0.5 && kind < 1.5) col *= vec3(0.74, 0.7, 0.64);   // the sides, down in the soil
-  trRough = 0.88 - 0.12 * worn;
-  vec2 d = vec2(fb(g * 4.0, 0.25, fp) - 0.5, fb(g * 4.0 + 7.0, 0.25, fp) - 0.5);
-  trNormal = normalize(N + vec3(d.x, 0.0, d.y) * 0.25 * step(kind, 0.5));
+  trRough -= 0.1 * worn;
+  if (kind > 2.5) col *= mix(vec3(1.0), vec3(0.7, 0.62, 0.52), 0.5 * n2);   // risers: soil splashed up
+  if (kind > 0.5 && kind < 1.5) col *= vec3(0.74, 0.7, 0.64);               // the sides, down in the soil
 #elif defined(TR_DIRT)
-  // The dirt path: pale, dusty and stony on the ridge (trail-top-railing.jpg), browner earth
-  // lower down where the path is shaded and damp (trail-mid-descent-b.jpg). Trodden smooth
-  // along the middle, looser and stony towards the edges, grass encroaching on the skirts.
+  // The dirt path (rocky_trail): pale, dusty and stony on the ridge (trail-top-railing.jpg),
+  // browner earth lower down, shaded and damp (trail-mid-descent-b.jpg). Trodden smoother and
+  // paler along the middle; the skirts blend into the ground beside it.
   float along = vTrail.y;
   float lower = smoothstep(uSections.y - 12.0, uSections.y + 25.0, along);
-  vec3 pale = lin(vec3(0.62, 0.58, 0.51)), brown = lin(vec3(0.47, 0.39, 0.30));
-  float n1 = fb(g * 0.9, 1.2, fp), n2 = fb(g * 3.1 + 5.0, 0.35, fp), n3 = fb(g * 0.13, 8.0, fp);
-  float n4 = fb(g * 11.0 + 2.0, 0.09, fp);
-  col = mix(pale, brown, lower) * (0.72 + 0.56 * n1) * (0.86 + 0.28 * n3) * (0.9 + 0.2 * n4);
-  // Patches of darker, damp or organic soil, and paler dust.
-  col *= mix(vec3(1.0), vec3(0.78, 0.74, 0.7), smoothstep(0.55, 0.7, n2) * 0.8);
-  col *= mix(vec3(1.0), vec3(1.12, 1.1, 1.06), smoothstep(0.62, 0.75, fb(g * 0.5 + 9.0, 2.0, fp)) * 0.7);
   float a = abs(vTrail.x);
   float trod = 1.0 - smoothstep(0.3, 0.95, a);
-  // Stones: limestone gravel and cobbles a couple of centimetres to a hand across, set into the
-  // dirt, more of them off the trodden line. Two sizes of cell, each with a stone or not.
-  float stone = 0.0, stoneAO = 1.0; vec2 stoneN = vec2(0.0); vec3 stoneCol = vec3(0.0);
-  for (int k = 0; k < 2; k++) {
-    float sz = k == 0 ? 7.0 : 19.0;
-    vec2 sc = g * sz + float(k) * 3.7;
-    vec2 ci = floor(sc);
-    vec2 off = vec2(th(ci + 1.7), th(ci + 9.2)) * 0.5 + 0.25;
-    vec2 dv = fract(sc) - off;
-    // Irregular: stretched and turned per stone.
-    float ang = th(ci + 3.3) * 6.28;
-    mat2 R = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
-    dv = R * dv * vec2(1.0, 1.0 + 0.8 * th(ci + 5.1));
-    float r = length(dv);
-    float size = 0.14 + 0.2 * th(ci + 4.4);
-    float here = step(k == 0 ? 0.86 - 0.2 * (1.0 - trod) : 0.7 - 0.25 * (1.0 - trod), th(ci)) * smoothstep(0.06 / sz * 10.0, 0.02 / sz * 10.0, fp);
-    float s1 = (1.0 - smoothstep(size * 0.8, size, r)) * here;
-    if (s1 > stone) {
-      stone = s1;
-      stoneN = dv / max(r, 1e-3) * smoothstep(size * 0.3, size, r);
-      stoneCol = lin(mix(vec3(0.5, 0.48, 0.44), vec3(0.68, 0.66, 0.6), th(ci + 2.0))) * (0.8 + 0.3 * n2);
-    }
-    stoneAO *= 1.0 - 0.45 * (1.0 - smoothstep(size, size * 1.45, r)) * here * (1.0 - s1);
+  float n1 = fb(g * 0.9, 1.2, fp), n3 = fb(g * 0.13, 8.0, fp);
+  if (uTrScans > 0.5) {
+    // Two readings, scaled and offset against each other and handed over by a noise, so the
+    // 2 m tile does not repeat down 300 m of path.
+    TS t = tsTri(T_DIRT, P, N, vec2(0.0));
+    TS t2 = tsTri(T_DIRT, P * 0.73 + vec3(3.1, 0.0, 1.7), N, vec2(0.37, 0.61));
+    float m = smoothstep(0.35, 0.65, fb(g * 0.35 + 7.0, 3.0, fp));
+    t.color = mix(t.color, t2.color, m); t.dn = mix(t.dn, t2.dn, m); t.rough = mix(t.rough, t2.rough, m); t.ao = mix(t.ao, t2.ao, m);
+    col = t.color;
+    // Trodden: the grit pressed in, the relief flatter.
+    col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))) * vec3(1.06, 1.0, 0.92), trod * 0.25);
+    trNormal = normalize(N + t.dn * mix(1.0, 0.55, trod));
+    trRough = t.rough; trAO = mix(t.ao, 1.0, trod * 0.3);
+  } else {
+    col = lin(vec3(0.62, 0.58, 0.51)) * (0.72 + 0.56 * n1);
+    trRough = 0.95;
   }
-  col = mix(col, stoneCol, stone * 0.9) * stoneAO;
+  col *= mix(vec3(1.0), vec3(0.76, 0.66, 0.55), lower) * (0.88 + 0.24 * n3);
   col *= mix(1.0, 1.06, trod * 0.6);
   // Skirts and the sides of the steps: the ground at the edge, darker and greener.
-  if (vTrail.z > 1.5 && vTrail.z < 2.5) {
-    float out_ = smoothstep(1.0, 1.4, a);
-    col = mix(col, uGroundAlb * (0.8 + 0.4 * n2), out_ * 0.75);
-  }
-  if (vTrail.z > 2.5) col *= 0.7;   // the riser: packed earth, in its own shadow, damp
-  trRough = 0.95;
-  vec2 d = vec2(n2 - 0.5, fb(g * 3.1 + 11.0, 0.35, fp) - 0.5) + vec2(n4 - 0.5) * 0.6;
-  trNormal = normalize(N + vec3(d.x, 0.0, d.y) * 0.5 + vec3(stoneN.x, 0.0, -stoneN.y) * stone * 1.2);
+  if (vTrail.z > 1.5 && vTrail.z < 2.5) col = mix(col, uGroundAlb * (0.8 + 0.4 * n1), smoothstep(1.0, 1.4, a) * 0.75);
+  if (vTrail.z > 2.5) col *= 0.72;   // the riser: packed earth, in its own shadow, damp
 #elif defined(TR_WOOD)
-  // Sawn timber left out for years: grey-brown, split along the grain, darker in the cracks.
-  // The grain runs along the longest side of the piece.
-  vec3 L = vLocal;
-  vec3 aL = abs(L);
-  float ax = step(aL.y, aL.x) * step(aL.z, aL.x);   // grain along local x (rails)
-  float along = mix(L.y, L.x, ax);
-  vec2 across = mix(L.xz, L.yz, ax);
-  float grain = tn(vec2(along * 1.3 + vRand * 40.0, dot(across, vec2(37.0, 29.0)) + vRand * 13.0));
-  float fine = tn(vec2(along * 7.0, dot(across, vec2(151.0, 131.0))));
-  float crack = smoothstep(0.62, 0.7, tn(vec2(along * 0.6 + vRand * 9.0, dot(across, vec2(90.0, 70.0)))));
-  col = lin(mix(vec3(0.36, 0.31, 0.26), vec3(0.46, 0.43, 0.39), vRand)) * (0.8 + 0.25 * grain + 0.15 * fine) * (1.0 - 0.45 * crack);
-  // Logs across the dirt steps (defined LOG): rounder, darker, muddy underneath.
 #ifdef LOG
-  col = lin(vec3(0.33, 0.27, 0.21)) * (0.75 + 0.3 * grain + 0.15 * fine) * (1.0 - 0.4 * crack);
+  // Logs across the dirt steps (bark_brown_02), the moss mostly gone, muddy underneath.
+  if (uTrScans > 0.5) {
+    TS t = tsBark(T_BARK, vRand * 5.3);
+    col = mix(t.color, vec3(dot(t.color, vec3(0.3, 0.55, 0.15))), 0.35);
+    trNormal = normalize(N + t.dn); trRough = t.rough; trAO = t.ao;
+  } else col = lin(vec3(0.33, 0.27, 0.21));
   col *= mix(0.6, 1.0, smoothstep(-0.6, 0.4, N.y));
+#else
+  // Sawn timber left out for years (weathered_planks): grey-brown, darker on the concrete steps
+  // (trail-stairs-viewpoint.jpg), each post and rail its own shade.
+  if (uTrScans > 0.5) {
+    TS t = tsGrain(T_WOOD, vRand * 7.9);
+    col = t.color;
+    trNormal = normalize(N + t.dn); trRough = t.rough; trAO = t.ao;
+  } else col = lin(vec3(0.4, 0.37, 0.33));
+  // (On the concrete steps, everything above about 100 m, the timber is the darker kind.)
+  col *= mix(0.6, 1.15, vRand) * mix(1.0, 0.62, smoothstep(96.0, 104.0, vWorldPos.y));
 #endif
-  trRough = 0.9;
-  trNormal = normalize(N + (fine - 0.5) * 0.15 * vec3(1.0, 0.0, 1.0));
 #elif defined(TR_BAMBOO)
   // Bamboo poles: straw to grey-green, glossy between the nodes, a ring every 25 to 40 cm.
   float along = vLocal.y + vRand * 3.0;
@@ -224,7 +284,16 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     uGroundAlb: { value: new THREE.Vector3(0.06, 0.08, 0.03) },
     uSections: { value: new THREE.Vector2(84, 178) },
     uClayT: { value: 0 },
+    uTrColor: { value: null }, uTrNormal: { value: null }, uTrMask: { value: null },
+    uTrGain: { value: TRAIL_SURFACES.map((s) => new THREE.Vector3(...srgbGain(s))) },
+    uTrTile: { value: TRAIL_SURFACES.map((s) => s.tile) },
+    uTrScans: { value: 0 },
   };
+  // The scans (surfaces.js), a small texture array of their own.
+  const ready = loadSurfaceTextures('assets/textures/', TRAIL_SURFACES, 2048).then((t) => {
+    uniforms.uTrColor.value = t.color; uniforms.uTrNormal.value = t.normal; uniforms.uTrMask.value = t.mask;
+    uniforms.uTrScans.value = 1;
+  }).catch((e) => console.error('trail textures failed', e));
 
   function material(kind, extra = {}) {
     const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, side: kind === 'dirt' || kind === 'concrete' ? THREE.DoubleSide : THREE.FrontSide });
@@ -239,13 +308,15 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       shader.fragmentShader = [
         ['#include <common>', '#include <common>\n' + FRAG_PARS],
         ['#include <color_fragment>', FRAG_COLOR],
-        ['#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = trRough;'],
+        ['#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(trRough, 0.2, 1.0);'],
         ['#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize((viewMatrix * vec4(trNormal, 0.0)).xyz);'],
         ['#include <lights_fragment_begin>', patch(THREE.ShaderChunk.lights_fragment_begin,
           'getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= trShadow;')],
         // Light bounced up from the ground round the path: the lower half of the view, lit by
         // the sun and the sky.
         ['#include <aomap_fragment>', `#include <aomap_fragment>
+          reflectedLight.indirectDiffuse *= trAO;
+          reflectedLight.directDiffuse *= mix(1.0, trAO, 0.4);
           { vec3 nW = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
             reflectedLight.indirectDiffuse += uGroundAlb * (uSunIrr * max(uSunDirW.y, 0.0) + uSkyUp) * 0.5 * (1.0 - nW.y) * BRDF_Lambert(material.diffuseColor); }`],
         ['#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vAp.a + vAp.rgb;\n#include <tonemapping_fragment>'],
@@ -314,5 +385,5 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     // Where the sections change, for the dirt's colour (metres along).
     uniforms.uSections.value.set(...data.sectionEnds);
   }
-  return { group, update, uniforms, materials: mats };
+  return { group, update, uniforms, materials: mats, ready };
 }

@@ -238,6 +238,8 @@ water.uniforms.uWetSandAlb.value.setRGB(...terrain.uniforms.uSandAlb.value.toArr
 const trail = createTrail({ ...lightUniforms }, grade.uniforms, { uExtent: terrain.uniforms.uExtent, uSunShadow: water.uniforms.uSunShadow });
 scene.add(trail.group);
 trail.uniforms.uClayT.value = state.clay ? 1 : 0;
+let trailReady = false;
+trail.ready.then(() => { trailReady = true; });
 const hidden = new Set((params.get('hide') || '').split(','));
 for (const name of hidden) {
   if (name === 'trail') trail.group.visible = false;
@@ -276,6 +278,7 @@ worker.onmessage = (e) => {
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
   trail.update(hf.trail);
+  terrain.setTrail(hf.trail?.mask);
   shadowDirty = true;
   terrainFrames = 0;
   outlineDirty = true;
@@ -730,7 +733,7 @@ renderer.setAnimationLoop(() => {
   renderFrame();
   if (state.outline && outlineDirty && hf) { outlineDirty = false; drawOutline(); }
   // Ready for a capture once the terrain and the textures are in and a few frames have run.
-  if (terrainFrames >= 0 && texturesReady && plantsReady) terrainFrames++;
+  if (terrainFrames >= 0 && texturesReady && plantsReady && trailReady) terrainFrames++;
   if (!window.__ready && terrainFrames >= 3 && refReady) {
     window.__ready = true;
     status();

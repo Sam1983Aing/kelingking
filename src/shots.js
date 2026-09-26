@@ -44,9 +44,10 @@ export const SHOTS = {
     label: 'On the stairs',
     ref: 'references/03-trail/trail-mid-descent-a.jpg',
     // Near the top of the concrete steps, just below the platform, by the handrail: the head's
-    // outline and the beach fitted to 12 px in 480 (the rest is the neck, wider than the
-    // photo's, see PROCESS.md).
-    s: 24.9, pos: [232.74, 237.45, 154.05], yaw: 223.1, pitch: -27.6, roll: -2, fov: 52.1,
+    // outline and the beach fitted to 13 px in 480 (the rest is the neck, wider than the
+    // photo's, see PROCESS.md). Anywhere from 18 to 38 m down the steps fits about as well;
+    // higher up, the platform fills the bottom of the frame.
+    s: 32, pos: [233.46, 230.32, 145.89], yaw: 224.5, pitch: -27, roll: 0, fov: 52.9,
   },
   trailLow: {
     label: 'Low on the trail',

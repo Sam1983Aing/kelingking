@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync, statSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SURFACES } from '../src/terrain/surfaces.js';
+import { TRAIL_SURFACES } from '../src/trail/surfaces.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const src = join(root, 'assets-src/polyhaven');
@@ -17,7 +18,7 @@ const MAGICK = process.env.MAGICK || '/opt/ImageMagick/bin/convert';
 const run = (...args) => execFileSync(MAGICK, args, { stdio: ['ignore', 'ignore', 'pipe'] });
 
 let total = 0;
-for (const s of SURFACES) {
+for (const s of [...SURFACES, ...TRAIL_SURFACES]) {
   const dir = join(src, s.id);
   const files = {
     color: join(out, `${s.id}_color.jpg`),
@@ -38,6 +39,6 @@ writeFileSync(join(out, 'CREDITS.md'), `# Texture credits
 
 All textures are from Poly Haven (${manifest.source}) under CC0 1.0, resized and repacked.
 
-${SURFACES.map((s) => `- ${s.id}: ${manifest.textures[s.id]?.page} (${s.use})`).join('\n')}
+${[...SURFACES, ...TRAIL_SURFACES].map((s) => `- ${s.id}: ${manifest.textures[s.id]?.page} (${s.use})`).join('\n')}
 `);
 console.log(`total ${(total / 1e6).toFixed(1)} MB`);
