@@ -11,10 +11,12 @@ import { leafAtlas } from './grow/leaves.js';
 import { SPECIES, SP } from './scatter.js';
 
 // Where each species hands over from 3D to its impostor (metres, at the default lens).
-// detail: where the full plant has handed over to its lighter version (grow/core.js).
+// detail: where each level of detail has handed over to the next (grow/core.js). The full
+// naupaka's leaves are built to their outline, ten triangles each: fine up close, but a
+// few pixels further off, where tiny triangles cost more than the pixels they cover (v7).
 const LOD = {
-  scaevola: { near: 22, far: 32, detail: 11 },
-  grass: { near: 16, far: 24, detail: 7 },
+  scaevola: { near: 22, far: 32, detail: [5, 11] },
+  grass: { near: 16, far: 24, detail: [7] },
   tree: { near: 40, far: 55 },
   palm: { near: 50, far: 70 },
   pandanus: { near: 30, far: 42 },
@@ -25,7 +27,7 @@ const LOD = {
 // it; main.js vegDetail=).
 export async function createVegetation(renderer, lightUniforms, { wind = {}, detailScale = 1 } = {}) {
   const t0 = performance.now();
-  for (const l of Object.values(LOD)) if (l.detail) l.detail = Math.max(2.01, l.detail * detailScale);
+  for (const l of Object.values(LOD)) if (l.detail) l.detail = l.detail.map((d) => Math.max(2.01, d * detailScale));
   const shared = {
     ...lightUniforms,
     uExtent: { value: new THREE.Vector3() },
@@ -46,13 +48,15 @@ export async function createVegetation(renderer, lightUniforms, { wind = {}, det
       const geometry = info.builder.geometry();
       info.tris = info.builder.tris;
       info.verts = info.builder.count;
-      let light = null;
-      if (LOD[sp.id]?.detail) {
-        const li = grow(1000 + v * 17, { height: h, light: true });
-        light = li.builder.geometry();
-        info.lightTris = li.builder.tris;
+      // The lighter levels.
+      const levels = [geometry];
+      info.levelTris = [info.tris];
+      for (let k = 1; k <= (LOD[sp.id]?.detail?.length ?? 0); k++) {
+        const li = grow(1000 + v * 17, { height: h, lod: k });
+        levels.push(li.builder.geometry());
+        info.levelTris.push(li.builder.tris);
       }
-      return { info, geometry, light };
+      return { info, geometry, levels };
     });
     return { id: sp.id, lod: LOD[sp.id], variants, capacity: sp.id === 'grass' ? 6000 : 3000 };
   });

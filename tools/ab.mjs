@@ -4,6 +4,8 @@
 //   node tools/ab.mjs beach --a=v3 --rounds=15            against a chosen tag
 //   node tools/ab.mjs --hero                              every hero frame
 //   node tools/ab.mjs beach --set="cam=124,200,4.4,208,-3.8,40"   both at the same camera
+//   node tools/ab.mjs trailLow --a=self --seta="vegDetail=0"      this build against itself with
+//        other switches on one side (--seta for the first, --setb for this one; v7)
 //
 // Frame times on this Mac swing by 2x with whatever else is on the GPU, and `hero.mjs` times
 // each version in its own pages, minutes apart, so one version can catch a quiet moment the
@@ -40,10 +42,13 @@ const versions = readdirSync(gallery).filter((d) => /^v\d+$/.test(d)).sort((a, b
 // second newest gallery folder was v3 during v5, before v5 had a folder).
 const tagged = versions.filter((v) => spawnSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${v}`], { cwd: root }).status === 0);
 const tag = flag('a', tagged.at(-1));
-const dir = `captures/ab-${tag}`;
-rmSync(join(root, dir), { recursive: true, force: true });
-mkdirSync(join(root, dir), { recursive: true });
-if (spawnSync('sh', ['-c', `git archive ${tag} | tar -x -C "${join(root, dir)}"`], { cwd: root }).status !== 0) throw new Error('could not check out ' + tag);
+const SELF = tag === 'self';
+const dir = SELF ? '.' : `captures/ab-${tag}`;
+if (!SELF) {
+  rmSync(join(root, dir), { recursive: true, force: true });
+  mkdirSync(join(root, dir), { recursive: true });
+  if (spawnSync('sh', ['-c', `git archive ${tag} | tar -x -C "${join(root, dir)}"`], { cwd: root }).status !== 0) throw new Error('could not check out ' + tag);
+}
 
 const TIMER = `(n) => {
   const A = window.__app, R = A.renderer, gl = R.getContext(), px = new Uint8Array(4);
@@ -85,8 +90,9 @@ try {
     const pages = {};
     // One at a time: a page that is not in front gets no animation frames, and its ready flag
     // is set from the animation loop.
-    for (const [k, base] of [['a', `http://localhost:5178/${dir}/`], ['b', 'http://localhost:5178/']]) {
-      pages[k] = await b.open(base + '?' + q, { width: WIDTH, height: h });
+    const side = (k) => { const v = flag('set' + k); return v ? String(v).split(';').join('&') + '&' : ''; };
+    for (const [k, base] of [['a', SELF ? 'http://localhost:5178/' : `http://localhost:5178/${dir}/`], ['b', 'http://localhost:5178/']]) {
+      pages[k] = await b.open(base + '?' + side(k) + q, { width: WIDTH, height: h });
       await pages[k].waitFor('window.__ready === true');
     }
     // Stop both pages' own animation loops, or each would keep drawing while the other is

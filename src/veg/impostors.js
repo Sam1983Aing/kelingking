@@ -41,6 +41,13 @@ vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x +
 void main() {
   float s = iPosScale.w, yaw = iYawTint.x;
   vec3 cW = iPosScale.xyz + rotY(uCenter * s, yaw);
+  // Out of view (all the plants of the island are drawn every frame): stop here, before the
+  // rest of the work. The bounding sphere against the clip volume.
+  {
+    vec4 cc = projectionMatrix * viewMatrix * vec4(cW, 1.0);
+    float r = uRadius * s * 1.5 * max(abs(projectionMatrix[0][0]), abs(projectionMatrix[1][1]));
+    if (cc.w < -uRadius * s * 1.5 || any(greaterThan(abs(cc.xy) - r, vec2(cc.w)))) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  }
   vFade = 1.0;
   if (iYawTint.z > 0.5) {
     float dl = distance(cameraPosition, iPosScale.xyz + vec3(0.0, uHeight * s * 0.5, 0.0)) * uLod.z;

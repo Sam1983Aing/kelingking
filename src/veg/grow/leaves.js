@@ -28,6 +28,14 @@ const shapes = {
   [LEAF.ROUND]: { a: 0.8, b: 0.6, veins: 5, rib: 0.9 },
 };
 
+// The outline of a leaf cell (0..1 of the cell's half-width at t along the leaf), for
+// leaves built to their shape in geometry (grow/core.js leafBlade cut), or null for a cell
+// that is not one leaf.
+export function leafOutline(cell) {
+  const s = shapes[cell];
+  return s ? (t) => halfWidth(s, t) * 0.96 : null;
+}
+
 function halfWidth(s, t) {
   if (t <= 0 || t >= 1) return 0;
   const tp = s.a / (s.a + s.b);

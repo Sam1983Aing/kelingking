@@ -15,6 +15,7 @@
 //              deep in the crown: 1 on the outside), the leaf texture cell, gloss
 
 import * as THREE from 'three';
+import { leafOutline } from './leaves.js';
 
 export function rng(seed) {
   let a = (seed * 2654435761) >>> 0;
@@ -54,17 +55,21 @@ export const clamp01 = (x) => Math.min(Math.max(x, 0), 1);
 // sRGB 0..255 to linear 0..1.
 export const srgb = (r, g, b) => [r, g, b].map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
 
-export const KIND = { BARK: 0, LEAF: 1, STRAP: 2 };
+// LEAF: a leaf cut out by its texture's alpha; CUT: a leaf whose outline is the geometry (its
+// texture gives only its markings: no cut-out, which is costly on tile-based GPUs).
+export const KIND = { BARK: 0, LEAF: 1, STRAP: 2, CUT: 3 };
 
-// light: the lighter level of detail, for further off. Built from the same calls (so the
-// plant has the same shape): fewer sides on the stems and the thinnest twigs left out here;
-// the growers draw leaves as cards with painted sprites (card(), grow/leaves.js).
+// lod: the level of detail, 0 the full plant. Every level is built from the same calls (so
+// the plant has the same shape). From 1 up, fewer sides on the stems and the thinnest twigs
+// left out here; the growers choose how each level draws its leaves (built to their outline,
+// cut out by the texture, or as cards with painted sprites: card(), grow/leaves.js).
 export class PlantBuilder {
-  constructor({ light = false } = {}) {
+  constructor({ lod = 0 } = {}) {
     this.pos = []; this.nrm = []; this.uv = []; this.col = []; this.wind = []; this.leaf = []; this.idx = [];
     this.count = 0;
     this.tris = 0;
-    this.light = light;
+    this.lod = lod;
+    this.alphaLeaves = false;   // whether any leaf needs its texture's alpha
   }
   // w: [branchAmp, branchPhase, leafAmp, leafPhase] (0..1); l: [kind, shade, cell, gloss]; c: [r, g, b, trans]
   vertex(p, n, uv, c, w, l) {
@@ -85,7 +90,7 @@ export class PlantBuilder {
   tube(pts, r, { color, wind, shade, sides = 5, capEnd = true }) {
     const n = pts.length;
     if (n < 2) return;
-    if (this.light) {
+    if (this.lod >= 1) {
       if (r[0] < 0.005) return;
       sides = Math.max(3, sides - 2);
     }
@@ -132,13 +137,18 @@ export class PlantBuilder {
   // rows: points along the length (2 = one flat panel each side).
   // cup and arch tilt the normals further than the shape does (across the leaf and along
   // it), so the light runs over each leaf as over a curved one, without the vertices.
-  leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35 }) {
+  // cut: build the leaf to its outline (leaves.js) with rows along it at ts, instead of a
+  // rectangle cut out by the texture.
+  leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35, cut = false }) {
+    const outline = cut ? leafOutline(cell) : null;
+    const ts = outline ? [0, 0.3, 0.58, 0.78, 0.91, 1] : null;
+    if (outline) rows = ts.length; else this.alphaLeaves = true;
     const d = norm(dir);
     let side = norm(cross(d, up));
     let u = cross(side, d);
     const verts = [];
     for (let j = 0; j < rows; j++) {
-      const t = j / (rows - 1);
+      const t = ts ? ts[j] : j / (rows - 1);
       // Along the leaf, bending down toward the tip.
       const c = madd(madd(p, d, l * t), [0, -1, 0], droop * t * t);
       // Local tangent for the normal of the bent leaf.
@@ -146,7 +156,8 @@ export class PlantBuilder {
       const tw = twist * t;
       const s = norm(add(mul(side, Math.cos(tw)), mul(u, Math.sin(tw))));
       const uu = norm(cross(s, tan));
-      const half = w * 0.5;
+      const hw = outline ? Math.max(outline(t), 0.02) : 1;   // share of the width here
+      const half = w * 0.5 * hw;
       const lift = Math.sin(fold) * half;
       const inward = Math.cos(fold) * half;
       const left = madd(madd(c, s, -inward), uu, lift);
@@ -157,11 +168,12 @@ export class PlantBuilder {
       const nl = norm(madd(nm, s, Math.sin(fold + cup)));
       const nr = norm(madd(nm, s, -Math.sin(fold + cup)));
       const la = [wind[0], wind[1], t, leafPhase];
-      const L = [KIND.LEAF, shade, cell, gloss];
+      const L = [outline ? KIND.CUT : KIND.LEAF, shade, cell, gloss];
+      const u0 = 0.5 - 0.5 * hw, u1 = 0.5 + 0.5 * hw;
       verts.push([
-        this.vertex(left, nl, [0, t], color, la, L),
+        this.vertex(left, nl, [u0, t], color, la, L),
         this.vertex(c, nm, [0.5, t], color, la, L),
-        this.vertex(right, nr, [1, t], color, la, L),
+        this.vertex(right, nr, [u1, t], color, la, L),
       ]);
     }
     for (let j = 0; j < rows - 1; j++) {
@@ -228,6 +240,7 @@ export class PlantBuilder {
   // rounded clump). c0, c1: colours at the bottom and the top. w0, w1: [branch amp, phase]
   // at the bottom and the top.
   card(p, u, v, { cell, vr = [0, 1], nb, nt, c0, c1, w0, w1, leafPhase, shade, gloss = 0.5 }) {
+    this.alphaLeaves = true;
     const L = [KIND.LEAF, shade, cell, gloss];
     const ids = [
       this.vertex(madd(p, u, -1), nb, [0, vr[0]], c0, [w0[0], w0[1], 0, leafPhase], L),
@@ -255,6 +268,7 @@ export class PlantBuilder {
     g.setIndex(new THREE.BufferAttribute(I, 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();
+    g.userData.alphaLeaves = this.alphaLeaves;
     return g;
   }
 }

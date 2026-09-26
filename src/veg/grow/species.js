@@ -54,7 +54,7 @@ export function scaevola(seed, o = {}) {
     branches.push(...g.branches); tips.push(...g.tips);
   }
 
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   const bark = lin(142, 134, 112);
   const stemGreen = lin(118, 128, 88);
   for (const br of branches) {
@@ -82,8 +82,8 @@ export function scaevola(seed, o = {}) {
     const n = Math.round(rand.range(11, 17));
     const rot0 = rand() * Math.PI * 2;
     const side0 = perp(axis);
-    if (b.light) {
-      // The lighter level: the rosette as three cards (grow/leaves.js paints it from above
+    if (b.lod >= 2) {
+      // The lightest level: the rosette as three cards (grow/leaves.js paints it from above
       // and from the side), about as wide as the leaves reach.
       // (Size and colour matched to the full plant at 10 and 14 m: coverage and mean colour
       // of the frame, tools in PROCESS.md, v7.)
@@ -124,7 +124,7 @@ export function scaevola(seed, o = {}) {
       if (old) c = mixc(c, yellow, rand.range(0.25, 0.6));
       b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L, Wl, {
         color: [...c, 0.3], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade * (0.8 + 0.2 * (1 - age)),
-        cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, rows: 2,
+        cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, cut: b.lod === 0,
       });
       area += L * Wl * 0.72;
     }
@@ -159,7 +159,7 @@ export function grass(seed, o = {}) {
   const green = lin(70, 94, 48), green2 = lin(92, 104, 54), dry = lin(158, 138, 96), dead = lin(128, 112, 82), baseCol = lin(52, 58, 36);
   const dryShare = o.dry ?? rand.range(0.25, 0.45);
   const lean = [rand.gauss() * 0.1, 0, rand.gauss() * 0.1];   // the whole tuft leans a little
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   const blade = (base, out, L, el0, droop, w0, colAt, phase, segs = 4) => {
     const pts = [], widths = [], faces = [], colors = [], wind = [];
     let p = base;
@@ -182,7 +182,7 @@ export function grass(seed, o = {}) {
       gloss: 0.3, trans: 0.55, flat: true, cup: 0.45,
     });
   };
-  if (b.light) {
+  if (b.lod >= 1) {
     // The lighter level: three crossed cards with a painted tuft (grow/leaves.js).
     const Hc = H * 1.35, Wc = Hc * 0.5;
     const c0 = scalec(mixc(baseCol, green, 0.6), 0.55), c1 = scalec(mixc(mixc(green, green2, 0.5), dry, dryShare * 0.8), 0.55);
@@ -251,7 +251,7 @@ export function tree(seed, o = {}) {
     root: [0, 0, 0], rootDir: norm([rand.gauss() * 0.08, 1, rand.gauss() * 0.08]), trunk: trunkH, reach: 0.45, twigAt: 1, maxLevel: 10,
     radius: 0.05 * H, tipRadius: 0.006, pipe: 2.3, bendUp: 0.3, sag: 0.2, crownC, crownR, lengthScale: H,
   }, rand);
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   const bark = lin(138, 128, 114), young = lin(124, 118, 94);
   for (const br of branches) {
     const n = br.pts.length;
@@ -302,7 +302,7 @@ export function palm(seed, o = {}) {
   const H = o.height ?? rand.range(9, 14);
   const trunkH = H - 1.5;
   const lean = rand.range(0.08, 0.2), leanAz = rand() * Math.PI * 2;
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   // Trunk: leaning at the foot, curving back up.
   const tp = [], tr = [];
   const segs = 14;
@@ -383,7 +383,7 @@ export function palm(seed, o = {}) {
 export function pandanus(seed, o = {}) {
   const rand = rng(seed * 53 + 11);
   const H = o.height ?? rand.range(3, 5);
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   const bark = lin(146, 134, 112);
   // Stilt roots.
   const nRoots = Math.round(rand.range(4, 7));
@@ -468,7 +468,7 @@ export function creeper(seed, o = {}) {
     root: [0, 0.05, 0], rootDir: [1, 0.25, 0], trunk: 0, reach: 0.4, twigAt: 1, maxLevel: 9,
     radius: 0.025, tipRadius: 0.003, pipe: 2.3, bendUp: -0.25, sag: 0.9, crownC, crownR, lengthScale: H,
   }, rand);
-  const b = new PlantBuilder({ light: !!o.light });
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
   const bark = lin(128, 118, 96);
   for (const br of branches) {
     const n = br.pts.length;
