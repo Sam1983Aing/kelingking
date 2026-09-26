@@ -103,6 +103,40 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       // Plants hold on to steeper ground than the ground cover does (to about 70 degrees,
       // v3's note: the islet's east side and the head's flanks are green there).
       let veg = Math.max(coverAt(px, py, h, up, n1), smooth(0.22, 0.36, up + (n1 - 0.5) * 0.2) * smooth(8, 14, h) * 0.8);
+      // Scrub down the sheer faces, in patches (beach-white-sand-cliff.jpg: a whole stretch of
+      // the wall green from the rim nearly to the sand, bare white rock either side). A grid
+      // point on a face stands for a tall strip of it (the face is steep, so a metre across
+      // the map is metres up the face): walk down the fall line and fill the strip, a clump
+      // every faceStep metres up, where the patch noise says.
+      if (up < 0.3 && h > 12 && cfg.face) {
+        const e = 0.8;
+        let gx = heightAt(px + e, py) - heightAt(px - e, py), gy = heightAt(px, py + e) - heightAt(px, py - e);
+        const G = Math.hypot(gx, gy) / (2 * e);
+        const gl = Math.hypot(gx, gy) || 1;
+        gx /= gl; gy /= gl;
+        const outA = Math.atan2(-gy, -gx);
+        const n = Math.min(24, Math.round((spacing * G) / cfg.face.step));
+        for (let k = 0; k < n; k++) {
+          const d = ((k + rand()) / n - 0.5) * spacing;
+          const x2 = px + gx * d, y2 = py + gy * d, h2 = heightAt(x2, y2);
+          if (h2 < 12) continue;
+          // Patches longer down the face than across it, their edges ragged at a few metres.
+          const fp = smooth(0.5, 0.66, fbm(noise, x2 * 0.035 + h2 * 0.008, y2 * 0.035 - h2 * 0.007 + 31, 3) + 0.5
+            + 0.12 * (fbm(noise, x2 * 0.2 + h2 * 0.15, y2 * 0.2 - h2 * 0.1 - 9, 2)));
+          if (rand() > fp * cfg.face.density * smooth(12, 22, h2)) continue;
+          let qx2 = x2, qy2 = y2;
+          if (surfaceShift) {
+            const s2 = surfaceShift(x2, y2, h2);
+            if (s2) { if (s2.c > 2.5) continue; qx2 += s2.c * s2.gx; qy2 += s2.c * s2.gy; }
+          }
+          // A little out from the rock, where the roots hold.
+          qx2 += Math.cos(outA) * 0.3; qy2 += Math.sin(outA) * 0.3;
+          const sp2 = rand() < 0.75 ? SP.CREEPER : SP.SCAEVOLA;
+          const sc2 = sp2 === SP.CREEPER ? 0.7 + 0.7 * rand() : 0.5 + 0.4 * rand();
+          out.push(qx2, h2 - 0.1 * sc2, -qy2, sc2, sp2 === SP.CREEPER ? outA + (rand() - 0.5) * 0.6 : rand() * Math.PI * 2, sp2,
+            Math.floor(rand() * SPECIES[sp2].heights.length), rand());
+        }
+      }
       // Clumps on the ledges of the sheer faces: slide down the fall line to the nearest shelf.
       let onLedge = false, outYaw = 0;
       if (veg < 0.5 && h > 12) {
@@ -120,8 +154,10 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           const L = ledgeAt(x2, y2, h2);
           if (L > best) { best = L; bx = x2; by = y2; bh = h2; }
         }
-        // Patches across the face: some stretches of ledge carry scrub, others are bare.
-        const patch = smooth(0.4, 0.62, fbm(noise, px * 0.03 + h * 0.025, py * 0.03 - h * 0.02 + 17, 3) + 0.5);
+        // Patches across the face: some stretches carry scrub, others are bare. Taller than
+        // they are wide (the noise changes four times slower up the face than along it), so
+        // the scrub on one ledge carries on down the next, as it does where water seeps.
+        const patch = smooth(0.42, 0.62, fbm(noise, px * 0.05 + h * 0.009, py * 0.05 - h * 0.008 + 17, 3) + 0.5);
         // Just under the rim, where the ground above levels off: scrub spills over the edge.
         const rim = h > 20 && slopeAt(px + gx * 3, py + gy * 3) > 0.5 && rand() < 0.5 * patch + 0.15;
         if (rim) { best = Math.max(best, 0.3); bx = px; by = py; bh = h; }
@@ -130,7 +166,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           px = bx; py = by; h = bh; up = slopeAt(px, py);
           // A run along the ledge: more hanging scrub either side, along the face's contour,
           // longer where the ledge is broad and in stretches the clump noise favours.
-          const run = Math.floor(smooth(0.35, 0.7, fbm(noise, px * 0.05 + 5, py * 0.05 - 3, 2) + 0.5) * 6 * smooth(0.08, 0.35, best) * patch);
+          const run = Math.floor(smooth(0.35, 0.7, fbm(noise, px * 0.05 + 5, py * 0.05 - 3, 2) + 0.5) * 3.5 * smooth(0.08, 0.35, best) * patch);
           for (let k = 1; k <= run; k++) {
             for (const sgn of [-1, 1]) {
               if (rand() < 0.35) continue;
@@ -163,7 +199,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       veg *= 1 - clearing * 0.85;
       // Scrub patches close up, the grassy ground between them carries the odd bush.
       const scrub = scrubAt(px, py);
-      veg *= lerp(1, 0.18 + 0.82 * scrub, 1 - far);
+      veg *= lerp(1, 0.45 + 0.55 * scrub, 1 - far);
       if (rand() > veg * cfg.density) continue;
 
       // Species and size: the naupaka on the finger, the odd screw pine on the slopes and the
@@ -185,7 +221,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
         : sp === SP.PALM ? 0.8 + 0.4 * rand()
         : sp === SP.PANDANUS ? 0.7 + 0.5 * rand()
         : sp === SP.CREEPER ? 0.9 + 0.7 * rand()
-        : (0.55 + 0.55 * rand() * rand() + 0.2 * scrub) * (onLedge ? 0.8 : 1);
+        : (0.5 + 0.5 * rand() * rand() + 0.2 * scrub) * (onLedge ? 0.8 : 1);
       let scale = base * (onLedge ? 1 : 0.85 + 0.3 * up);
       // Views from the path stay open (v6): a plant's top stays under the eye line of someone on
       // the tread, falling away at about 12 degrees past 6 m, or is scrub (1.6 m) beside the

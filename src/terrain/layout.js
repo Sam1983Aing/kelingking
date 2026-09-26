@@ -195,7 +195,7 @@ export function defaultLayout() {
     plants: {
       seed: 11, focus: [60, 60],
       nearRadius: 260, farRadius: 520,
-      nearSpacing: 1.1, farSpacing: 3.6,
+      nearSpacing: 0.95, farSpacing: 3.6,
       nearScale: 0.45, farScale: 0.95,
       // trailClear: metres kept clear beyond the handrail per unit of the biggest scale a plant
       // can have there (about its canopy's radius), v6.
@@ -203,6 +203,9 @@ export function defaultLayout() {
       // Grass tussocks (v7), drawn only near the camera, so only within `reach` metres of the
       // path: on a grid `spacing` apart, kept with a chance of up to `density`.
       grass: { reach: 22, spacing: 0.42, density: 1 },
+      // Scrub down the sheer faces (v7): a clump every `step` metres up the face where its
+      // patches are, kept with a chance of up to `density`.
+      face: { step: 1.8, density: 0.9 },
     },
     noise: { seed: 7, broad: 5, fine: 1.4, faceJitter: 0.35, edgeJitter: 2.5 },
   };

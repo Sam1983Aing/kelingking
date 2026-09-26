@@ -72,8 +72,8 @@ export function scaevola(seed, o = {}) {
   // Leaves: a rosette at every twig end, young leaves upright in the middle, older ones
   // spreading below them, the oldest yellowing.
   // Real leaves are greyer than they look: about 0.05 red, 0.11 green, 0.04 blue.
-  const green = o.green ?? lin(70, 96, 54);
-  const deep = lin(54, 78, 44);
+  const green = o.green ?? lin(76, 100, 48);
+  const deep = lin(56, 80, 40);
   const yellow = lin(140, 128, 70);
   const leafLen = o.leafLen ?? 0.15;
   let area = 0;
@@ -120,7 +120,7 @@ export function scaevola(seed, o = {}) {
       const old = age > 0.9 && rand() < 0.1;
       const tint = rand.range(-1, 1);
       let c = mixc(green, deep, clamp01(0.45 - 0.45 * tint));
-      c = mixc(c, lin(84, 108, 56), (1 - age) * 0.4);      // young leaves are brighter
+      c = mixc(c, lin(96, 118, 52), (1 - age) * 0.4);      // young leaves are brighter, yellower
       if (old) c = mixc(c, yellow, rand.range(0.25, 0.6));
       b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L, Wl, {
         color: [...c, 0.3], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade * (0.8 + 0.2 * (1 - age)),
@@ -411,7 +411,7 @@ export function pandanus(seed, o = {}) {
     }
   };
   grow([0, 0.8, 0], [rand.gauss() * 0.1, 1, rand.gauss() * 0.1], H * 0.3, 0.1, 0);
-  const green = lin(76, 98, 52), dark = lin(58, 80, 44), dry = lin(146, 124, 82);
+  const green = lin(66, 90, 46), dark = lin(48, 70, 38), dry = lin(140, 118, 80);
   let area = 0;
   for (const e of ends) {
     const nL = Math.round(rand.range(40, 54));
@@ -437,15 +437,15 @@ export function pandanus(seed, o = {}) {
       const w = rand.range(0.065, 0.09);
       const col = u > 0.9 && rand() < 0.4 ? mixc(green, dry, 0.8) : mixc(green, dark, rand());
       b.strap(pts, pts.map((_, i) => w * (1 - Math.pow(i / segs, 2.2) * 0.95)), pts.map(() => norm(add([0, 1, 0], mul(out, -0.3)))), {
-        colors: pts.map((_, i) => mixc(col, mixc(col, dry, 0.25), i / segs)), wind: pts.map((_, i) => [0.3 + 0.7 * i / segs, phase]),
-        leafPhase: rand(), shade: pts.map(() => 0.6 + 0.4 * (1 - u)), gloss: 0.55, fold: 0.45, trans: 0.3,
+        colors: pts.map((_, i) => mixc(col, mixc(col, dry, 0.12), i / segs)), wind: pts.map((_, i) => [0.3 + 0.7 * i / segs, phase]),
+        leafPhase: rand(), shade: pts.map(() => 0.5 + 0.5 * (1 - u)), gloss: 0.4, fold: 0.45, trans: 0.3,
       });
       area += L * w * 0.6;
     }
   }
   const crownC = [0, H * 0.72, 0], crownR = [H * 0.5, H * 0.3, H * 0.5];
   return {
-    builder: b, height: H, radius: H * 0.6, crownC, crownR, density: 0.6, leafArea: area, trans: 0.3, gloss: 0.55,
+    builder: b, height: H, radius: H * 0.6, crownC, crownR, density: 0.6, leafArea: area, trans: 0.3, gloss: 0.4,
     wind: { freq: 1.1, stiff: 0.03, branchAmp: 0.12, branchFreq: 2.0, leafAmp: 0.03, leafFreq: 6 },
   };
 }

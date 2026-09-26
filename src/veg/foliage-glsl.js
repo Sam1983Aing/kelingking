@@ -89,8 +89,13 @@ void foliageLightSplit(vec3 N, vec3 V, float sunVis, float ao, float trans, floa
   float open = smoothstep(-0.05, 0.35, R.y) * ao * ao;
   if (open > 0.01) {
     float Fv = F0 + (1.0 - F0) * pow(1.0 - NoV, 5.0);
-    spec += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss) * (1.0 - 0.6 * spread);
+    spec += skyRadiance(vec3(R.x, max(R.y, 0.02), R.z)) * Fv * open * mix(0.35, 1.0, gloss) * (1.0 - spread);
   }
+  // Where a pixel covers many leaves turned every way, their mirrors add up to a soft sheen
+  // of the whole sky: the Fresnel reflectance averaged over the hemisphere (about 0.09 for a
+  // leaf's wax) times the sky light on the canopy. It is what greys a glossy canopy seen from
+  // afar (v7: the viewpoint photo's scrub is far less saturated than its leaves).
+  spec += 0.09 * mix(0.5, 1.0, gloss) * uSkyUp / PI * ao * spread;
 }
 vec3 foliageLight(vec3 alb, vec3 N, vec3 V, float sunVis, float ao, float trans, float gloss, float spread) {
   vec3 diffE, spec;
