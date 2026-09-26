@@ -90,3 +90,21 @@ of `src/terrain/terrain-shader.js`, the `plants` settings in `src/terrain/layout
 - The sand along the foot of the walls has grit, pebbles and a band of red grains where the
   swash reaches (`vFoot` in `terrain-shader.js`, metres from the foot, from the mesh). Leaf
   litter and dry twigs under the scrub that overhangs the sand would sit on the same band.
+
+**From v6 (trail).**
+
+- The placeholder clearance is gone. `scatter.js` now asks the path itself (`hf.trail.route`,
+  src/trail/route.js): nothing on the tread or its verge, nothing on the viewpoint platform
+  (`layout.trail.pads`), and views from the path kept open: a plant's top stays under the eye
+  line of someone on the tread (falling away at about 12 degrees past 6 m), or it is scrub,
+  at most 1.6 m, right beside the path. Keep that rule, or its intent, when the plants are
+  rebuilt: the hero frames on the path depend on it.
+- The small plants beside the steps are scaled-down trees, so a 1.6 m "bush" 7 m from the
+  `stairs` camera has a trunk and reads as a small tree across the lower middle of the frame.
+  In `trail-mid-descent-a.jpg` and `trail-stairs-viewpoint.jpg` that is low leafy scrub, and
+  along the ridge (`trail-top-railing.jpg`) dry, knee-high grass that leans over the path.
+- The carve's mask is in the worker's output (`hf.trail.mask`: its shelf, how much the carve
+  moved the ground, and the distance to the path, over 8 m, 25 cm a texel), but the ground's
+  shader does not read it: a read there cost 2.2 ms at `overview` (v6 in `PROCESS.md`). The
+  cut banks are the ground's usual cover. Grass along the edges and roots on the banks are
+  better as geometry placed from the mask than as a lookup in the ground's shader.

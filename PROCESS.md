@@ -1024,3 +1024,214 @@ caustics only run where a pixel is small enough to show them.
   and turquoise, with the sea's streaky lace (v4) on top.
 - Shaded sand from the viewpoint measures 1.7 stops darker than the photo at the same pixels,
   mostly because the photo's shadows fall differently there.
+
+## v6: trail and stairs (2026-09-26)
+
+### Where the path goes
+
+OpenStreetMap has the whole route (`TRAIL` in `geo.js`), and the paved steps and the ridge
+path sit well on this model. The mapped zigzag down to the beach did not: on this model's
+slope its legs ran straight down the fall line at 50 to 70 degrees, and its bottom climbed a
+bump and dropped 32 m to the sand within 6 m (v5's note). So the descent was laid out again
+in the same corridor, on this ground:
+
+- A small generator walks the model's slope at a set grade (it turns off the fall line by
+  just enough), leg by leg, and turns at chosen places. About 1 in 2 on the legs.
+- The first leg is a long diagonal from the neck down the slope facing the beach, which is
+  what the viewpoint photo and `trail-stairs-viewpoint.jpg` show. Its pixels in the
+  viewpoint photo were cast onto this ground (`__app.rayToGround`) to find the corridor.
+- Three switchbacks, then a steep last stretch to the sand at the foot of the wall, where
+  the drone photo shows the path (its marks cast onto the map through the `overview` camera).
+
+The route is then one line, top to bottom (`src/trail/route.js`): the sections end to end,
+corners cut, resampled every 25 cm. The walking height comes from the ground under it,
+smoothed and held to each section's steepest grade (the average of the highest and the
+lowest profiles within that grade of the ground: each is no steeper than the grade, and
+where the ground is gentler both are the ground). Where the line is steeper than a
+section's `flat` grade it becomes steps: level treads, each straddling the line to within
+half a riser, at least a `going` long, risers growing where it is steep. The concrete steps
+are regular; the dirt ones vary by up to 30% each, as steps cut by hand do.
+
+304 m and 550 steps: 230 concrete, 38 on the ridge, 282 on the way down. The real count
+is about 156 concrete steps; here the concrete falls 60 m, so either the real ones are
+taller or the ground under them is gentler than the model's.
+
+### The carve
+
+The ground is cut to a level shelf under the tread, with a cut bank on the uphill side
+(2.2 in 1) and a fill bank on the downhill side (2.6 in 1), their edges rounded, running out
+within 8 m (`src/trail/carve.js`). It is worked out once on a 25 cm grid as the change it
+makes to the height, and `heightAt` adds it, so the ground mesh, the faces, the plants and
+the baked shadow all stand on the same carved ground. Across a hairpin the shelf's height is
+a blend of the nearby samples, weighted by how much nearer each is than the nearest.
+
+The first check went wrong in a way no picture would have caught cleanly: building the mesh
+in node and taking the highest surface over 6090 points across the treads, the ground stood
+up to 0.7 m above them on the lower legs. It was the face strips (v3). Their rows are zipped
+column to column by how far up the face they are, and a shelf running diagonally across a
+face sits at a different fraction of each column, so the triangles between two columns were
+up to 2.5 m long and cut over the tread. Two changes fixed it: the strips stop 3 m short of
+the path and the ground grid carries it, and the shelf reaches 0.7 m past each edge of the
+tread, more than the diagonal of a grid cell, so no triangle that touches the tread reaches
+the bank. The ground is now at least 2 cm under every tread. The faces' own carving
+(buttresses, beds) is switched off across the path, so it cannot push the shelf sideways.
+
+### The viewpoint platform
+
+Stage 1 left a question: the viewpoint camera stood 10 m above the modelled ground. Either
+the camera or the ground was wrong. The ground was. The photo nine minutes later (`eastCove`,
+same phone) has a GPS altitude of 110 m at a point on the steps where v5's ground was 102,
+and `trail-stairs-viewpoint.jpg` shows the viewpoint is simply the top of the steps.
+
+Raising the spine's control points did nothing: the ridge profile only takes over about 30 m
+before the root of the finger, and up there the plateau (and the dip that opens the view)
+sets the height. A local rise centred just behind the camera does it (+9.6 m, 15 m across, in
+`dips`), with a level concrete pad on it. The first pad put the camera in its middle, and the
+slab filled the bottom third of the viewpoint frame; in the photo the ground drops away under
+the lens, so the camera now stands at the pad's south-west corner. Where the pad meets the
+steps the lower of the two wins, so the steps carry on down beside it. The outline checks on
+`viewpoint` and `overview` came out the same as v5's.
+
+### What stands on it
+
+Built in the terrain worker from the route in about 35 ms (`src/trail/geometry.js`): concrete
+steps as blocks with their sides running into the ground, dirt treads dished a little with a
+skirt at each edge running 0.8 m out and down to the ground, risers, a log across 30% of the
+dirt risers over 18 cm, and handrails. Sawn timber (square posts every 2 m, two plank rails) on the concrete steps and
+the ridge, bamboo lashed with blue rope on the way down, no rail across the other leg of a
+hairpin or on the platform. About 30,000 triangles and 1,500 instances.
+
+Surfaces: four CC0 scans from Poly Haven (Sam approved the 42 MB download; 9 MB ships):
+`concrete_floor_02` for the steps and platform, `rocky_trail` for the dirt (read twice at two
+scales against each other, so the 2 m tile does not repeat down 300 m of path, and browned
+lower down), `weathered_planks` for the timber (mapped in each piece's own frame with the
+grain along its longest side, darker on the concrete steps as in the photo), `bark_brown_02`
+round the logs (with gradients taken from the position, not the angle, which jumps where it
+wraps round and left a seam). The bamboo and the rope are procedural. The procedural stand-ins
+before the scans read as plaster with polka dots.
+
+The edges of the path in `trail-top-railing.jpg` are trodden bare earth. The first go at that
+was in the ground's shader: the carve's mask as a texture, bare earth on the shelf and the cut
+banks. It looked right and cost 2.2 ms at `overview` (0.3 at `viewpoint`), timed with it on and
+off in one page (`parts.mjs`): one texture read behind a rectangle test, in the most expensive
+shader on screen, which v2 had already found adds cost whatever it does. So the verge is the
+path's own now: the dirt's skirt runs 0.8 m out past the tread, over the carve's level
+shoulder, and the ground's shader is v5's, unchanged.
+
+The path is drawn into the depth pass that runs before the ground (renderOrder -2). Without it
+the ground's shader, the heaviest on screen, ran under every tread only to be painted over:
+`trailTop` measured +18% against v5 at the same camera, and +6% with it.
+
+### Plants
+
+The placeholder cleared 5.5 m around every mapped line, including the ridge path out to the
+head that nobody walks and the approach. Now (`scatter.js`): nothing on the tread or its
+verge, nothing on the platform, and the views from the path stay open. A plant's top stays
+under the eye line of someone on the tread, falling away at about 12 degrees past 6 m, or it
+is scrub (1.6 m) right beside the path. In the photos the slopes along the steps and the ridge
+are scrub and dry grass, and the views down to the beach are open.
+
+### Cameras
+
+`src/fit.js` fits a camera to its photo by outlines. Points are traced on the photo where land
+meets the sea or the sky (30 to 45 per photo, on a gridded copy), and the render's land mask is
+turned into a distance field; the score is the mean distance in pixels at 480 wide. A
+Nelder-Mead search moves the camera along the path (distance along it, side, eye height) and
+turns it (heading, pitch, roll, lens), from a coarse sweep every few metres. Horizon points
+count too.
+
+- `stairs`: fits to 12 to 13 px anywhere from 18 to 38 m down the concrete steps. At the top
+  the platform fills the bottom of the frame, so 32 m. What is left is the neck's west flank,
+  3% of the frame too far out. v3 named the spine points to narrow if that happened
+  (`(109, 70)` and `(70, 38)`); narrowing them from 46 and 50 m to 40 and 44 m moved the score
+  by 0.2 px, so they were left alone.
+- `trailTop`: on the ridge path, 147.5 m along, 9.7 px, a wide phone lens (about 24 mm).
+- `trailLow`: nothing on the path fits better than 25 px, with any lens. The photo was taken
+  from about 65 m over the south end of the beach (v3's placeholder), where there is no path;
+  likely a drone. So the frame is set by eye low on the zigzag, 244 m along, looking over the
+  handrail into the overhang.
+
+Each of the three carries `s`, how far along the path it stands.
+
+### The walk line
+
+For the scroll (v8): `node tools/walk-line.mjs` writes `data/walk-line.json`, 565 points 0.5 m
+apart from the viewpoint photo's spot on the platform, onto the steps 27 m down them, and
+down to the sand, with the direction of travel and the grade at each. The eye is 1.4 to 1.8 m
+over the tread (the steps are smoothed out of it); the largest change in height between
+points is 0.68 m (the concrete steps), the sharpest turn 13 degrees (the hairpins).
+
+### Tools
+
+- `__app.traceOnPhoto(lines)`: map lines drawn over the shot's photo or render (the OSM route
+  over the drone photo was the first look at where the path really runs).
+- `__app.rayToGround(u, v)`: where a pixel of the frame lands on the ground.
+- `__app.contactSheet(cams)`: several cameras in one PNG, on the path by `s` or anywhere.
+- `__app.fitCamera(...)`: the fit above.
+- `tools/parts.mjs` switches can be any `#ifdef` added to the ground's shader for the purpose;
+  that is how the mask's cost above was found.
+- `trail=0`: no path at all (no carve, geometry or clearing), for A/B checks. `SKIP_trail` for
+  `capture.mjs --bench --ablate`. `cam=` takes a roll.
+
+### A hole beside the path
+
+A late look from the sand, where the path meets the beach, found a hole in the wall beside
+the bottom steps, several metres tall, with the sea showing through. v5 had none there, and it
+stayed with the path's geometry hidden, so it was the ground mesh. With the strips cut back
+from the path, a grid cell next to the gap could still find a neighbouring column whose window
+covered it, count itself covered, and be left out (v3's saving: a cell a strip fully covers is
+dropped). Now no grid cell within 10 m of the path is dropped, and the grid right beside the
+path is not pushed into the rock. A sweep of views with the sky and the sea hidden (holes show
+black) found no others.
+
+### Speed
+
+`hero.mjs` was run four times and swung too far to judge by: `viewpoint` came out +11%, +6% and
++56%, `trailTop` +22%, +48% and +26%, `shoreBreak` -28% and -16%, with nothing changed that
+those frames see between runs (one of them crashed on a page that never became ready, the
+only time in dozens of loads). The side by side timer (`ab.mjs`, both builds open in one
+browser, timed in turns) is what the budget below rests on. The gallery holds the last
+`hero.mjs` run.
+
+| Frame | `ab.mjs --hero` (v5's cameras for the trail frames) | at v6's camera, both builds |
+|---|---|---|
+| overview | 0% | |
+| viewpoint | +6%, then 0% over 20 rounds | |
+| stairs | +11%, then +5% over 24 rounds | -8% |
+| trailTop | -7% | +2% |
+| trailLow | -8% | +10% |
+| beach | +6% | |
+| swash | +5% | |
+| shoreBreak | +27%, then -1% over 24 rounds (it looks out to sea, away from the path) | |
+| sideFromSea | +1% | |
+
+Two things were taken back to hold it:
+
+- The path is drawn into the ground's depth pass first. Without it the ground's shader, the
+  heaviest on screen, ran under every tread only to be painted over: `trailTop` was +18% at
+  the same camera, +6% with it.
+- The ground's shader has no path mask (above): 2.2 ms at `overview`.
+
+### Still weak
+
+- `trailLow` is on the path but not matched to its photo, which was taken from over the beach.
+- The steps: 230 concrete ones where the real path has about 156, because the model's ground
+  falls 60 m under them. And the treads are cleaner and more even than the real ones, which
+  are chipped, patched and uneven in height at the bottom of each flight.
+- Low on the descent the treads are 25 to 35 cm, so from above the steep bottom reads a little
+  like a ladder, even with a log on only 30% of the risers over 18 cm.
+- Where the path meets the sand the last treads and their skirts of dirt read as tiles laid on
+  the beach from low down; the dirt and the sand do not blend.
+- The edges of the dirt verge are ragged where each tread's skirt ends.
+- The handrails are straight and tidy: real bamboo sags, leans, is patched with odd lengths
+  and tied with more rope than here, and the timber posts lean too. At hairpins the rails stop
+  short and leave a gap.
+- The bamboo and the rope are procedural, not scanned.
+- The platform's downhill side is a bare concrete face over its fill bank.
+- In the viewpoint photo the descent's line meets the ridge about 15 m further towards the
+  head and lower on the flank than here; the photo's crest there is higher than the model's.
+- The dirt is one scan, browned lower down. The damp dark earth, leaf litter and roots of the
+  shaded lower path are not there.
+- Seen before v6 and not its own: thin dark lines down the face strips in the flat-triangle
+  view (`clay=2`).
+

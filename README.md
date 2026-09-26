@@ -22,8 +22,8 @@ moving on. The plan, the rules and a brief per version are in
 | v3 | Rock | done |
 | v4 | Water | done |
 | v5 | Sand and the waterline | done |
-| v6 | Trail and stairs | next |
-| v7 | Plants | |
+| v6 | Trail and stairs | done, in review |
+| v7 | Plants | next |
 | v8 | The scroll descent | |
 | v9 | Speed and the shareable build | |
 
@@ -59,6 +59,11 @@ tuned against photos.
    the edge above it.
 4. It runs in a web worker at 1024 or 2048 texels over 1.6 km (0.78 m per texel), and the
    page builds a mesh plus a full-resolution normal map from it.
+5. **The path** (`src/trail/`, v6) is one line from the top of the steps to the sand, with a
+   walking height held to a steepest grade and turned into steps where it is steep. It is cut
+   into the ground (a level shelf, cut and fill banks) before anything else is built from the
+   height, so the mesh, the plants and the shadows all stand on the carved ground. The steps,
+   handrails and logs are built from the same line in the worker.
 
 ## How the cliffs and surfaces work
 
@@ -237,9 +242,9 @@ caught.
 - Reference photos are not included in this repo. `references/refs.json` and
   `references/REFERENCES.md` list every source with its author and licence (Unsplash and
   Wikimedia Commons), and `node references/fetch-refs.mjs --get` downloads them locally.
-- Rock, sand and ground textures and the tree scans are from Poly Haven (polyhaven.com),
-  CC0. `node tools/fetch-assets.mjs` downloads the originals (about 260 MB, not committed),
-  `node tools/prepare-assets.mjs` makes the 10 MB of textures in `assets/textures/`, and
+- Rock, sand, ground and path textures and the tree scans are from Poly Haven (polyhaven.com),
+  CC0. `node tools/fetch-assets.mjs` downloads the originals (about 330 MB, not committed),
+  `node tools/prepare-assets.mjs` makes the 24 MB of textures in `assets/textures/`, and
   `node tools/bake-impostors.mjs` bakes the trees into `assets/veg/`. See
   `assets/textures/CREDITS.md`.
 - three.js and lil-gui load from jsDelivr.

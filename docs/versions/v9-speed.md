@@ -132,3 +132,19 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   detail into fewer textures.
 - The foam simulation now also works out the swash each step (`surf-sim.js`), which makes
   its step dearer (not measured separately; it runs when the clock moves).
+
+**From v6 (trail).**
+
+- The path adds two meshes (the concrete and the dirt, about 30,000 triangles) and six
+  instanced meshes (posts, rails, logs, rope: about 1,500 instances), all drawn into the
+  ground's depth pass first. Without that the ground's shader ran under the treads: +18% at
+  `trailTop`, +6% with it.
+- Its surfaces are a texture array of their own (four scans, 2048 colour, 1024 normal and
+  mask; about 9 MB of JPEG, about 130 MB on the GPU with mipmaps: 4 layers of 2048 RGBA8 is 64 MB before them). The page waits for them
+  before a capture is ready.
+- The ground's shader is v5's. A read of the path's mask in it (one small texture behind a
+  rectangle test) cost 2.2 ms at `overview` and was taken out: anything added to that shader
+  costs, whether it runs or not (v2's finding, again).
+- Generating the terrain: the route and the carve add about 0.4 s in the worker at 2048
+  (a grid of 25 cm over the path's box), and every `heightAt` call after it pays one more
+  bilinear lookup. The path's geometry is about 35 ms.

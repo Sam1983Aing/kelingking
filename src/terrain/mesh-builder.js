@@ -375,7 +375,10 @@ export function buildTerrainMesh(hf, layout, M) {
           const Fx = x - psi * gx, Fy = y - psi * gy;
           const col = nearestColumn(Fx, Fy);
           if (col && psi > col.P.a && psi < col.P.b) {
-            const w = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist);
+            // (Beside the path the strips are cut back and the grid carries the ground (v6):
+            // not pushed in right beside it, and never left out within 10 m of it, where a
+            // strip's neighbour could claim cover the cut-back strip does not give.)
+            const w = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist) * keep(x, y);
             // In by the deepest carving within 2.5 m above or below this spot (the grid's
             // big triangles would otherwise cut across the bend of a cave's ceiling), never
             // out, plus a margin; and down a little, but only on flat ground: under a ceiling
@@ -384,7 +387,7 @@ export function buildTerrainMesh(hf, layout, M) {
             const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
             const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
             const inward = (cl + 1.2) * w;
-            cover[v] = w;
+            cover[v] = route && route.nearest(x, y, 10) ? Math.min(w, 0.9) : w;
             px += inward * gx; py += inward * gy;
             h -= 1.2 * w * smooth(1.5, 0.4, sl);
             if (w > 0) pushed++;
