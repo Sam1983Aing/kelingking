@@ -141,7 +141,7 @@ export class PlantBuilder {
   // rectangle cut out by the texture.
   leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35, cut = false }) {
     const outline = cut ? leafOutline(cell) : null;
-    const ts = outline ? [0, 0.3, 0.58, 0.78, 0.91, 1] : null;
+    const ts = outline ? [0, 0.36, 0.7, 0.9, 1] : null;
     if (outline) rows = ts.length; else this.alphaLeaves = true;
     const d = norm(dir);
     let side = norm(cross(d, up));

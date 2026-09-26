@@ -49,16 +49,21 @@ export function createNearPlants({ species, shared, leafTex }) {
   const meshes = species.map((sp) => sp.variants.map((v) => (v.levels ?? [v.geometry]).map((g, k) => make(sp, v, g, k))));
 
   let data = null, count = 0;
-  let grid = new Map();
+  // One grid per species, so each is searched only as far as it can be drawn in 3D (the
+  // camera moves every frame in the scroll: the dense scrub within reach of the palms is
+  // tens of thousands of plants).
+  let grids = [];
 
   function setPlants(plants) {
     data = plants.data; count = plants.count;
-    grid = new Map();
+    grids = species.map(() => new Map());
     for (let i = 0; i < count; i++) {
       const o = i * STRIDE;
+      const g = grids[data[o + 5]];
+      if (!g) continue;
       const key = cellKey(Math.floor(data[o] / CELL), Math.floor(data[o + 2] / CELL));
-      let l = grid.get(key);
-      if (!l) grid.set(key, (l = []));
+      let l = g.get(key);
+      if (!l) g.set(key, (l = []));
       l.push(i);
     }
     last.x = NaN;
@@ -69,7 +74,6 @@ export function createNearPlants({ species, shared, leafTex }) {
   const m4 = new THREE.Matrix4();
   const sphere = new THREE.Sphere();
   const last = { x: NaN, y: 0, z: 0, q: new THREE.Quaternion(), fov: 0, lod: 1 };
-  const reach = Math.max(...species.map((s) => s.lod.far)) * 1.6;
   const stats = { picked: 0, checked: 0, levels: [] };
   // Picked this frame: which mesh, which plant, its band, its distance. Written out nearest
   // first, so the depth test turns away the hidden leaves behind (alpha to coverage and
@@ -103,10 +107,15 @@ export function createNearPlants({ species, shared, leafTex }) {
     m4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(m4, THREE.WebGLCoordinateSystem, camera.reversedDepth);
     for (const m of allParts()) m.n = 0;
-    const R = reach / lodScale;
+    stats.checked = 0; stats.levels = [];
+    for (let sp0 = 0; sp0 < species.length; sp0++) {
+    const grid = grids[sp0];
+    if (!grid || !species[sp0].variants.length) continue;
+    // (A plant's distance is taken to its middle, so allow for its height above its foot.)
+    const R = species[sp0].lod.far / lodScale + 8;
+    const far2 = (species[sp0].lod.far / lodScale) ** 2;
     const i0 = Math.floor((p.x - R) / CELL), i1 = Math.floor((p.x + R) / CELL);
     const j0 = Math.floor((p.z - R) / CELL), j1 = Math.floor((p.z + R) / CELL);
-    stats.checked = 0; stats.levels = [];
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
       const l = grid.get(cellKey(i, j));
       if (!l) continue;
@@ -121,8 +130,10 @@ export function createNearPlants({ species, shared, leafTex }) {
         stats.checked++;
         const s = data[o + 3];
         const cy = data[o + 1] + M.height * s * 0.5;
-        const d = Math.hypot(data[o] - p.x, cy - p.y, data[o + 2] - p.z) * lodScale;
-        if (d > S.lod.far) continue;
+        const dx = data[o] - p.x, dy = cy - p.y, dz = data[o + 2] - p.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > far2) continue;
+        const d = Math.sqrt(d2) * lodScale;
         sphere.center.set(data[o], cy, data[o + 2]);
         sphere.radius = Math.max(M.radius, M.height * 0.6) * s * 1.3;
         if (!frustum.intersectsSphere(sphere)) continue;
@@ -139,6 +150,7 @@ export function createNearPlants({ species, shared, leafTex }) {
         if (t > 0 && lv + 1 < levels.length) put(levels[lv + 1], o, 1 - t, top, d);
         stats.levels[lv] = (stats.levels[lv] ?? 0) + 1;
       }
+    }
     }
     write();
     stats.picked = 0;
