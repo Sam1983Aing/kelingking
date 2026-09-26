@@ -15,7 +15,7 @@ import { SPECIES, SP } from './scatter.js';
 // naupaka's leaves are built to their outline, ten triangles each: fine up close, but a
 // few pixels further off, where tiny triangles cost more than the pixels they cover (v7).
 const LOD = {
-  scaevola: { near: 13, far: 19, detail: [5] },
+  scaevola: { near: 10, far: 15, detail: [5] },
   grass: { near: 16, far: 24, detail: [7] },
   tree: { near: 40, far: 55 },
   palm: { near: 50, far: 70 },

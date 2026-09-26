@@ -97,10 +97,15 @@ export function scaevola(seed, o = {}) {
       const faceUp = norm(add(add(mul(axis, 0.8), [0, 0.6, 0]), [rand.gauss() * 0.15, 0, rand.gauss() * 0.15]));
       const old = age > 0.9 && rand() < 0.1;
       const tint = rand.range(-1, 1);
+      // The lighter level (from 5 m): the rosettes deep inside the mound left out (from
+      // outside they are hidden), and every other leaf, the rest bigger to cover the same.
+      // It is the triangles that cost there, not the pixels (v7: a million per frame).
+      const skip = b.lod >= 1 && (t.shade < 0.35 || k % 2 === 1);
+      const grow1 = b.lod >= 1 ? 1.35 : 1;
       let c = mixc(green, deep, clamp01(0.45 - 0.45 * tint));
       c = mixc(c, lin(96, 118, 52), (1 - age) * 0.4);      // young leaves are brighter, yellower
       if (old) c = mixc(c, yellow, rand.range(0.25, 0.6));
-      b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L, Wl, {
+      if (!skip) b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L * grow1, Wl * grow1, {
         color: [...c, 0.3], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade * (0.8 + 0.2 * (1 - age)),
         cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, cut: b.lod === 0,
       });

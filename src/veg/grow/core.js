@@ -91,8 +91,8 @@ export class PlantBuilder {
     const n = pts.length;
     if (n < 2) return;
     if (this.lod >= 1) {
-      if (r[0] < 0.005) return;
-      sides = Math.max(3, sides - 2);
+      if (r[0] < 0.008) return;
+      sides = Math.max(3, Math.min(4, sides - 2));
     }
     // Parallel transport frames down the line.
     const T = [];
@@ -137,11 +137,11 @@ export class PlantBuilder {
   // rows: points along the length (2 = one flat panel each side).
   // cup and arch tilt the normals further than the shape does (across the leaf and along
   // it), so the light runs over each leaf as over a curved one, without the vertices.
-  // cut: build the leaf to its outline (leaves.js) with rows along it at ts, instead of a
-  // rectangle cut out by the texture.
+  // cut: build the leaf to its outline (leaves.js), instead of a rectangle cut out by the
+  // texture: in rows along it at these fractions of its length (true: the full set).
   leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35, cut = false }) {
     const outline = cut ? leafOutline(cell) : null;
-    const ts = outline ? [0, 0.36, 0.7, 0.9, 1] : null;
+    const ts = outline ? (Array.isArray(cut) ? cut : [0, 0.36, 0.7, 0.9, 1]) : null;
     if (outline) rows = ts.length; else this.alphaLeaves = true;
     const d = norm(dir);
     let side = norm(cross(d, up));
