@@ -31,11 +31,6 @@ uniform float uPeriod;
 uniform sampler2D uStrataA;
 uniform sampler2D uStrataB;
 uniform sampler2D uStrataC;
-// The path cut into the ground (v6, src/trail/carve.js): R how much is its level shelf, G how
-// far the carve moved the ground (/ 1.5 m), B distance to the path (/ 8 m). uTrailRect is its
-// corner (east, north) and size in metres.
-uniform sampler2D uTrailMask;
-uniform vec4 uTrailRect;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 // From the mesh builder: sand under an overhang, share of the sky not hidden by rock
@@ -317,18 +312,6 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   float wet = smoothstep(1.1, 0.35, h) * sandZone;
   float detail = smoothstep(0.6, 0.15, fp);               // close-range layers fade out by here
 
-  // The path (v6): its shelf and shoulders trodden bare, the banks the carve cut and filled
-  // freshly exposed earth, the cover coming back over a metre or two beyond.
-  float trodden = 0.0, dug = 0.0;
-  vec2 tuv = (g - uTrailRect.xy) / uTrailRect.zw;
-  if (all(greaterThan(tuv, vec2(0.0))) && all(lessThan(tuv, vec2(1.0)))) {
-    vec3 tm = texture2D(uTrailMask, tuv).rgb;
-    float edge = (tfbm(g * 0.9 + 4.0, 1.2, fp) - 0.5) * 0.35;
-    trodden = smoothstep(0.25, 0.7, tm.r + edge);
-    dug = smoothstep(0.08, 0.45, tm.g + edge * 0.5) * (1.0 - smoothstep(0.35, 0.8, tm.b));
-    veg *= 1.0 - max(trodden * 0.9, dug * 0.75);
-  }
-
   Surf s = Surf(vec3(0.5), vec3(0.0), 0.85, 1.0);
 
   // ---------------------------------------------------------------- limestone
@@ -438,17 +421,6 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     gr.color *= mix(vec3(1.0), vec3(1.25, 1.2, 1.1), smoothstep(0.42, 0.3, cover));
     gr.color = mix(gr.color, gr.color * vec3(1.35, 1.1, 0.9), smoothstep(0.64, 0.8, n2) * 0.5);
     mixSurf(s, gr, veg);
-  }
-
-  // ---------------------------------------------------------------- the path's earth
-  if (trodden + dug > 0.001) {
-    // Pale limestone soil on the ridge, browner lower down, with grit (the treads themselves
-    // are drawn on top, src/trail/).
-    float lowOnSlope = 1.0 - smoothstep(40.0, 85.0, h);
-    vec3 soil = mix(lin(vec3(0.6, 0.56, 0.49)), lin(vec3(0.48, 0.4, 0.31)), lowOnSlope);
-    soil *= 0.8 + 0.4 * tfbm(g * 1.7, 0.6, fp);
-    Surf e = Surf(soil, s.dn * 0.6, 0.95, 0.9);
-    mixSurf(s, e, max(trodden * 0.85, dug * 0.7) * (1.0 - sand));
   }
 
   // ---------------------------------------------------------------- sand

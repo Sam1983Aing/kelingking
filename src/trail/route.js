@@ -248,7 +248,7 @@ function gauss(a, sigma) {
 export function walkLine(route, { eye = 1.6, step = 0.5, look = 4, from = null, fromH = null, join = 0 } = {}) {
   const { n, x, y, ht } = route;
   const hs = gauss(ht, 0.6 / DS);
-  const pts = [];
+  const pts = [];   // east, north, height, metres along the path (null before it)
   const j0 = Math.min(n - 1, Math.round(join / DS));
   if (from) {
     // Level across the platform, then onto the path.
@@ -256,12 +256,12 @@ export function walkLine(route, { eye = 1.6, step = 0.5, look = 4, from = null, 
     const m = Math.max(1, Math.round(L / step));
     for (let k = 0; k < m; k++) {
       const u = k / m;
-      pts.push([from[0] + (x[j0] - from[0]) * u, from[1] + (y[j0] - from[1]) * u, fromH + (hs[j0] - fromH) * smooth01(u)]);
+      pts.push([from[0] + (x[j0] - from[0]) * u, from[1] + (y[j0] - from[1]) * u, fromH + (hs[j0] - fromH) * smooth01(u), null]);
     }
   }
   const every = Math.max(1, Math.round(step / DS));
-  for (let i = j0; i < n; i += every) pts.push([x[i], y[i], hs[i]]);
-  if ((n - 1 - j0) % every) pts.push([x[n - 1], y[n - 1], hs[n - 1]]);
+  for (let i = j0; i < n; i += every) pts.push([x[i], y[i], hs[i], i * DS]);
+  if ((n - 1 - j0) % every) pts.push([x[n - 1], y[n - 1], hs[n - 1], (n - 1) * DS]);
   // Along-line distance, direction and grade.
   const S = [0];
   for (let k = 1; k < pts.length; k++) S.push(S[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
@@ -273,7 +273,7 @@ export function walkLine(route, { eye = 1.6, step = 0.5, look = 4, from = null, 
     const dx = pts[b][0] - pts[a][0], dy = pts[b][1] - pts[a][1];
     const heading = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
     const grade = (pts[b][2] - pts[a][2]) / Math.max(S[b] - S[a], 1e-3);
-    out.push({ s: +S[k].toFixed(2), pos: [+pts[k][0].toFixed(2), +pts[k][1].toFixed(2), +(pts[k][2] + eye).toFixed(2)], heading: +heading.toFixed(1), grade: +grade.toFixed(3) });
+    out.push({ s: +S[k].toFixed(2), path: pts[k][3] === null ? null : +pts[k][3].toFixed(2), pos: [+pts[k][0].toFixed(2), +pts[k][1].toFixed(2), +(pts[k][2] + eye).toFixed(2)], heading: +heading.toFixed(1), grade: +grade.toFixed(3) });
   }
   return out;
 }

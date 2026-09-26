@@ -19,7 +19,10 @@
 import { DS } from './route.js';
 import { padDistance } from './carve.js';
 
-const SKIRT = 0.45;   // how far the dirt runs out past the tread's edge, down to the ground
+// How far the dirt runs out past the tread's edge, down to the ground: over the level shoulder
+// the carve leaves (0.7 m), so the trodden verge is the path's own, not the ground shader's
+// (a lookup of the carve's mask there cost 2 ms at the overview, v6).
+const SKIRT = 0.8;
 
 export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   const t0 = performance.now();
@@ -164,7 +167,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   for (const st of R.steps) {
     const sec = spec.sections[st.sec];
     // Only some of the dirt risers are held by a log; the rest are bare earth and rock.
-    if (sec.kind === 'concrete' || Math.abs(st.from - st.to) < 0.14 || rand() > 0.45) continue;
+    if (sec.kind === 'concrete' || Math.abs(st.from - st.to) < 0.18 || rand() > 0.3) continue;
     const f = frame(st.s);
     const hi = Math.max(st.from, st.to), dir = st.from > st.to ? 1 : -1;
     const r = 0.045 + 0.03 * rand();

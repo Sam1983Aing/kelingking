@@ -96,9 +96,6 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     uSwashT: { value: 2.6 },
     uSwashMap: { value: null },
     uSwashRect: { value: new THREE.Vector3(0, 0, 1) },
-    // The path cut into the ground (v6), set by setTrail().
-    uTrailMask: { value: null },
-    uTrailRect: { value: new THREE.Vector4(0, 0, 0, 0) },
     uSurfColor: { value: null },
     uSurfNormal: { value: null },
     uSurfMask: { value: null },
@@ -179,19 +176,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
     uniforms.uBeachTop.value = beachTop;
   }
 
-  // The carve's mask (src/trail/carve.js), or nothing.
-  function setTrail(mask) {
-    uniforms.uTrailMask.value?.dispose();
-    if (!mask) { uniforms.uTrailMask.value = null; uniforms.uTrailRect.value.set(0, 0, 0, 0); return; }
-    const t = new THREE.DataTexture(mask.data, mask.nx, mask.ny, THREE.RGBAFormat);
-    t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
-    t.needsUpdate = true;
-    uniforms.uTrailMask.value = t;
-    // Samples sit on the cell corners: widen by half a cell so texel centres land on them.
-    uniforms.uTrailRect.value.set(mask.x0 - mask.cell / 2, mask.y0 - mask.cell / 2, mask.nx * mask.cell, mask.ny * mask.cell);
-  }
-
-  return { mesh, material, uniforms, update, setData, setSurfaces, setTrail };
+  return { mesh, material, uniforms, update, setData, setSurfaces };
 }
 
 // Bilinear height lookup in local metres (x east, y north).

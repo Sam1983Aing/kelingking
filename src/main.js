@@ -278,7 +278,6 @@ worker.onmessage = (e) => {
   terrain.setData(tex, hf.extent, layout.beach.top);
   plants?.setInstances(hf.plants);
   trail.update(hf.trail);
-  terrain.setTrail(hf.trail?.mask);
   shadowDirty = true;
   terrainFrames = 0;
   outlineDirty = true;

@@ -1,8 +1,9 @@
 // The camera line for walking the path (v6, for v8's scroll): from the viewpoint on the
 // platform, onto the concrete steps, along the ridge and down to the sand, at eye height.
 //   node tools/walk-line.mjs            writes data/walk-line.json and prints its checks
-// Each point: s (metres walked), pos [east, north, height], heading (compass degrees, the way
-// the path goes), grade (rise over run, a few metres either side).
+// Each point: s (metres walked), path (metres along the path from the top of the concrete steps,
+// as the shots' `s` in src/shots.js; null on the platform), pos [east, north, height], heading
+// (compass degrees, the way the path goes), grade (rise over run, a few metres either side).
 
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -38,7 +39,7 @@ for (const p of line) {
   const under = q ? route.lerpAt(route.ht, q) : pad.h;
   minEye = Math.min(minEye, p.pos[2] - under); maxEye = Math.max(maxEye, p.pos[2] - under);
 }
-const out = { note: 'Camera line along the path at eye height (v6). s metres walked, pos [east, north, height], heading compass degrees, grade rise over run.',
+const out = { note: 'Camera line along the path at eye height (v6). s metres walked, path metres along the path (as the shots\' s), pos [east, north, height], heading compass degrees, grade rise over run.',
   start: 'viewpoint', joinsPathAt: +joinS.toFixed(2), eye: 1.6, points: line };
 writeFileSync(join(root, 'data/walk-line.json'), JSON.stringify(out) + '\n');
 console.log(`${line.length} points over ${line.at(-1).s} m, from ${line[0].pos.join(', ')} to ${line.at(-1).pos.join(', ')}`);
