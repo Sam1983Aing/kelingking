@@ -1836,14 +1836,57 @@ it reuses the shader's own noise now). After: +2%.
 - `ab.mjs --a=v9 --b=<commit>` bisected the overview's cost; `scroll-clip.mjs --stills` with
   `--dpr=2` gave the pixel rows across the horizon.
 
+### Second round: the sand, the foot of the rock, the leftovers
+
+Sam looked at v10 on his Mac and sent a screenshot from the sand at the foot of the path: the
+sand too even, one colour, no depth, like a flat surface; where the cliff starts, too polygon;
+and the leftovers from the first round.
+
+- **The sand.** The photos (`beach-people-scale.jpg`, `beach-under-cliff.jpg`) show dry sand
+  trodden all over: overlapping oval pits with pushed-up rims, fresh and slumped, some in lines
+  where people walked. First worked out in the ground shader: it looked right (a red debug
+  colour for the pits confirmed they were there before the lighting could show them; at first
+  they were too shallow to see in the noon sun), but the whole ground shader got 8 to 12%
+  slower everywhere, even from a kilometre up where no print is drawn. Switching the relief off
+  in copies of the build, one feature at a time, pinned it on the relief. So the footprints are
+  now baked at load into one more layer of the ground's texture arrays (`trample.js`, a 6 m tile
+  in 170 ms), read twice with a sharp hand-over (averaged half and half, two reliefs cancelled
+  out flat) and a level sharper than the pixel asks for; the layer stores the tilt as a sine,
+  which flattens the steep walls of a print, so it is scaled back up. Metre-scale lumps stay in
+  the shader, with patches of whiter, creamier and duller sand and a mottle into the distance.
+  The viewpoint's sand still measures +0.02 stops against its photo.
+- **Where the cliff starts.** Two things. The strips of rock face had rows 1.1 m apart at the
+  page's resolution and met the sand in a jagged line of big facets: low on walls standing on
+  the sand, rows are now 35 cm apart up to 8 m over the foot (26,000 more triangles), placed
+  along the profile and zipped between columns by their place along it rather than their index.
+  And sand banks up against the foot in ragged drifts, lying at its angle of repose, covering
+  the line where the rock meets the sand. At the side of the cave mouth a white sand pyramid
+  with a sawtooth top turned out to be the mesh builder's per-vertex mask for sand under the
+  overhang, following the columns' triangles; it has a noisy edge now and only lies where sand
+  could.
+- **Leftovers.** The concrete steps a little greyer. The lace: a warp at half a cell bends
+  each wall, walls thicken, thin and break off, and in about a third of the foam they are drawn
+  out into curving filaments (the crackle glaze is gone; the first try was all scratches). From
+  50 m out the plants' stand-ins shift toward the photo's grey-green and the painted ground
+  cover stops at a steeper slope, so the head's faces show white rock and plants, not olive
+  smears.
+
+### Speed, second round
+
+Side by side with v9 (`ab.mjs --hero --a=v9`, 16 rounds): overview +6%, viewpoint +2%, stairs
+-1%, trailTop +6%, trailLow +8% (24 rounds, after the trampled layer was limited to where a
+print is a few pixels; +10% before), beach +8%, swash +8%, shoreBreak +1%, sideFromSea +5%.
+Bisecting this round's cost used temporary builds with one file put back, or one feature
+switched off, each timed against the current build in the same browser: `parts.mjs`, which
+switches defines in one page, disagreed with itself from run to run with the Mac this busy.
+
 ### Still weak
 
-- The concrete flight from above reads as steps now, but its treads are still brighter than
-  the photo's, where they are in their own shade half the time.
-- The lace from above is still a little cellular where one cell size covers a big patch.
-- The head from the viewpoint is better but still a blanket of round crowns; the photo's scrub
-  is finer.
+- The head from the viewpoint is closer in colour, but still a blanket of round crowns; the
+  photo's scrub is finer.
 - Far clouds right on the horizon (100 km and more) are soft smudges rather than a crisp band
   of small cumulus.
-- The foot of the wall is still a coarse mesh (triangles of a metre or two at the corner where
-  it meets the sand); the textures hide it better, the shape is the same.
+- Beyond about 20 m the footprints give way to a mottle; from the switchbacks the beach is
+  smooth pale sand with tone, as it is in the photos from up there, but the hand-over could show
+  in motion.
+- The budget is spent again: trailLow, beach and swash at +8% against v9.
