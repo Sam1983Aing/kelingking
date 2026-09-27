@@ -713,6 +713,13 @@ void main() {
   vec2 p = vGrid;
   vec4 d = dataAt(p);
   float fp = max(length(fwidth(vWorld.xz)), 0.01);   // metres per pixel
+  // (v10) The vertex shader lowers the sea with the Earth's curvature (so the horizon sits
+  // where it really is). Heights over the sea bed are measured before that drop: after it,
+  // the sea beyond about 26 km came out deeper than its 45 m bed was low, so it counted as
+  // dry sand, went fully transparent, and drew the black background as a line along the
+  // horizon from anywhere high up.
+  float farC = max(length(vWorld.xz - cameraPosition.xz) - 2000.0, 0.0);
+  vec3 wLoc = vec3(vWorld.x, vWorld.y + farC * farC / (2.0 * 6.36e6), vWorld.z);
   // The surf here, and the swash sheet from the vertices (its edge and front interpolate
   // exactly: see swash.js).
   gSwash = false;
@@ -771,14 +778,14 @@ void main() {
   // Thin water on the sand (the swash sheet, under 12 cm) shows the ground's own sand through
   // it (see below), so the sea's model of its bed is not needed there: only the water's own
   // absorption and scattering, with the sand the swash carries.
-  float filmE = mix(vWorld.y - d.r, sf.h - d.r, sf.sheet);
+  float filmE = mix(wLoc.y - d.r, sf.h - d.r, sf.sheet);
   Under uw;
   if (filmE < 0.12 && sf.sheet > 0.99) {
     float churn = simSand(sim.g, simW) * uTurbidity;
     vec3 bbT = uBackscatter + churn * uSedBack;
     uw = Under(vec3(0.0), max(filmE, 0.0), churn, 0.0, bbT, uAbsorb + churn * uSedAbsorb + bbT);
   } else
-    uw = underLight(p, d, vWorld, N, V, fp, shadow, 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1), 0.0, sim.g, simW);
+    uw = underLight(p, d, wLoc, N, V, fp, shadow, 0.9 + 5.5 * exp(-max(wLoc.y + 0.3, 0.0) * 1.1), 0.0, sim.g, simW);
   vec3 under = uw.light;
   float depth0 = uw.depth0, sed = uw.sed, through = uw.through;
   vec3 bb = uw.bb, K = uw.K;
@@ -834,11 +841,11 @@ void main() {
   float pattern = 0.0, ridge = 0.0;
   vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
-  float swFoam = smoothstep(1.0, 0.3, vWorld.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
+  float swFoam = smoothstep(1.0, 0.3, wLoc.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
   // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
   if (amount > 0.002 || (caps > 0.002 && fp < 0.6)) {
     // On a steep face the ground position barely changes going up, so fold the height in.
-    vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp) : vec2(0.0);
+    vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * wLoc.y, fp) : vec2(0.0);
     pattern = lp.x; ridge = lp.y;
   }
   float soft = clamp(fwidth(pattern) * 1.5, 0.045, 0.15);
@@ -927,7 +934,7 @@ void main() {
   // (src a + dst (1 - a)) the sand comes through with weight dstK: less the more of the
   // light the surface reflects and the deeper the water. The sea's own model of the bed takes
   // over below about 30 cm.
-  float film = mix(vWorld.y - d.r, sf.h - d.r, sf.sheet);
+  float film = mix(wLoc.y - d.r, sf.h - d.r, sf.sheet);
   float shallowW = 1.0 - smoothstep(0.12, 0.45, film);
   vec3 X = col;
   float dstK = 0.0;
