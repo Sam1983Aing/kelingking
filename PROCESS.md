@@ -1501,7 +1501,7 @@ water, through six stops. It is plain maths with no three.js in it, so node can 
   rooted and up to 5 m wide, over the path. So a plant whose crown the lens is inside, or
   within a fifth of a radius of, now dissolves with the same stipple its hand-overs use
   (`near.js`, `LENS`). It only fires when the camera is in a plant, so the hero frames did not
-  change (pixel-identical again).
+  change (all nine hero frames match v7's).
 - **Hairpins whipped.** A recording's frame-to-frame differences put the biggest jumps on the
   lower switchbacks: the camera ran round 1.2 m bends with the steps half a metre away. Rounder
   bends and a screen more of scroll for the switchbacks halved them.
@@ -1525,3 +1525,47 @@ water, through six stops. It is plain maths with no three.js in it, so node can 
   tag side by side in one browser (still, and with the clock and camera moving); `--pace`
   times the real page scrolling itself.
 - `__scroll` on the page: `jumpTo(screens)`, `pace`, `descent`, `cam`.
+
+### Speed
+
+v8 draws nothing new, so the question was whether the path finds somewhere slow that the
+hero frames miss, and whether the page plays smoothly.
+
+- **Along the path** (`path-bench.mjs`, 21 cameras from tau 0 to 5, 1400 x 788, pixel ratio 1,
+  side by side with v7 drawing the same cameras, 6 rounds): 5.3 to 11.6 ms a frame still, 6.8
+  to 12.9 ms with the clock and the camera moving (the sea's passes, the sky tables, the clouds
+  and the near plants all redone every frame). The same as v7: median +3% still and +1%
+  moving, every point within noise. The slowest stretch is the start of the flight (tau 0 to
+  0.5, 10 to 13 ms), then the water's edge at the end.
+- **The page itself** (`path-bench.mjs --pace`, 1512 x 945 at 2x, the canvas 2268 x 1417 at
+  pixel ratio 1.5, scrolling itself top to bottom in 40 s): 2,479 frames, median interval
+  16.7 ms, 99% under 20.5 ms, 3 over 25 ms and none over 50. No hitches when the camera first
+  reaches the switchbacks or the sand: the warm-up behind the loader had already drawn there.
+- **The hero frames**: `hero.mjs` put four over budget and one 42% faster, on frames that are
+  bit-identical to v7's (eight of nine; `sideFromSea` differs in a handful of pixels); side by side (`ab.mjs --hero`, 16 rounds) all within budget, -7%
+  to +10%.
+- **Loading** is now the slowest part of the experience: 14 to 16 s before the loader lifts.
+  The breakdown is in the v9 brief.
+
+### Still weak
+
+- **The copy is mine, not Sam's**, and unapproved. It is all in `index.html`.
+- **Loading takes 14 to 16 s** (the breakdown is in the v9 brief). The loader makes it bearable,
+  it does not make it short.
+- **Nothing has run on a real phone.** The layout holds at 390 x 844; the scene is the
+  desktop's, which a phone will struggle with.
+- **The switchbacks are the weakest stretch to look at.** Close slopes of ground texture and
+  grass, steps sweeping past at arm's length. Hanging scrub that the lens goes into dissolves,
+  and if the scroll stops in the middle of that (a fifth of a crown radius) the stipple shows.
+- **The opening is not the `overview` frame**: 670 m and south-east up on 16:9, not 1.1 km
+  and north up, because the modelled ground is only 1.6 km across.
+- **Found along the path, belonging to versions that are done** (left as they are, the camera
+  steers round them):
+  - v6: the side of the viewpoint's concrete pad reads as a smooth pale block from a metre
+    away. The camera now stands higher leaving the platform, so it passes below the frame.
+  - v7: hanging scrub grows on the cut bank above the hairpin where the path leaves the
+    ridge, six plants up to 5 m tall hanging over the tread. The scatter keeps plants off the
+    path, but not what hangs from beside it.
+  - v7's worry that the hand-over bands would shimmer when the camera sweeps them across a
+    slope: I did not see it in the recordings at 1080p, but did not hunt for it frame by
+    frame either.

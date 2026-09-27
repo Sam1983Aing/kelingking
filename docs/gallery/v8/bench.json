@@ -1,0 +1,56 @@
+{
+  "overview": {
+    "ms": 11.8,
+    "noGround": 8.3,
+    "noSea": 7.5,
+    "mp": 1.47
+  },
+  "viewpoint": {
+    "ms": 10.9,
+    "noGround": 11.1,
+    "noSea": 10.2,
+    "mp": 1.47
+  },
+  "stairs": {
+    "ms": 7.6,
+    "noGround": 6.7,
+    "noSea": 6.9,
+    "mp": 2.95
+  },
+  "trailTop": {
+    "ms": 9.7,
+    "noGround": 9.4,
+    "noSea": 12,
+    "mp": 2.95
+  },
+  "trailLow": {
+    "ms": 9.6,
+    "noGround": 11.3,
+    "noSea": 7.2,
+    "mp": 2.61
+  },
+  "beach": {
+    "ms": 7.6,
+    "noGround": 14,
+    "noSea": 10.5,
+    "mp": 1.31
+  },
+  "swash": {
+    "ms": 10.8,
+    "noGround": 17.2,
+    "noSea": 6.8,
+    "mp": 1.31
+  },
+  "shoreBreak": {
+    "ms": 9.2,
+    "noGround": 7.8,
+    "noSea": 2.5,
+    "mp": 1.31
+  },
+  "sideFromSea": {
+    "ms": 8.9,
+    "noGround": 9.6,
+    "noSea": 9.5,
+    "mp": 1.47
+  }
+}

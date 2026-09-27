@@ -13,8 +13,8 @@ version. A session works on its element only, and goes deep on it.
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
-| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | next |
-| v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |
+| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | built, with Sam for review |
+| v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | next |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -26,7 +26,7 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v8-scroll.md, then start v8.
+> Read docs/versions/README.md and docs/versions/v9-speed.md, then start v9.
 
 ## Rules for every version
 
@@ -107,6 +107,10 @@ node tools/walk-line.mjs                             # the camera line down the 
 node tools/capture.mjs trailTop --eval="__app.contactSheet([{ s: 150, yaw: 234, pitch: -20, fov: 70 }])"   # cameras on the path by distance along it
 node tools/veg-parts.mjs trailLow --groups=all,near,impostor,~^near:grass   # what groups of plants cost (v7)
 node tools/ab.mjs trailLow --a=self --seta="vegHide=near"   # this build against itself, a switch on one side (v7)
+node tools/descent.mjs                                # the scroll's camera path: speeds, turn rates, clearance (v8)
+node tools/scroll-clip.mjs                            # the landing page recorded top to bottom, 1080p (--phone for 390 x 844)
+node tools/path-bench.mjs                             # frame times at 21 cameras down the path, against the last tag (v8)
+node tools/path-bench.mjs --pace --dpr=2 --size=1512x945   # the real page scrolling itself: dropped frames
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
@@ -122,6 +126,12 @@ as a seventh number. From v7: `lab=x,y[,gap]` (one of every plant in a row inste
 scatter), `vegDetail=` (how far the full plants reach, 0 for none), `vegHide=near:grass,impostor`
 (leave out plant meshes by the start of their names). Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
+
+From v8 the page without `shot=`, `capture` or `cam=` is the landing page (`src/scroll/`), and
+the switches above are the tools'. The landing page takes `debug` (the panel, a readout, keys
+`1` to `6` for the stops), `at=` (start at a `tau`, 0 over the bay to 5 at the water),
+`notext`, `record` (stepped frame by frame by `scroll-clip.mjs`), and any scene switch. In the
+console, `__scroll.jumpTo(__scroll.pace.screensAt(2.5))` goes to a place on the way down.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light
 before the tone curve) and averages the same pixels in the render and the photo. Shots can
