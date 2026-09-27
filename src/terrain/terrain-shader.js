@@ -405,9 +405,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // edge taken at a noisy level so it does not follow the columns' triangles, and only where
   // the ground is no steeper than sand can lie; the ramp at the side of the cave mouth came
   // out as a white pyramid with a sawtooth top).
-  float underSand = smoothstep(0.25, 0.6, vRock.x + (tn(g * 1.3 + h) - 0.5) * 0.45 + (tn(g * 4.1) - 0.5) * 0.15)
-                  * smoothstep(0.68, 0.8, upC);
-  sand = max(sand, underSand);
+  // (Only where there is any: this ran on every pixel of the island.)
+  if (vRock.x > 0.005) {
+    float underSand = smoothstep(0.25, 0.6, vRock.x + (tn(g * 1.3 + h) - 0.5) * 0.45 + (tn(g * 4.1) - 0.5) * 0.15)
+                    * smoothstep(0.68, 0.8, upC);
+    sand = max(sand, underSand);
+  }
 
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
   // (v10: from 0.3..0.46: on the steep faces of the head it painted olive smears over the rock,
