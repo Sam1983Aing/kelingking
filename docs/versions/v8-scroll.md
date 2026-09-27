@@ -60,7 +60,7 @@ debug tools.
   animation loop. Keep calling it once a frame with the scene clock.
 - A jump of the clock (backwards, or more than half a second forward) makes the foam
   simulation replay the last 30 s so the trails look as they would, which is 450 steps and a
-  visible hitch (see the v9 notes for its cost). If the scroll scrubs time, let the clock run
+  visible hitch (see the v10 brief for its cost). If the scroll scrubs time, let the clock run
   forward on its own instead and keep jumps for cuts.
 - The foam simulation covers a 640 m square around the bay (`rect` in `surf-sim.js`), and
   the breaking wave only exists along the beaches. Every point on the planned descent is

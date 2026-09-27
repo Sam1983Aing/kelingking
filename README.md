@@ -25,7 +25,8 @@ moving on. The plan, the rules and a brief per version are in
 | v6 | Trail and stairs | done |
 | v7 | Plants | done |
 | v8 | The scroll descent | done |
-| v9 | Speed and the shareable build | next |
+| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | next |
+| v10 | Speed and the shareable build | |
 
 ## Run it
 
@@ -35,7 +36,7 @@ python3 -m http.server 5178
 
 Then open http://localhost:5178: the landing page, the scroll from high over the bay down
 to the water's edge (v8). It needs a local server (module workers do not run from `file://`).
-A standalone single-file build comes later (v9).
+A standalone single-file build comes later (v10).
 
 The tools that match the scene to photos are the same page with a shot in the URL:
 http://localhost:5178/?shot=viewpoint. There, keys `1` to `9` switch shots, `O` photo overlay,

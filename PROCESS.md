@@ -1545,12 +1545,12 @@ hero frames miss, and whether the page plays smoothly.
   bit-identical to v7's (eight of nine; `sideFromSea` differs in a handful of pixels); side by side (`ab.mjs --hero`, 16 rounds) all within budget, -7%
   to +10%.
 - **Loading** is now the slowest part of the experience: 14 to 16 s before the loader lifts.
-  The breakdown is in the v9 brief.
+  The breakdown is in the v10 brief (speed was v9 until the final pass took that number).
 
 ### Still weak
 
 - **The copy is mine, not Sam's**, and unapproved. It is all in `index.html`.
-- **Loading takes 14 to 16 s** (the breakdown is in the v9 brief). The loader makes it bearable,
+- **Loading takes 14 to 16 s** (the breakdown is in the v10 brief). The loader makes it bearable,
   it does not make it short.
 - **Nothing has run on a real phone.** The layout holds at 390 x 844; the scene is the
   desktop's, which a phone will struggle with.
