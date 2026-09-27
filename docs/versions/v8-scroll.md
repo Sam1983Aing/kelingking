@@ -99,3 +99,20 @@ debug tools.
   the beach), so its frame was set by eye.
 - `__app.contactSheet([{ s, side, eye, yaw, pitch, fov }, ...])` renders cameras on the path
   side by side, and `src/fit.js` fits one to a photo along it.
+
+**From v7 (plants).**
+
+- The plants near the camera are picked for where it stands every frame it moves
+  (`src/veg/near.js`): about 1.2 ms of JavaScript at `trailLow` (16,000 plants checked, about
+  1,000 drawn), plus writing their instance buffers. In a scroll the camera moves every frame,
+  so this is paid every frame. If it shows, pick every other frame or only when the camera
+  has moved half a metre (the hand-over bands are 2 to 7 m wide, so nothing pops).
+- The plants hand over from real geometry to impostors by stippling across a band (naupaka
+  5 m and 10 to 15 m, grass 6 m and 11 to 15 m, trees 22 to 32 m, palms 30 to 44 m). A
+  moving camera sweeps the band across the slope, which reads as a soft dissolve. Worth a
+  look in motion once the scroll exists; widen a band if it shimmers.
+- The wind runs on the sea's clock (`uWindTime` is the page's `simTime`), so a frozen sea
+  (`t=`) freezes the plants too.
+- Beside the concrete steps the verge is low leafy scrub, on purpose (the stairs photos).
+  The walk line passes right by it: the first metres of the descent have leaves in the lower
+  corners of the frame.

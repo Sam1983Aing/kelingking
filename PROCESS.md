@@ -1237,3 +1237,175 @@ Two things were taken back to hold it:
 - Seen before v6 and not its own: thin dark lines down the face strips in the flat-triangle
   view (`clay=2`).
 
+
+## v7: plants (2026-09-26)
+
+### Grown, not scanned
+
+The brief said CC0 scans. Poly Haven's plant scans are temperate or Karoo desert species,
+the tropical ones are pot plants, and v1's three tree scans are what made the island read as
+dots and dark cards. So the plants are grown in code when the page loads (`src/veg/grow/`),
+about a second of JavaScript, and nothing is downloaded. The three tree scans and their
+baking tools went (13 MB out of the repo).
+
+Six species that grow on this limestone, each in two or three variants:
+
+- **Beach naupaka** (*Scaevola taccada*): the low bush of the finger and the foreground of
+  the viewpoint and stairs photos. Points are scattered through a mound, more of them near
+  its surface, and a small grower joins them to the base: a stem per sector, each branch
+  growing part of the way toward the middle of its group of points and splitting the group
+  along its widest spread, until every point has a twig. Radii follow the pipe model (a
+  branch carries the leaves above it). Every twig ends in a rosette of 11 to 17 spoon-shaped
+  leaves on the golden angle, the young ones upright and brighter, the old ones spread flat,
+  one in ten of the oldest yellowing.
+- **Grass tussocks**: 110 to 150 arching blades from a tight base, green at the base, a
+  third of them dried to straw from the tip down, and a few seed stalks.
+- **Hanging scrub** for the ledges: the same grower with its points in a curtain out and
+  below the foot, and sprays of small leaves hanging from the twig ends.
+- **Pandanus** on stilt roots, with three-ranked spirals of keeled strap leaves. **Coconut
+  palms** with ringed leaning trunks and fronds of drooping leaflets. A **broadleaf tree** with
+  a short trunk and a crown of leaf sprays.
+
+Leaves are painted into one small atlas at load (outline, pale midrib, side veins, darker
+rim, as a multiplier: the colour is per leaf in the geometry). A spray (a twig with a dozen
+leaves) is one card, for the crowns too big to build leaf by leaf.
+
+### Where they grow
+
+The v1 scatter kept its grid and its path rules (v6), and gained:
+
+- **Scrub and grass.** Scrub patches tens of metres across with open grass between, twice as
+  dense on the finger as v1's (0.95 m apart). On the plateau a mosaic hundreds of metres
+  across of woodland and open grassland, and palm groves away from the cliff edge, a palm
+  about every 8 m in them.
+- **The faces.** Plants hold on to steeper ground than the ground cover (to about 70
+  degrees, v3's note). On the sheer faces, clumps on the ledges: a point on a face slides
+  down the fall line to the nearest shelf, and a shelf is where the bedding table
+  (`strata.js`, the table the mesh is carved with) steps back going up. Runs along a ledge,
+  and scrub spilling over the rim. Then scrub in patches down the faces, longer down than
+  across (`beach-white-sand-cliff.jpg` has a whole stretch of wall green from the rim to near
+  the sand). The first go was ledges only: from the sea it read as green stripes, the thing
+  v3 wanted gone. Hanging scrub faces out from the rock.
+- **Along the path.** Grass tussocks within 22 m of it on a 42 cm grid, up to the verge,
+  shorter right beside the tread. Beside the concrete steps the verge is low leafy scrub
+  instead (the stairs photos): the stairs frame lost its foreground bushes to a new random
+  layout once, so it is a rule now, not luck.
+
+### How they are drawn
+
+- **Near: real geometry** (`near.js`, `plant-material.js`). Every frame the camera moves, the
+  plants within reach are picked from a grid per species, checked against the view, and
+  written nearest first into one instanced mesh per species, variant and level. The naupaka
+  has leaves built to their outline (so no texture cut-out) up to 5 m, fewer and bigger ones
+  to 10 m, and its impostor beyond. Grass is blades to 6 m and three crossed cards with a
+  painted tuft to 15 m, and the ground's straw beyond. Each hand-over is a stipple
+  dissolve over 2 to 7 m, each side keeping its band of the pattern, so no pixel is drawn
+  twice or dropped.
+- **Far: impostors** baked on the GPU at load from the same plants (`impostor-bake-rt.js`,
+  about 0.1 s): 64 views over the upper hemisphere, colour, normal, depth and how deep in the
+  crown. A jump flood fills the empty texels so mipmaps do not darken the edges. One card per
+  plant, showing the nearest view, lit live.
+- **One light for both** (`foliage-glsl.js`): light through the leaf, yellower. The waxy
+  sheen (GGX and the sky in it). The sky from the atmosphere's harmonics on both sides of the
+  leaf, with a warmer ground below than the harmonics' generic one. And the sunlight left after
+  crossing the crown (the path from each point out of the crown's ellipsoid toward the sun,
+  through a leaf density from the leaf area the grower made).
+
+### Wind
+
+One wind for the island, toward the west-north-west as the sea's gusts drift. Gusts are
+patches 16 by 38 m, the long side across the wind, blowing downwind at 5.5 m/s. Three layers
+move a plant: the whole plant leans and sways with the push where it stands (gusts
+included), each branch sways on its own phase, leaves flutter along their normals, harder in
+a gust. Seen from the viewpoint the sway is too small to see, so a gust also turns leaves
+over: their undersides are paler and greyer, flickering leaf by leaf. That is what shows a
+gust crossing a slope of scrub from 200 m.
+
+### Colour, measured
+
+- The first leaves were 0.25 green in linear reflectance, the colour they look. Real leaves
+  are about 0.05 red, 0.11 green, 0.04 blue, and grass about the same. With those the
+  viewpoint's scrub came out near the photo's, which is far greyer than its leaves.
+- From 1 km the canopy was pale and silvery: every leaf mirroring the sky. A pixel covers
+  many leaves there, turned every way, and their highlights average out. So the sheen
+  broadens and dims with the pixel's footprint, and a soft sheen of the whole sky takes its
+  place (the Fresnel reflectance averaged over the hemisphere, about 0.09 for a leaf's wax).
+- The ground under the plants: the scrub texture greyer and yellower (lime grass, as the drone
+  photo's slopes are), leaf litter and shade under the crowns (the worker works out how much
+  of each texel the crowns cover and packs it into the data texture's spare channel on land),
+  straw and earth under the near grass. v1's painted bands of scrub along the ledges are gone:
+  the plants there are real.
+
+### What went wrong
+
+- **The first bushes were leggy sticks** with a few leaves: branches reached their points
+  in long straight runs. A stem per sector, shorter steps, three to four times the points.
+- **Leaves came out bluish and dark on one side**: two-sided leaves lit with the normal of
+  the side facing away. The normal now flips toward the camera.
+- **The palm groves went nearly black from 1 km.** The impostors kept their crisp edge at
+  every distance, and at small mip levels a texel averages fine leaflets with the gaps
+  between them to under the threshold: the fronds vanished and the shaded ground showed.
+  Further off the average is now the coverage itself.
+- **A page that never became ready**, silently: a variable declared `const` was reassigned
+  in the worker, and errors in the worker do not reach the page's console. `main.js` reports
+  them now.
+- **Rosette cards** for the naupaka's middle distance read as green shingles on the ridge
+  (`trailTop`). The impostor looked better from where they took over, so they went.
+
+### Speed
+
+The plants were the likeliest thing to break the budget, and did, twice:
+
+- **Triangles, not pixels.** Low on the path the plants drew about a million triangles a
+  frame, and halving the resolution did not make them cheaper. The naupaka's middle level
+  lost its hidden rosettes and half its leaves (the rest bigger), its impostor took over from
+  10 m instead of 22, the other species from much closer too, and the grass stops at 15 m.
+- **What is left is not the plants' own work.** Measured in one page with the new switches
+  (`ab.mjs --a=self`, `vegHide=`): hiding every plant makes `trailLow` 16 to 19% faster, but
+  hiding only the near plants 2 to 5%, only the impostors 0%, half of either 0%, and with the
+  ground hidden the plants cost nothing over the sea. The ground's depth pass saves 34% at
+  `viewpoint` with no plants and 8% with them. Cut-out plants between the ground's depth pass
+  and its colour pass take most of that pass's benefit away, which fits what is known of
+  Apple's tile-based GPUs. Nine ways round it were tried and none helped (the list is in the
+  v9 brief). It is left for v9.
+
+| Frame | `ab.mjs` against v6 | across the day's runs |
+|---|---|---|
+| overview | -11% (16 rounds) | -25% to -11% |
+| viewpoint | +12% (24 rounds) | +1% to +16% |
+| stairs | -9% (16 rounds) | -23% to +3% |
+| trailTop | +22% (24 rounds) | +4% to +22% |
+| trailLow | +16% (24 rounds) | +11% to +23% |
+| beach | -1% (16 rounds) | |
+| swash | +2% (16 rounds) | |
+| shoreBreak | +3% (16 rounds) | |
+| sideFromSea | +13% (24 rounds) | -1% to +13% |
+
+The Mac was busy with other apps for the last runs and the spreads were 15 to 20 points
+wide. `hero.mjs`'s own run put every frame within budget (the gallery holds it). Four frames
+are taken as over, and handed to v9 with the measurements.
+
+### Tools
+
+- `lab=x,y[,gap]`: one of every plant in a row instead of the scatter, to look at them.
+- `vegDetail=` (how far the full plants reach, 0 for none) and `vegHide=` (leave out plant
+  meshes by the start of their names).
+- `tools/veg-parts.mjs`: what groups of plants cost, hidden one at a time in one page.
+- `tools/ab.mjs --a=self --seta=... --setb=...`: this build against itself with a switch on
+  one side. How every cost above was found.
+- `__app.hf`: the worker's output (the plants, the heights) from the console.
+
+### Still weak
+
+- Four frames over budget (above), and the lead for v9 is not proved.
+- Wet season only. Most trail photos are dry season, with brown grass and bare twigs.
+- The patches of scrub on the faces are rounder and denser than the photos' finer texture of
+  scrub on the rock, from the sea especially.
+- The hand-overs between real leaves and baked views are soft dissolves, fine in still frames.
+  In the scroll the camera sweeps them across the slope, which nobody has seen in motion yet.
+- Up close the trees and palms are simpler than the naupaka, whose leaves are built one by
+  one. Their bark is flat colour with streaks, not a scan.
+- Leaf litter and roots on the path's banks are the ground's texture, not geometry (v6 asked
+  for geometry from the carve's mask).
+- The grass stops at 15 m, where the ground's straw takes over. From low angles the line
+  between them can show.

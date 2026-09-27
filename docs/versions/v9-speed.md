@@ -148,3 +148,38 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
 - Generating the terrain: the route and the carve add about 0.4 s in the worker at 2048
   (a grid of 25 cm over the path's box), and every `heightAt` call after it pays one more
   bilinear lookup. The path's geometry is about 35 ms.
+
+**From v7 (plants).**
+
+- Over budget at the end of v7, against v6 in `ab.mjs` (24 rounds, a busy Mac): `trailTop`
+  +22%, `trailLow` +16%, `sideFromSea` +13%, `viewpoint` +12%. Across the day's runs these
+  swung from +4% to +23%, and `hero.mjs` put them all within budget once. `overview` and
+  `stairs` are about 10 to 20% faster (fewer, cheaper impostors than v1's scanned trees).
+- What the extra is, as far as it was pinned down: the plants cost almost nothing on their
+  own, and a lot in combination with the ground. Measured in one page with `ab.mjs --a=self`
+  and page switches (removed after, see PROCESS.md v7):
+  - All plants hidden: 16 to 19% faster. Only the near plants hidden: 2 to 5%. Only the
+    impostors hidden: 0%. Every other near plant, or every other impostor: 0%. With the
+    ground hidden, the plants cost 0 to 5% over the sea.
+  - the ground's depth pass (`terrain-mesh.js`, renderOrder -2) saves 34% at `viewpoint`
+    with no plants, and 8% with them. The plants sit between it and the ground's colour pass
+    (renderOrder -1), and most of them cut out their shape in the shader (discard, alpha to
+    coverage). On Apple's tile-based GPUs that is known to stop hidden surfaces being
+    skipped for what is drawn after, in the tile.
+  - Tried without a gain: the plants after the ground's colour pass (11% worse, the ground
+    is then shaded under every plant), the plants before its depth pass, a depth-only pass
+    for the impostors with their colour drawn at equal depth, no alpha to coverage, a stencil
+    mark from the plants that the ground's colour pass tests, the ground's colour pass on
+    front faces only, half the triangles in the near leaves, half-precision varyings.
+  - Not tried: moving the ground's expensive shading into a pass of its own (shade the
+    ground once per pixel from a thin G-buffer, or a visibility buffer), which would make it
+    independent of what is drawn in front of it. Or a Safari/Chrome GPU capture (Xcode's
+    Metal debugger on Chrome's GPU process) to see what the tile does.
+- Loading: the plants are grown in the page, about 0.8 to 1.2 s of JavaScript at load
+  (`createVegetation`, `growMs` on `__app.plants`), and their impostors baked on the GPU in
+  about 0.1 s. Nothing to download, but the first frame waits for it. It could run in a
+  worker (the growers are plain JavaScript over arrays, and only `geometry()` touches three.js).
+- 183,000 plants in the scatter (the worker, about 2.4 s at 2048), 173,000 impostors drawn
+  as one instanced draw per species and variant, all of them every frame (off-screen ones stop
+  in the vertex shader). A grid of chunks culled on the CPU would save the vertex work, which
+  measured as small here.

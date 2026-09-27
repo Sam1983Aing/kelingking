@@ -62,6 +62,7 @@ float tFineShadow = 1.0;   // shadow of the ledges above, on a bedded face
 float tLedgeSky = 1.0;     // share of the sky the ledges above leave
 float tWet = 0.0;          // sand wet from the swash (0..1)
 float tGloss = 0.0;        // a film of water on it, mirror-like (0..1)
+float tCanopy = 0.0;       // plants' crowns over this ground (0..1, v7), in shade under them
 
 // ---------------------------------------------------------------- bedding (strata.js)
 // Same formulas as strata.js, sines only, so the beds here are the beds in the mesh.
@@ -292,10 +293,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
   float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
-  float clump = tfbm(vec2(along * 0.06, h * 0.32) + g * 0.02, 6.0, fp);
-  // Clumps along the ledges, which are the tops of the hard beds.
-  float ledges = smoothstep(0.6, 0.7, clump + (n1 - 0.5) * 0.12 + (SB.g - 0.5) * 0.25) * smoothstep(10.0, 40.0, h) * 0.95;
-  veg = max(veg, ledges);
+  // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
   veg *= 1.0 - sand;
@@ -415,11 +413,21 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     Surf gr = triplanar(L_GROUND, uTile[L_GROUND], vec2(0.0));
     Surf g2 = triplanar(L_GROUND, uTile[L_GROUND] * 3.1, vec2(0.61, 0.13));
     mixSurf(gr, g2, smoothstep(0.35, 0.65, n2));
-    // Field-scale cover: darker, greener forest patches, brighter grass, the odd dry patch.
+    // Field-scale cover: greener patches, paler grass, straw where it has dried.
     float cover = tfbm(g * 0.009 + 3.7, 110.0, fp);
-    gr.color *= mix(vec3(1.0), vec3(0.55, 0.72, 0.5), smoothstep(0.52, 0.68, cover));
-    gr.color *= mix(vec3(1.0), vec3(1.25, 1.2, 1.1), smoothstep(0.42, 0.3, cover));
-    gr.color = mix(gr.color, gr.color * vec3(1.35, 1.1, 0.9), smoothstep(0.64, 0.8, n2) * 0.5);
+    gr.color *= mix(vec3(1.0), vec3(0.8, 0.88, 0.78), smoothstep(0.52, 0.68, cover));
+    gr.color *= mix(vec3(1.0), vec3(1.15, 1.12, 1.08), smoothstep(0.42, 0.3, cover));
+    gr.color = mix(gr.color, gr.color * vec3(1.9, 1.5, 1.35), smoothstep(0.6, 0.78, n2) * 0.6);
+    // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
+    // litter and bare earth, and shade, which the lighting takes from tCanopy.
+    float canopy = clamp(-D.a, 0.0, 1.0);
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(0.72, 0.7, 0.6), canopy);
+    // Near the camera the grass is real (the tussocks, src/veg/, up to 15 m): the ground under
+    // it is straw and earth. Further off the ground carries the grass's colour itself.
+    float litter = 1.0 - smoothstep(10.0, 15.0, distance(P, cameraPosition));
+    vec3 straw = vec3(0.15, 0.12, 0.062) * (0.55 + 0.9 * luma(gr.color) / 0.1) * (0.85 + 0.3 * n1);
+    gr.color = mix(gr.color, straw, litter * 0.85);
+    tCanopy = canopy * veg;
     mixSurf(s, gr, veg);
   }
 
@@ -549,7 +557,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   tNormalW = normalize(N + s.dn * 0.9);
   tRough = clamp(s.rough, 0.2, 1.0);
-  tAO = s.ao;
+  tAO = s.ao * (1.0 - 0.4 * tCanopy);
   vec3 col = s.color;
 
   if (uClay > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); tNormalW = N; tAO = 1.0; tRough = 0.93; }
@@ -570,7 +578,8 @@ export const TERRAIN_COLOR = /* glsl */ `
   vec3 tN = normalize(vWorldNormal);
   float tFp = max(length(fwidth(vWorldPos)), 0.005);
   diffuseColor.rgb = terrainSurface(vWorldPos, tN, tFp);
-  tShadow = groundShadow(vWorldPos, tN) * tFineShadow;
+  // Under the crowns: the sun gets through the gaps, and green through the leaves.
+  tShadow = groundShadow(vWorldPos, tN) * tFineShadow * (1.0 - 0.8 * tCanopy);
   // Cloud shadows only reach the island when the clear sky over it is small (main.js sets
   // this); by default the island sits in sun, as on the photo day.
 #ifdef TERRAIN_CLOUDS

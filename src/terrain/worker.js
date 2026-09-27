@@ -3,7 +3,7 @@
 
 import { generateHeightfield, signedDistance, blur } from './heightfield.js';
 import { buildTerrainMesh, contourChains, resampleChain } from './mesh-builder.js';
-import { scatterPlants } from '../veg/scatter.js';
+import { scatterPlants, canopyCover } from '../veg/scatter.js';
 import { buildTrailGeometry } from '../trail/geometry.js';
 
 self.onmessage = (e) => {
@@ -11,28 +11,30 @@ self.onmessage = (e) => {
   const hf = generateHeightfield(layout, N);
   const mesh = buildTerrainMesh(hf, layout, M);
   const normals = normalMap(hf.heights, N, hf.cell);
-  const water = waterData(hf, N);
+  const plants = scatterPlants(hf, layout, mesh.surfaceShift);
+  const water = waterData(hf, N, canopyCover(plants, hf.extent, N));
   const shoreDir = shoreDirection(hf.shore, N);
   const coast = coastData(hf, mesh, layout, N);
   const breakers = breakerLines(hf, N);
-  const plants = scatterPlants(hf, layout, [0, 1, 2], mesh.surfaceShift);
   const trail = trailData(hf, layout);
   self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms, breakers, rockSites: coast.sites,
-    plants: { data: plants.data, count: plants.count, ms: plants.ms }, trail: trail?.data,
+    plants: { data: plants.data, count: plants.count, shrubs: plants.shrubs, ms: plants.ms }, trail: trail?.data,
     mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
     [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, ...(trail?.transfer ?? []), mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
 };
 
 // Half-float RGBA texture for the water shader:
 //   R terrain height, G distance offshore from the waterline (m), B beach weight,
-//   A how much sand hangs in the water (the milky plumes in the bays).
-function waterData(hf, N) {
+//   A how much sand hangs in the water (the milky plumes in the bays); on land, where there
+//   is no water, minus how much of the ground the plants' crowns cover (v7, for the ground
+//   under them: terrain-shader.js).
+function waterData(hf, N, canopy) {
   const out = new Uint16Array(N * N * 4);
   for (let k = 0; k < N * N; k++) {
     out[k * 4] = toHalf(hf.heights[k]);
     out[k * 4 + 1] = toHalf(-hf.shore[k]);
     out[k * 4 + 2] = toHalf(hf.sand[k]);
-    out[k * 4 + 3] = toHalf(hf.murk[k]);
+    out[k * 4 + 3] = toHalf(hf.heights[k] > 1 && canopy[k] > 0 ? -canopy[k] : hf.murk[k]);
   }
   return out;
 }

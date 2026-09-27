@@ -24,12 +24,9 @@ export const TEXTURES = {
   weathered_planks: 'grey weathered wood, the handrail posts and rails (v6)',
   bark_brown_02: 'bark, the logs across the dirt steps (v6)',
 };
-export const MODELS = {
-  island_tree_01: 'tree',
-  island_tree_02: 'tree',
-  tree_small_02: 'tree',
-  grass_medium_02: 'grass clump',
-};
+// Plant scans. None since v7: the plants are grown in code at load (src/veg/grow/). v1 to v6
+// used island_tree_01, island_tree_02 and tree_small_02 (and fetched grass_medium_02).
+export const MODELS = {};
 const MAPS = { Diffuse: 'color', nor_gl: 'normal', Rough: 'rough', AO: 'ao' };
 
 const getJSON = async (u) => (await fetch(u, { headers: { 'User-Agent': UA } })).json();
