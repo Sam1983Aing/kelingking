@@ -55,3 +55,8 @@ the change column means anything: it is against v6, timed in the same run.
 | At the water's edge | 8.6 ms | 116 | +0% |
 | Shore break, eye level | 8.6 ms | 116 | +7% |
 | Head from the sea | 8.8 ms | 114 | -2% |
+
+These are from one `hero.mjs` run. Timed side by side with v6 in one browser (`ab.mjs`), on a
+Mac busy with other apps, four frames came out over budget: `trailTop` +22%, `trailLow` +16%,
+`sideFromSea` +13% and `viewpoint` +12% (24 rounds), after swinging between +4% and +23%
+across the day's runs. See the v7 section of `PROCESS.md` and the v9 brief.
