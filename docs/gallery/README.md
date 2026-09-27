@@ -8,4 +8,5 @@ The same hero frames for every version, so they can be compared side by side.
 - [v4](v4/README.md)
 - [v5](v5/README.md)
 - [v6](v6/README.md)
+- [v7](v7/README.md)
 - [How v1 was built, stage by stage](history/README.md)

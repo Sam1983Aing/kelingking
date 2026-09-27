@@ -12,7 +12,7 @@ version. A session works on its element only, and goes deep on it.
 | v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
-| v7 | Plants | [v7-plants.md](v7-plants.md) | next |
+| v7 | Plants | [v7-plants.md](v7-plants.md) | built, waiting for review |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |
 
@@ -105,6 +105,8 @@ node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum
 node tools/preview-height.mjs 1024                   # top-down shaded height map
 node tools/walk-line.mjs                             # the camera line down the path, data/walk-line.json (v6)
 node tools/capture.mjs trailTop --eval="__app.contactSheet([{ s: 150, yaw: 234, pitch: -20, fov: 70 }])"   # cameras on the path by distance along it
+node tools/veg-parts.mjs trailLow --groups=all,near,impostor,~^near:grass   # what groups of plants cost (v7)
+node tools/ab.mjs trailLow --a=self --seta="vegHide=near"   # this build against itself, a switch on one side (v7)
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
@@ -116,7 +118,9 @@ Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,pl
 `sprayDebug=1..4`, and `w.`, `o.`, `s.` for any water, spectrum or foam setting. From v5:
 `debug=10` (the swash: sheet, foam, thickness), `w.runup=` and `w.swashT=` (how high the swash
 runs and how long its uprush takes). From v6: `trail=0` (no path at all), `cam=` takes a roll
-as a seventh number. Keys: `1` to `9`
+as a seventh number. From v7: `lab=x,y[,gap]` (one of every plant in a row instead of the
+scatter), `vegDetail=` (how far the full plants reach, 0 for none), `vegHide=near:grass,impostor`
+(leave out plant meshes by the start of their names). Keys: `1` to `9`
 shots, `O` overlay, `L` outline, `F` free camera, `C` contours.
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light

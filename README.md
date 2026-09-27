@@ -23,7 +23,7 @@ moving on. The plan, the rules and a brief per version are in
 | v4 | Water | done |
 | v5 | Sand and the waterline | done |
 | v6 | Trail and stairs | done |
-| v7 | Plants | next |
+| v7 | Plants | built, waiting for review |
 | v8 | The scroll descent | |
 | v9 | Speed and the shareable build | |
 
@@ -103,9 +103,9 @@ The look is scanned textures (Poly Haven, CC0) plus procedural structure
   shade (grey to creamy), the shadow the ledges cast for the sun's angle against the face,
   and the sky the ledges hide. Runoff streaks, ochre and brown staining under the overhangs,
   and a ragged dark band at the waterline whose height changes along the coast.
-- **Scrub** on everything short of a sheer face, and in clumps along the ledges of the faces.
-  At field scale it varies between forest, scrub, grass and bare patches. Bushes, trees and
-  leaves appear as you get closer.
+- **The ground under the plants** is a scanned grass-and-rock surface, darker and browner
+  with leaf litter where the plants' crowns cover it (worked out from where they stand), and
+  straw and earth under the grass near the camera.
 - **Sand**, near-white coral sand (about 0.5 reflectance), trampled up close (two close-range
   scans), packed firm and wet where the swash runs, glossy for a moment after it drains, damp
   above, with red grains, grit and rock dust along the foot of the walls. The beach's shape
@@ -162,6 +162,47 @@ the carved mesh, and how exposed it is to the swell), and the light from `src/sk
   from the time, so a frozen frame and a running page agree.
 
 A frozen capture (`t=`) replays the last 30 s of foam, so its trails look as they would.
+
+## How the plants work
+
+Nothing is scanned or downloaded (v7). Six species that grow on Nusa Penida's limestone are
+grown in code when the page loads (`src/veg/grow/`), each in two or three variants:
+
+- **Beach naupaka** (*Scaevola taccada*), the low bush all over the finger: stems from the
+  base that fork toward points scattered through the mound (a small space-colonisation
+  grower, radii by the pipe model), each ending in a rosette of spoon-shaped leaves, young
+  ones upright and brighter, old ones spread and sometimes yellowing.
+- **Grass tussocks** along the path: a fountain of arching blades, green at the base, some
+  dried to straw at the tips, a few seed stalks.
+- **Hanging scrub** on the ledges and faces: stems that grow out over the edge and trail down
+  the rock in curtains of small leaves.
+- **Screw pine** (pandanus) on stilt roots with spiral tufts of keeled strap leaves,
+  **coconut palms** in groves on the plateau, and a **broadleaf tree** for the woods.
+
+Leaves are painted into a small atlas at load (outline, midrib, veins, rim), and built to
+their outline as geometry up close, so nothing is cut out by a texture there.
+
+**Where they grow** (`src/veg/scatter.js`, in the terrain worker): on anything short of a
+sheer face, none on the sand or at the foot of the cliffs. Scrub in patches tens of metres
+across with grass between on the finger, a mosaic of woodland and open grassland with palm
+groves on the plateau, hanging scrub in patches down the sheer faces and along the ledges
+(the tops of the hard beds, from the same bedding table the mesh is carved with). Grass
+tussocks within 22 m of the path, low leafy scrub beside the concrete steps, and views from
+the path kept open (v6's rule).
+
+**How they are drawn.** Up close, real geometry (`near.js`, `plant-material.js`): the plants
+within reach are picked each frame the camera moves, nearest first, in two or three levels of
+detail. Further off, impostors (`impostors.js`): each plant variant is baked on the GPU at
+load into 64 views, colour plus normal, depth and how deep in the crown, and drawn as one card
+that shows the view nearest to the camera's. Every hand-over is a stipple dissolve. Both are
+lit by the same code (`foliage-glsl.js`): light through the leaves, a waxy sheen that
+broadens as a pixel covers more leaves, the sky from the atmosphere's harmonics, and the
+sunlight left after passing through the crown.
+
+**Wind.** One wind for the island, blowing the way the sea's gusts drift, with gusts tens of
+metres across running downwind across the slopes. Plants lean and sway with the push where
+they stand, branches sway on their own, leaves flutter, and a gust turns leaves over so their
+paler undersides flicker (what you see of a gust from far off).
 
 ## How the light works
 
@@ -229,9 +270,8 @@ caught.
   the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
   See `docs/gallery/v1` for the baseline.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
-- **Materials after v2.** The plant colours were set under v1's dimmer light, and under the
-  physical light the plants come out about 1 stop too dark. v7 retunes them (the numbers are
-  in its brief). The rock was retuned in v3, the water in v4 and the sand in v5.
+- **Materials after v2.** Every material was retuned under v2's physical light: the rock in
+  v3, the water in v4, the sand in v5, the plants in v7 (to measured leaf reflectance).
 - **No far coast.** The terrain stops 1.6 km out, so the ridges that fade into the haze in
   the drone photos are not there to fade.
 
@@ -242,9 +282,9 @@ caught.
 - Reference photos are not included in this repo. `references/refs.json` and
   `references/REFERENCES.md` list every source with its author and licence (Unsplash and
   Wikimedia Commons), and `node references/fetch-refs.mjs --get` downloads them locally.
-- Rock, sand, ground and path textures and the tree scans are from Poly Haven (polyhaven.com),
-  CC0. `node tools/fetch-assets.mjs` downloads the originals (about 330 MB, not committed),
-  `node tools/prepare-assets.mjs` makes the 24 MB of textures in `assets/textures/`, and
-  `node tools/bake-impostors.mjs` bakes the trees into `assets/veg/`. See
-  `assets/textures/CREDITS.md`.
+- Rock, sand, ground and path textures are from Poly Haven (polyhaven.com), CC0.
+  `node tools/fetch-assets.mjs` downloads the originals (about 330 MB, not committed) and
+  `node tools/prepare-assets.mjs` makes the 24 MB of textures in `assets/textures/`. See
+  `assets/textures/CREDITS.md`. The plants are not scans: they are grown in code at load
+  (`src/veg/grow/`, v7). v1 to v6 used three Poly Haven tree scans.
 - three.js and lil-gui load from jsDelivr.
