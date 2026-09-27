@@ -13,7 +13,7 @@ version. A session works on its element only, and goes deep on it.
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
-| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | built, with Sam for review |
+| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | done, tag `v8` |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | next |
 
 Why this order: light first, because every colour decision after it is made under it. Then

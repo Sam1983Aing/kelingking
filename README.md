@@ -24,7 +24,7 @@ moving on. The plan, the rules and a brief per version are in
 | v5 | Sand and the waterline | done |
 | v6 | Trail and stairs | done |
 | v7 | Plants | done |
-| v8 | The scroll descent | with Sam for review |
+| v8 | The scroll descent | done |
 | v9 | Speed and the shareable build | next |
 
 ## Run it
