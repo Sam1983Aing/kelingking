@@ -282,6 +282,22 @@ float cells(vec2 p, float t) {
   }
   return f2 - f1;
 }
+// The same cell edges, searched over the four nearest cells instead of nine (v9, for the lace,
+// which runs on every pixel of foam): the points stay within the middle of their cells, so
+// the nearest two are almost always among those four.
+float cells4(vec2 p, float t) {
+  vec2 ip = floor(p), fp = fract(p);
+  vec2 o0 = step(0.5, fp) - 1.0;
+  float f1 = 9.0, f2 = 9.0;
+  for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
+    vec2 g = o0 + vec2(float(i), float(j));
+    vec2 h = vec2(hash12(ip + g), hash12(ip + g + 19.19));
+    vec2 o = 0.5 + 0.3 * sin(t + 6.2831 * h);
+    float dd = length(g + o - fp);
+    if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) { f2 = dd; }
+  }
+  return f2 - f1;
+}
 float caustics(vec2 p, float t) {
   float a = 1.0 - smoothstep(0.0, 0.14, cells(p * 0.9, t * 0.9));
   float b = 1.0 - smoothstep(0.0, 0.16, cells(p * 1.3 + 7.3, -t * 0.7));
@@ -332,16 +348,16 @@ vec2 lacePattern(vec2 pf, float fp) {
     // Cell walls: 1 on a wall, falling to 0 inside a cell. Cells about 2.2 m and 1.2 m
     // across, one or the other in patches (so the lace is coarse in places, fine in others),
     // and a finer net of 0.5 m cells through both.
-    float coarse = smoothstep(0.35, 0.65, vnoise(qw * 0.07 + 8.8));
+    float coarse = smoothstep(0.42, 0.58, vnoise(qw * 0.07 + 8.8));
     // (Thin walls: a thread of foam, not a band. The pattern's threshold widens them as the
     // foam gets thicker. Each size only where it shows.)
-    float c1 = fp < 0.6 && coarse > 0.0 ? 1.0 - smoothstep(0.0, 0.3, cells(qq * 0.45, uTime * 0.1)) : 0.3;
-    float c2 = fp < 0.4 && coarse < 1.0 ? 1.0 - smoothstep(0.0, 0.3, cells(qq * 0.85 + 5.3, uTime * 0.12)) : 0.3;
+    float c1 = fp < 0.6 && coarse > 0.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.45, uTime * 0.1)) : 0.3;
+    float c2 = fp < 0.4 && coarse < 1.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.85 + 5.3, uTime * 0.12)) : 0.3;
     float big = mix(c2, c1, coarse);
-    float small = fp < 0.22 ? 1.0 - smoothstep(0.0, 0.3, cells(qq * 2.0 + 3.1, uTime * 0.16)) : 0.28;
+    float small = fp < 0.22 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 2.0 + 3.1, uTime * 0.16)) : 0.28;
     // Finer threads and bubbles up close.
     float near = smoothstep(0.06, 0.02, fp);
-    float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
+    float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells4(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
     float walls = max(big, small * 0.8);
     walls = mix(walls, max(walls, tiny * 0.7), near);
     // The threads break up into strings of bubble clumps.
@@ -791,7 +807,7 @@ void main() {
 #ifdef SKIP_MILK
   if (false) {
 #else
-  if (simW > 0.0 || sf.fresh > 0.0) {
+  if ((simW > 0.0 && sim.r > 0.02) || sf.fresh > 0.0) {
 #endif
     float fa = max(sim.r * simW, sf.fresh);
     bubbles = smoothstep(0.02, 0.6, fa) * (0.55 + 0.45 * vnoise((p - sim.ba * simW) * 0.25 + 3.7)) * (1.0 - sf.sheet);
@@ -818,7 +834,8 @@ void main() {
   vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
   float swFoam = smoothstep(1.0, 0.3, vWorld.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
-  if (amount > 0.002 || caps > 0.002) {
+  // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
+  if (amount > 0.002 || (caps > 0.002 && fp < 0.6)) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp) : vec2(0.0);
     pattern = lp.x; ridge = lp.y;
@@ -852,7 +869,7 @@ void main() {
   float farCover = amount * amount * (3.0 - 2.0 * amount) * 0.85;
   float farW = smoothstep(0.3, 1.5, fp);
   float brk = 0.5;
-  if (farW > 0.0) {
+  if (farW > 0.0 && amount > 0.002) {
     vec2 pb = p - travel;
     brk = fbm3(pb * 0.16 + vec2(2.0, 7.0)) * 0.65 + vnoise(pb * 0.45 + 5.0) * 0.35;
     farCover *= clamp(mix(0.25, 0.75, amount) + (brk - 0.5) * mix(2.2, 1.3, amount) + 0.3, 0.0, 1.0);
