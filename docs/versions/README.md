@@ -14,7 +14,7 @@ version. A session works on its element only, and goes deep on it.
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | done, tag `v8` |
-| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | next |
+| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, waiting for Sam |
 | v10 | Speed and the shareable build | [v10-speed.md](v10-speed.md) | |
 
 Why this order: light first, because every colour decision after it is made under it. Then
@@ -114,6 +114,10 @@ node tools/descent.mjs                                # the scroll's camera path
 node tools/scroll-clip.mjs                            # the landing page recorded top to bottom, 1080p (--phone for 390 x 844)
 node tools/path-bench.mjs                             # frame times at 21 cameras down the path, against the last tag (v8)
 node tools/path-bench.mjs --pace --dpr=2 --size=1512x945   # the real page scrolling itself: dropped frames
+node tools/scroll-clip.mjs --stills=2.3,2.5 --size=1280x720  # stills from the real page at these tau (v9)
+node tools/scroll-clip.mjs --from=5 --to=9 --drag=3,-70      # a recording with a look to the left at 3 s (v9)
+node tools/cloud-bench.mjs eastCove viewpoint                # what the cloud march costs a frame (v9)
+node tools/ab.mjs stairs --a=v8 --b=b55d70f                  # two commits against each other (v9)
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
@@ -135,6 +139,9 @@ the switches above are the tools'. The landing page takes `debug` (the panel, a 
 `1` to `6` for the stops), `at=` (start at a `tau`, 0 over the bay to 5 at the water),
 `notext`, `record` (stepped frame by frame by `scroll-clip.mjs`), and any scene switch. In the
 console, `__scroll.jumpTo(__scroll.pace.screensAt(2.5))` goes to a place on the way down.
+From v9 the visitor can drag to look around (`__scroll.look` holds the head's turn), and the
+clouds take `clouds.coverage=`, `clouds.bank=`, `clouds.high=`, `clouds.clearRadius=` and more
+(`src/sky/clouds.js`).
 
 Measuring light: `--measure` renders the shot twice more (class labels, and scene light
 before the tone curve) and averages the same pixels in the render and the photo. Shots can

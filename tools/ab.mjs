@@ -6,6 +6,8 @@
 //   node tools/ab.mjs beach --set="cam=124,200,4.4,208,-3.8,40"   both at the same camera
 //   node tools/ab.mjs trailLow --a=self --seta="vegDetail=0"      this build against itself with
 //        other switches on one side (--seta for the first, --setb for this one; v7)
+//   node tools/ab.mjs stairs --a=v8 --b=b55d70f           two commits against each other, neither
+//        of them this folder (for bisecting a slowdown; v9)
 //
 // Frame times on this Mac swing by 2x with whatever else is on the GPU, and `hero.mjs` times
 // each version in its own pages, minutes apart, so one version can catch a quiet moment the
@@ -44,6 +46,13 @@ const tagged = versions.filter((v) => spawnSync('git', ['rev-parse', '-q', '--ve
 const tag = flag('a', tagged.at(-1));
 const SELF = tag === 'self';
 const dir = SELF ? '.' : `captures/ab-${tag}`;
+const tagB = flag('b', null);
+const dirB = tagB ? `captures/ab-${tagB}` : '.';
+if (tagB) {
+  rmSync(join(root, dirB), { recursive: true, force: true });
+  mkdirSync(join(root, dirB), { recursive: true });
+  if (spawnSync('sh', ['-c', `git archive ${tagB} | tar -x -C "${join(root, dirB)}"`], { cwd: root }).status !== 0) throw new Error('could not check out ' + tagB);
+}
 if (!SELF) {
   rmSync(join(root, dir), { recursive: true, force: true });
   mkdirSync(join(root, dir), { recursive: true });
@@ -91,7 +100,7 @@ try {
     // One at a time: a page that is not in front gets no animation frames, and its ready flag
     // is set from the animation loop.
     const side = (k) => { const v = flag('set' + k); return v ? String(v).split(';').join('&') + '&' : ''; };
-    for (const [k, base] of [['a', SELF ? 'http://localhost:5178/' : `http://localhost:5178/${dir}/`], ['b', 'http://localhost:5178/']]) {
+    for (const [k, base] of [['a', SELF ? 'http://localhost:5178/' : `http://localhost:5178/${dir}/`], ['b', tagB ? `http://localhost:5178/${dirB}/` : 'http://localhost:5178/']]) {
       pages[k] = await b.open(base + '?' + side(k) + q, { width: WIDTH, height: h });
       await pages[k].waitFor('window.__ready === true');
     }
@@ -113,7 +122,7 @@ try {
     const pct = (v) => `${v >= 1 ? '+' : ''}${((v - 1) * 100).toFixed(0)}%`;
     const row = { name, a: med(ta), b: med(tb), ratio: med(ratio), lo: q1(ratio), hi: q3(ratio) };
     rows.push(row);
-    console.log(`${name.padEnd(12)} ${tag} ${row.a.toFixed(2).padStart(6)} ms   this ${row.b.toFixed(2).padStart(6)} ms   ${pct(row.ratio).padStart(5)}  (middle half ${pct(row.lo)} to ${pct(row.hi)})`);
+    console.log(`${name.padEnd(12)} ${tag} ${row.a.toFixed(2).padStart(6)} ms   ${tagB ?? 'this'} ${row.b.toFixed(2).padStart(6)} ms   ${pct(row.ratio).padStart(5)}  (middle half ${pct(row.lo)} to ${pct(row.hi)})`);
   }
 } finally {
   b.close();

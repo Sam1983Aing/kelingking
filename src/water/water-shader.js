@@ -194,7 +194,8 @@ Surf surfAt(vec2 p, vec4 d) {
   // (v9: a band a fifth of a wavelength deep, where it was a metre or two), then foam that
   // thins into lace.
   // (Its leading edge ragged: lobes a metre or two across.)
-  float vr = v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02;
+  // (Only inside the break: this runs for every point near a beach, three times per vertex.)
+  float vr = broken > 0.0 && abs(v) < 0.1 ? v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02 : v;
   float front = broken * smoothstep(-0.03, 0.0, vr) * (1.0 - smoothstep(0.05, 0.22, v)) * mix(0.7, 1.0, smoothstep(0.15, 0.0, v));
   float trail = broken * 0.8 * exp(-max(v, 0.0) / 0.3) * step(0.0, v);
   float resid = smoothstep(br + 14.0, 0.0, s) * 0.2;
@@ -855,9 +856,10 @@ void main() {
   float lumps = 0.5, lumpsMid = 0.5;
   if (fresh > 0.01) {
     vec2 pl = p - travel;
-    lumps = fbm3(pl * 1.6 + vec2(uTime * 0.4, 0.0)) * 0.6 + vnoise(pl * 5.0 - uTime * 0.6) * 0.4;
+    // (Each scale only where it shows.)
+    if (fp < 0.22) lumps = fbm3(pl * 1.6 + vec2(uTime * 0.4, 0.0)) * 0.6 + vnoise(pl * 5.0 - uTime * 0.6) * 0.4;
     // (v9) Lumps and streaks of a metre to several, for where the small ones are below a pixel.
-    lumpsMid = fbm3(pl * vec2(0.28, 0.5) + vec2(uTime * 0.12, 3.0)) * 0.65 + vnoise(pl * 0.9 - uTime * 0.25) * 0.35;
+    if (fp > 0.05) lumpsMid = fbm3(pl * vec2(0.28, 0.5) + vec2(uTime * 0.12, 3.0)) * 0.65 + vnoise(pl * 0.9 - uTime * 0.25) * 0.35;
     float lz = mix(lumpsMid, lumps, smoothstep(0.2, 0.06, fp));
     // (Even the thickest leaves holes: churned water shows between the heaps.)
     lace = max(lace, fresh * smoothstep(0.3, 0.52, lz + fresh * 0.12 + pattern * 0.2));
