@@ -346,6 +346,10 @@ vec2 lacePattern(vec2 pf, float fp) {
     // than shears).
     vec2 w2 = vec2(vnoise(qw * 0.3 + 2.7), vnoise(qw * 0.3 + 9.1)) - 0.5;
     vec2 qq = qw + w2 * 1.6;
+    // (v10) And a warp at half a cell, which bends each wall along its own length: without it
+    // the walls ran straight from corner to corner and the net read as a crackle glaze.
+    vec2 w3 = vec2(vnoise(qq * 1.1 + 4.1), vnoise(qq * 1.1 + 12.7)) - 0.5;
+    qq += w3 * 0.6;
     // Cell walls: 1 on a wall, falling to 0 inside a cell. Cells about 2.2 m and 1.2 m
     // across, one or the other in patches (so the lace is coarse in places, fine in others),
     // and a finer net of 0.5 m cells through both.
@@ -361,9 +365,21 @@ vec2 lacePattern(vec2 pf, float fp) {
     float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells4(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
     float walls = max(big, small * 0.8);
     walls = mix(walls, max(walls, tiny * 0.7), near);
-    // The threads break up into strings of bubble clumps.
+    // The threads break up into strings of bubble clumps, thicken and thin along their length,
+    // and break off, leaving loose ends (v10: they ran unbroken all round every cell).
     float clumps = fp < 0.3 ? vnoise(qq * 3.3 + 1.9) * 0.6 + vnoise(qq * 8.1 + 6.2) * 0.4 : 0.5;
-    walls *= mix(0.62, 1.12, clumps);
+    walls *= mix(0.55, 1.2, clumps);
+    walls *= mix(0.35, 1.0, smoothstep(0.18, 0.4, vnoise(qq * 1.4 + 21.0) * 0.7 + vnoise(qq * 3.7 - 5.0) * 0.3));
+    // In places the foam is drawn out into filaments by the flow instead: ridges of stretched
+    // noise, a few decimetres apart.
+    float strands = smoothstep(0.5, 0.72, vnoise(qw * 0.09 + 31.0));
+    if (strands > 0.0 && fp < 0.4) {
+      // (Stretched along the slow swirl, so they curve with it.)
+      vec2 sd = normalize(w1 + vec2(0.3, 0.1));
+      vec2 qs = vec2(dot(qq, sd) * 0.8, dot(qq, vec2(-sd.y, sd.x)) * 2.8);
+      float fil = 1.0 - abs(2.0 * (vnoise(qs + w2 * 2.0) * 0.7 + vnoise(qs * 2.1 + 3.3) * 0.3) - 1.0);
+      walls = mix(walls, pow(fil, 2.5) * mix(0.7, 1.2, clumps), strands * 0.8);
+    }
     // Where it is thick and where it is thin: patches a few metres across.
     float body = fbm3(qw * 0.1 + 11.0) * 0.7 + vnoise(qq * 0.33 + 4.4) * 0.3;
     float pattern = clamp(walls * 0.7 + (body - 0.5) * 0.85 + 0.1, 0.0, 1.0);
