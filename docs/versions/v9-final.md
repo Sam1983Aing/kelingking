@@ -9,7 +9,7 @@ fixes those four things, in one session:
    review.
 3. **The camera on the path.** It always faces one way, so on the legs of the switchbacks that
    run the other way it goes down backwards. It should look where it is going, and the
-   visitor should be able to look around.
+   visitor should be able to drag to look around (Sam: both).
 4. **The green on the rock.** The plants round the stairs look good. The trees and the green on
    the rock faces look fake.
 
@@ -110,11 +110,15 @@ the ridge that is forward. On the legs of the switchbacks that run north and nor
 is backwards: the camera moves away from what it sees, and you never see the path ahead going
 down.
 
-**Wanted.** Look where you walk: along the path and down the steps, turning with the
-switchbacks. And, in Sam's words, "the camera should be able to move, you can see from every
-side if you want": the visitor can look around. Ask Sam at the start whether that means the
-view following the path, a way to look around yourself (drag with the mouse or a finger to
-turn the head, easing back when let go), or both. Both is the likely answer.
+**Wanted (Sam confirmed both, 2026-09-27).**
+
+- **The view follows the path.** Look where you walk: along the path and down the steps,
+  turning with the switchbacks.
+- **Drag to look around.** With the mouse or a finger, the visitor turns the head to look
+  anywhere, and the view eases back to the path's when they let go. It has to work with the
+  scroll at the same time (scrolling on while looking sideways), on a phone as well (a
+  horizontal drag must not fight the page's vertical scroll), and without breaking the
+  recordings (`?record` never drags).
 
 **The hard part is comfort.** The hairpins turn 180 degrees in a bend of 1.2 to 1.5 m. A camera
 that follows the path's heading exactly spins. Options: start turning before the bend and
