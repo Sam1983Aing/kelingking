@@ -376,7 +376,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   // (v10) A stone: a faceted, lumpy ball, flat underneath, about 1 across. Limestone breaks
   // into angular pieces, so its facets stay (no smoothing across them).
   const unitStone = (() => {
-    const g = new THREE.IcosahedronGeometry(0.5, 1);
+    const g = new THREE.IcosahedronGeometry(0.5, 0);
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
@@ -415,7 +415,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       group.add(m);
       withPrepass(m);
     }
-    const inst = (k, geo, mat) => {
+    const inst = (k, geo, mat, prepass = true) => {
       const d = data.inst[k];
       if (!d.count) return;
       const g = geo.clone();
@@ -425,10 +425,11 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       m.computeBoundingSphere();
       m.name = 'trail-' + k;
       group.add(m);
-      withPrepass(m);
+      if (prepass) withPrepass(m);
     };
     inst('logs', unitCyl, mats.log);
-    if (data.inst.stones) inst('stones', unitStone, mats.stone);
+    // (No depth pass for the stones: they are small, and cover little of anything.)
+    if (data.inst.stones) inst('stones', unitStone, mats.stone, false);
     inst('timberPosts', unitBox, mats.timber);
     inst('timberRails', unitBox, mats.timber);
     inst('bambooPosts', unitCylFine, mats.bamboo);
