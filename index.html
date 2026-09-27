@@ -2,24 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kelingking</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #0d0f11; overflow: hidden; font: 12px/1.4 -apple-system, system-ui, sans-serif; color: #ddd; }
-    #stage { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-    #stage canvas { display: block; }
-    #ref, #outline { position: absolute; top: 0; left: 0; pointer-events: none; }
-    #ref { opacity: 0; }
-    #outline { display: none; }
-    #status { position: fixed; left: 10px; bottom: 8px; opacity: .8; pointer-events: none; white-space: pre; text-shadow: 0 1px 2px #000; }
-    .capture #status { display: none; }
-  </style>
+  <meta name="description" content="Kelingking Beach on Nusa Penida, rebuilt in three.js. Scroll from high over the bay down the cliff path to the sand.">
+  <meta name="theme-color" content="#12110e">
+  <!-- The tools (?shot=, ?capture, ?cam=) get the bare stage; everything else is the landing page. -->
+  <script>document.documentElement.className = /[?&](shot|capture|cam)(=|&|$)/.test(location.search) ? 'tool' : 'scroll';</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&display=swap">
+  <link rel="stylesheet" href="src/scroll/page.css">
   <script type="importmap">
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
-        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js"
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.21.0/dist/lil-gui.esm.js",
+        "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.15.0/index.js",
+        "gsap/": "https://cdn.jsdelivr.net/npm/gsap@3.15.0/",
+        "lenis": "https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.mjs"
       }
     }
   </script>
@@ -27,6 +28,83 @@
 <body>
   <div id="stage"><img id="ref" alt=""></div>
   <div id="status"></div>
+
+  <div class="page">
+    <div class="loader" role="status" aria-live="polite">
+      <p class="label">Nusa Penida, Bali</p>
+      <p class="loader__title">Kelingking</p>
+      <div class="loader__bar"><span></span></div>
+      <p class="loader__step"><span class="loader__count">000</span><span class="loader__what">Raising the headland</span></p>
+      <p class="loader__fail">This needs WebGL 2 and a reasonably recent graphics chip, and this browser could not start it. It runs best in Chrome or Safari on a laptop.</p>
+    </div>
+
+    <div class="scrim"></div>
+
+    <header class="hud">
+      <a class="hud__mark" href="#" data-top>Kelingking</a>
+      <p class="hud__where"><span class="hud__lat">8°45′07″S</span><span class="hud__lon">115°28′24″E</span><span class="hud__alt">1,096 m</span></p>
+    </header>
+
+    <aside class="rail" aria-hidden="true">
+      <div class="rail__line"></div>
+      <div class="rail__fill"></div>
+      <div class="rail__mark"><span></span></div>
+    </aside>
+
+    <!-- The words. data-tau: where on the way down (src/scroll/path.js, 0 over the bay to 5 at the
+         water) each block shows, from and to. -->
+    <main class="words">
+      <section class="hero" data-tau="-1,0.012">
+        <p class="label">Nusa Penida, Bali</p>
+        <h1 class="display" data-lines>The long way down to <em>Kelingking</em></h1>
+        <p class="body">A limestone headland shaped like a T-Rex, with a white beach at its foot and one steep path down. Scroll to walk it.</p>
+        <p class="cue"><i></i>Scroll</p>
+      </section>
+
+      <section class="chapter" data-tau="0.1,0.72">
+        <div class="chapter__head"><span class="chapter__num">01</span><p class="label">From the air · 1,100 m</p></div>
+        <h2 class="display" data-lines>Everyone calls it the <em>T-Rex</em>.</h2>
+        <p class="body">From up here you can see why: a long neck of rock, and a head with its jaw in the sea.</p>
+      </section>
+
+      <section class="chapter" data-tau="0.975,1.02">
+        <div class="chapter__head"><span class="chapter__num">02</span><p class="label">The clifftop · 150 m</p></div>
+        <h2 class="display" data-lines>Most people stop at the <em>railing</em>.</h2>
+        <p class="body">They take the photo from this platform and head back to the car park. The beach is another 150 metres down.</p>
+      </section>
+
+      <section class="chapter" data-tau="1.3,2.03">
+        <div class="chapter__head"><span class="chapter__num">03</span><p class="label">The ridge · 95 m</p></div>
+        <h2 class="display" data-lines>The path runs along the <em>spine</em>.</h2>
+        <p class="body">Concrete steps first, then a ridge a few metres wide with a long drop on either side.</p>
+      </section>
+
+      <section class="chapter" data-tau="2.3,3.04">
+        <div class="chapter__head"><span class="chapter__num">04</span><p class="label">The switchbacks · 55 m</p></div>
+        <h2 class="display" data-lines>Then it gets <em>steep</em>.</h2>
+        <p class="body">Packed earth and bamboo rails, back and forth down the face above the beach. Your legs will know about it tomorrow.</p>
+      </section>
+
+      <section class="chapter on-light" data-tau="3.97,4.6">
+        <div class="chapter__head"><span class="chapter__num">05</span><p class="label">The sand · 2 m</p></div>
+        <h2 class="display" data-lines>White coral sand, and a lot of <em>noise</em>.</h2>
+        <p class="body">The swell comes straight in off the Indian Ocean and breaks close to the beach. Most people only go in up to their knees.</p>
+      </section>
+
+      <footer class="end" data-tau="4.96,9">
+        <div class="end__card">
+          <p class="label">Kelingking Beach · 8°45′05″S 115°28′23″E</p>
+          <h2 class="display" data-lines>You made it <em>down</em>.</h2>
+          <p class="body">Getting back up is the hard part.</p>
+          <div class="end__actions"><button class="button" type="button" data-top>Climb back up</button></div>
+          <p class="end__credits">A real place, rebuilt in three.js. Terrain from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data, © OpenStreetMap contributors. Rock, sand and path textures from Poly Haven (CC0). The plants are grown in code. The sun stands where it did at noon on 6 April 2025.</p>
+        </div>
+      </footer>
+    </main>
+
+    <div class="track"></div>
+  </div>
+
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

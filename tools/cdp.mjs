@@ -57,6 +57,8 @@ export async function launch() {
       await send('Page.navigate', { url }, sessionId);
       return {
         log,
+        sessionId,
+        async screenshot(opts = { format: 'png' }) { return Buffer.from((await send('Page.captureScreenshot', opts, sessionId)).data, 'base64'); },
         async eval(expression, timeout = 600000) {
           const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout }, sessionId);
           if (r.exceptionDetails) throw new Error((r.exceptionDetails.exception?.description || r.exceptionDetails.text) + '\n' + log.join('\n'));

@@ -6,12 +6,18 @@
 // shader): the full plant up close, a lighter one (fewer leaves, a little bigger) further
 // off, and the impostor beyond that (impostors.js keeps the rest of the pattern), so every
 // hand-over is a dissolve and each pixel belongs to one of them.
+//
+// A plant the lens is inside (or nearly: within LENS of its crown's ellipsoid, in crown radii)
+// dissolves the same way, rather than filling the frame with a few leaves (v8: the scroll's
+// camera walks under hanging scrub on the switchbacks). Still frames are not affected unless
+// their camera stands in a plant.
 
 import * as THREE from 'three';
 import { plantMaterial } from './plant-material.js';
 import { STRIDE } from './scatter.js';
 
 const CELL = 8;
+const LENS = [1.2, 1.4];
 
 export function createNearPlants({ species, shared, leafTex }) {
   const group = new THREE.Group();
@@ -44,7 +50,7 @@ export function createNearPlants({ species, shared, leafTex }) {
   };
   const make = (sp, v, geometry, level) => ({
     parts: [part(sp, v, geometry, level, true), part(sp, v, geometry, level, false)],
-    radius: v.info.radius, height: v.info.height,
+    radius: v.info.radius, height: v.info.height, crownC: v.info.crownC, crownR: v.info.crownR,
   });
   const meshes = species.map((sp) => sp.variants.map((v) => (v.levels ?? [v.geometry]).map((g, k) => make(sp, v, g, k))));
 
@@ -138,7 +144,17 @@ export function createNearPlants({ species, shared, leafTex }) {
         sphere.radius = Math.max(M.radius, M.height * 0.6) * s * 1.3;
         if (!frustum.intersectsSphere(sphere)) continue;
         // The impostor keeps the pattern from 1 - fade up; the 3D plant below it.
-        const top = 1 - smoothstep(S.lod.near, S.lod.far, d);
+        let top = 1 - smoothstep(S.lod.near, S.lod.far, d);
+        // The lens in or at the crown: the plant dissolves (nobody keeps the rest of the band).
+        if (M.crownC && d2 < (M.radius * s + 1) ** 2 * 4) {
+          const yaw = data[o + 4], c = Math.cos(yaw), sn = Math.sin(yaw);
+          const px = (p.x - data[o]) / s, py = (p.y - data[o + 1]) / s, pz = (p.z - data[o + 2]) / s;
+          const lx = c * px - sn * pz, lz = sn * px + c * pz;
+          const C = M.crownC, Rr = M.crownR;
+          const e = Math.hypot((lx - C[0]) / Rr[0], (py - C[1]) / Rr[1], (lz - C[2]) / Rr[2]);
+          top = Math.min(top, smoothstep(LENS[0], LENS[1], e));
+          if (top <= 0.001) continue;
+        }
         // Which level, and across a hand-over band the two either side of it: the nearer
         // keeps the pattern below 1 - t, the further from there up (and nothing past `top`,
         // which the impostor keeps).
