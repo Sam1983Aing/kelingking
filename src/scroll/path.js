@@ -207,7 +207,10 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
     const pull = Math.sign(d) * Math.min(Math.abs(d), most) * (most >= 180 ? 1 : 1 - smooth01((Math.abs(d) - 120) / 60));
     yawRaw[i] = fwd[i] + pull;
     const full = Math.max(0, (bias - 90) / 90);   // looking at the view only: no grade in the pitch
-    pitchRaw[i] = Math.max(A.pitch + (B.pitch - A.pitch) * u + GRADE * grade[i] * (1 - full), STEEPEST);
+    // (Coming off the last flight onto the sand the head comes up: the grade fades out of the
+    // pitch over the last 14 m, or the sand chapter opened on a frame of plain sand.)
+    const offSteps = 1 - smooth01((w - (W.foot - 14)) / 11);
+    pitchRaw[i] = Math.max(A.pitch + (B.pitch - A.pitch) * u + GRADE * grade[i] * (1 - full) * offSteps, STEEPEST);
     fovRaw[i] = A.fov + (B.fov - A.fov) * u;
   }
   // (The yaw unwrapped again: fwd + pull can cross north between samples.)
