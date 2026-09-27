@@ -277,7 +277,14 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     SB = textureGrad(uStrataB, vec2(su, 0.5), sdx, sdy);
   }
 #endif
-  vec3 w = pow(abs(N), vec3(4.0));
+  // (v10) Where the smoothed normal and the triangle's own disagree a lot (the cut banks beside
+  // the path, the corners where a wall meets the beach), the triangle's decides which way the
+  // texture is projected: from the smoothed one, a vertical bank got the view from above and
+  // its texture ran down it in streaks.
+  vec3 Ng = normalize(cross(triDx, triDy));
+  Ng *= sign(dot(Ng, N) + 1e-4);
+  vec3 Nt = normalize(mix(N, Ng, smoothstep(0.9, 0.6, dot(Ng, N))));
+  vec3 w = pow(abs(Nt), vec3(4.0));
   w /= w.x + w.y + w.z;
   w = max(w - 0.03, 0.0);
   triW = w / (w.x + w.y + w.z);
@@ -287,7 +294,15 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // Under an overhang, dry ground out past the drip line means the rock stands on a beach,
   // whatever the zones say.
   if (carveM > 0.3) sandZone = max(sandZone, smoothstep(1.0, 2.0, D.r));
-  float sand = sandZone * smoothstep(0.55, 0.8, up) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // (v10) By the slope of the triangle itself as much as the smoothed normal: across the
+  // corner where a wall meets the beach the smoothed normal turns over a metre or two, and the
+  // sand came out as a white fade up the foot of the rock. Sand lies where the ground is flat
+  // enough to hold it, and the rock starts where it steepens, with a ragged contact.
+  float upG = abs(normalize(cross(triDx, triDy)).y);
+  float upC = mix(up, upG, 0.75) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
+  float sand = sandZone * smoothstep(0.64, 0.72, upC) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // Just steeper than that, the foot of the rock: sand blown and splashed into its hollows.
+  float footDust = sandZone * smoothstep(0.3, 0.62, upC) * (1.0 - sand) * (1.0 - smoothstep(uBeachTop, uBeachTop + 2.5, h));
   sand = max(sand, smoothstep(0.2, -0.4, h) * sandZone);
   sand = max(sand, vRock.x);   // the floor running in under an overhang
 
@@ -331,6 +346,25 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       a.dn += beds.dn * 0.7 * detail;
       a.ao *= mix(1.0, beds.ao, 0.6 * detail);
       a.color = mix(a.color, beds.color, ochre * 0.55);
+    }
+
+    // (v10) At arm's length: the layered scan at its own size (1.8 m), and the pitted grain of
+    // the rough rock scan, for the relief the face's big scans are too coarse to have there.
+    // The marble scan's crack network, which reads as marble up close, pulled further to grey.
+    float closeR = max(wallF, footDust) * smoothstep(0.02, 0.006, fp);
+    if (closeR > 0.01) {
+      Surf fine = triplanar(L_BEDS, uTile[L_BEDS] / 3.0, vec2(0.23, 0.57));
+      Surf grain = triplanar(L_WET, 0.8, vec2(0.61, 0.19));
+      float lf = luma(fine.color) / luma(uGain[L_BEDS] * lin(vec3(0.482, 0.322, 0.194)));
+      float lg = luma(grain.color) / luma(uGain[L_WET] * lin(vec3(0.271, 0.251, 0.215)));
+      a.color = mix(a.color, vec3(luma(a.color)) * uGain[L_LIMESTONE] / luma(uGain[L_LIMESTONE]), 0.5 * closeR);
+      a.color *= mix(1.0, clamp(lf, 0.5, 1.4) * clamp(lg, 0.7, 1.25), 0.7 * closeR);
+      a.dn = mix(a.dn, a.dn * 0.5 + fine.dn * 1.1 + grain.dn * 1.2, closeR);
+      a.ao *= mix(1.0, fine.ao * grain.ao, 0.7 * closeR);
+      a.rough = mix(a.rough, 0.95, closeR * 0.5);
+      // Sand in the hollows at the foot: where the scans are darkest (the pits and seams).
+      float hollow = 1.0 - smoothstep(0.55, 1.0, lf * lg);
+      a.color = mix(a.color, uSandAlb * 0.9, footDust * max(hollow, 0.35) * 0.8);
     }
 
     // The bedding: each bed its own shade, grey or creamy, the seams between them darker
