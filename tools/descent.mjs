@@ -41,7 +41,7 @@ const step = 0.01;
 const rows = [];
 for (let k = 0; k < PACE.length - 1; k++) {
   const [a, ta] = PACE[k], [b, tb] = PACE[k + 1];
-  let maxYaw = 0, maxPitch = 0, maxSpeed = 0, maxFov = 0, minClear = Infinity, where = 0;
+  let maxYaw = 0, maxPitch = 0, maxSpeed = 0, maxFov = 0, minClear = Infinity, where = 0, maxOff = 0;
   let prev = D.poseAt(pace.tauAt(a));
   for (let x = a + step; x <= b + 1e-9; x += step) {
     const p = D.poseAt(pace.tauAt(x));
@@ -51,11 +51,15 @@ for (let k = 0; k < PACE.length - 1; k++) {
     maxPitch = Math.max(maxPitch, Math.abs(p.pitch - prev.pitch) / step);
     maxFov = Math.max(maxFov, Math.abs(p.fov - prev.fov) / step);
     maxSpeed = Math.max(maxSpeed, Math.hypot(p.pos[0] - prev.pos[0], p.pos[1] - prev.pos[1], p.pos[2] - prev.pos[2]) / step);
-    const c = p.pos[2] - groundAt(p.pos[0], p.pos[1]);
+    // How far off the walk line (on the path) and how high over the ground it is.
+    if (p.pos[2] < 200 && x > 5) { let best = Infinity; for (const q of walk) best = Math.min(best, (q.pos[0] - p.pos[0]) ** 2 + (q.pos[1] - p.pos[1]) ** 2); maxOff = Math.max(maxOff, Math.sqrt(best)); }
+    // (The least clearance under the camera and within 60 cm round it.)
+    let c = Infinity;
+    for (const [dx, dy] of [[0, 0], [0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6]]) c = Math.min(c, p.pos[2] - groundAt(p.pos[0] + dx, p.pos[1] + dy));
     if (c < minClear) { minClear = c; where = x; }
     prev = p;
   }
-  rows.push({ from: `${a}-${b}`, tau: `${ta}-${tb}`, 'm/screen': +maxSpeed.toFixed(1), 'yaw deg/screen': +maxYaw.toFixed(1), 'pitch deg/screen': +maxPitch.toFixed(1), 'fov deg/screen': +maxFov.toFixed(1), 'least clearance m': +minClear.toFixed(2), at: +where.toFixed(2) });
+  rows.push({ from: `${a}-${b}`, tau: `${ta}-${tb}`, 'm/screen': +maxSpeed.toFixed(1), 'yaw deg/screen': +maxYaw.toFixed(1), 'pitch deg/screen': +maxPitch.toFixed(1), 'fov deg/screen': +maxFov.toFixed(1), 'least clearance m': +minClear.toFixed(2), at: +where.toFixed(2), 'off path m': +maxOff.toFixed(2) });
 }
 console.table(rows);
 

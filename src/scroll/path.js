@@ -33,14 +33,14 @@ export const PACE = [
   [1.0, 0.03],     // the title over the bay
   [4.3, 0.985],    // the flight down
   [5.4, 1.012],    // a pause at the viewpoint
-  [7.9, 1.97],     // steps and ridge
-  [8.4, 2.02],     // the head ahead
-  [10.4, 2.97],    // the switchbacks
-  [10.8, 3.02],
-  [12.3, 3.975],   // down to the sand
-  [13.0, 4.03],    // on the sand
-  [14.5, 4.992],   // to the water
-  [15.6, 5],       // the end
+  [8.0, 1.97],     // steps and ridge
+  [8.5, 2.02],     // the head ahead
+  [11.0, 2.97],    // the switchbacks
+  [11.4, 3.02],
+  [13.4, 3.975],   // down to the sand
+  [14.1, 4.03],    // on the sand
+  [15.6, 4.992],   // to the water
+  [16.7, 5],       // the end
 ];
 
 // Look keyframes by metres walked (W, from the viewpoint): where the view is aimed (east,
@@ -48,9 +48,12 @@ export const PACE = [
 function lookKeys(W) {
   return [
     // The viewpoint's own line of sight, then the head's summit (the origin).
+    // Leaving the viewpoint it looks up a little: at the viewpoint's -25.6 the edge of the
+    // platform's concrete pad (v6) passes through the bottom of the frame a metre away.
     { W: 0, at: [32.4, 8.5], pitch: -25.6, fov: 57 },
-    { W: W.stairs, at: [0, 0], pitch: -27, fov: 55 },
-    { W: W.stairs + 30, at: [0, 0], pitch: -24, fov: 56 },
+    { W: 3, at: [16, 4], pitch: -18, fov: 56 },
+    { W: W.stairs, at: [0, 0], pitch: -20, fov: 55 },
+    { W: W.stairs + 30, at: [0, 0], pitch: -22, fov: 56 },
     { W: W.top - 35, at: [0, 0], pitch: -17, fov: 58 },
     { W: W.top, at: [0, 0], pitch: -20.3, fov: 60 },
     // Past the hairpin the path runs north along the slope that faces the beach, and looking
@@ -70,8 +73,12 @@ function lookKeys(W) {
 // The heading straight down over the bay at the start (the overview frame has 9.1, north up).
 const START_YAW = 140;
 
-// How much higher the eye is held on the switchbacks (metres).
-const LIFT = 1.0;
+// How much the line walked is smoothed across (metres, a Gaussian's sigma), which rounds off
+// the hairpins.
+const HAIRPIN = 2;
+
+// How much higher the eye is held on the switchbacks, and down the concrete steps (metres).
+const LIFT = 1.0, STEPS_LIFT = 0.9;
 
 // The walk across the sand: from the foot of the path to where the swash frame stands.
 const SAND = [[124.5, 190.6], [114, 182], [104.5, 170], [99, 164]];
@@ -108,9 +115,10 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   }
   // Where the stops are, in metres walked.
   const atPath = (s) => { for (const p of walk) if (p.path !== null && p.path >= s) return p.s; return walk.at(-1).s; };
-  // Hairpins rounded a little more (the look does not follow them anyway), and the sand's
-  // bumps taken out of the eye's height.
-  const Xs = gauss(X, 0.75 / DW), Ys = gauss(Y, 0.75 / DW);
+  // Hairpins rounded off: the camera cuts inside each bend a little, as a gimbal would, rather
+  // than swinging round a 1.2 m turn with the steps and bushes half a metre away (the look
+  // does not follow the bends anyway). And the sand's bumps taken out of the eye's height.
+  const Xs = gauss(X, HAIRPIN / DW), Ys = gauss(Y, HAIRPIN / DW);
   const footW = cum[ctrl.length - 1];
   const Zs = gauss(Z, 1.5 / DW);
   // Blend the smoothed height in only on the sand, where the walk line has not smoothed it.
@@ -118,12 +126,15 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
     const t = smooth01((i * DW - (footW - 4)) / 8);
     Z[i] = Z[i] + (Zs[i] - Z[i]) * t;
   }
-  // On the switchbacks the verge is tall scrub and grass, and the camera looks across the path
-  // rather than along it, so it is held a metre higher there (as if held up), over the leaves.
-  const topW = atPath(shots.trailTop.s);
+  // Held higher where the verge is tall, as if the camera were held up over the leaves: on the
+  // switchbacks, where it looks across the path rather than along it, and down the concrete
+  // steps, where v7 grows low leafy scrub on both sides (and at the viewpoint's 1.6 m the
+  // side of the platform's pad passes right under the lens).
+  const topW = atPath(shots.trailTop.s), stairsW = atPath(shots.stairs.s);
   for (let i = 0; i < n; i++) {
     const w = i * DW;
     Z[i] += LIFT * smooth01((w - topW - 10) / 25) * (1 - smooth01((w - (footW - 22)) / 18));
+    Z[i] += STEPS_LIFT * smooth01((w - 0.3) / 3) * (1 - smooth01((w - stairsW - 20) / 20));
   }
   // The viewpoint stays exactly where its frame stands.
   const hold = Math.round(1 / DW);
@@ -152,8 +163,8 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   const yawS = gauss(yawRaw, 3 / DW), pitchS = gauss(pitchRaw, 3 / DW), fovS = gauss(fovRaw, 3 / DW);
   // The viewpoint's frame exactly at the start (smoothing pulls it toward what comes next).
   const vp = shots.viewpoint;
-  for (let i = 0; i < hold * 4; i++) {
-    const t = smooth01(i / (hold * 4));
+  for (let i = 0; i < hold * 1.5; i++) {
+    const t = smooth01(i / (hold * 1.5));
     yawS[i] = vp.yaw + (yawS[i] - vp.yaw) * t;
     pitchS[i] = vp.pitch + (pitchS[i] - vp.pitch) * t;
     fovS[i] = vp.fov + (fovS[i] - vp.fov) * t;

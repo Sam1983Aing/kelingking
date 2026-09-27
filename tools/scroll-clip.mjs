@@ -67,7 +67,7 @@ const screensAt = (t) => from + moved(t - intro);
 
 const dir = mkdtempSync(join(tmpdir(), 'kelingking-scroll-'));
 const n = Math.round(T * FPS);
-await page.eval(`__scroll.frame(0, ${from}); ${from === 0 ? '__scroll.begin()' : '__scroll.begin(true)'}`);
+await page.eval(`__scroll.frame(0, ${from}, true); ${from === 0 ? '__scroll.begin()' : '__scroll.begin(true)'}`);
 const tr = Date.now();
 for (let f = 0; f < n; f++) {
   const tau = await page.eval(`__scroll.frame(${1 / FPS}, ${screensAt(f / FPS)})`);

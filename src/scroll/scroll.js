@@ -346,10 +346,11 @@ export function startScroll({ params }) {
     window.__scroll = {
       get ready() { return done.has('warm'); },
       begin(skip) { begin(skip); },
-      // Advance dt seconds with the page scrolled to `screens`.
-      frame(dt, screens) {
+      // Advance dt seconds with the page scrolled to `screens` (snap: the camera there at once).
+      frame(dt, screens, snap = false) {
         vt += dt;
         scrollTo(0, screens * unit);
+        if (snap) cam.screens = screens;
         gsap.updateRoot(vt);
         tick(dt);
         return cam.tau;
