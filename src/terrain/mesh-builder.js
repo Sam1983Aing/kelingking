@@ -133,11 +133,44 @@ export function buildTerrainMesh(hf, layout, M) {
       col.fade = smooth(0, 6, along[k]) * smooth(0, 6, total - along[k]);
       const S = P.S[P.S.length - 1];
       const du = across(col.x, col.y);
-      const R = Math.min(900, Math.max(4, Math.ceil(S / du) + 1));
+      // (v10) Where the camera walks by on the sand, the bottom of a wall gets rows every 35 cm
+      // up to 8 m above its foot (at the page's resolution they were 1.1 m apart, and the foot of
+      // the rock was a band of big facets with a jagged line where they met the sand). Rows are
+      // placed along the profile by that spacing, and neighbouring columns are zipped by how far
+      // along the profile each row is, not by its index, so the two can differ.
+      const hAtS = (s) => {
+        let lo = 0, hi = P.S.length - 1;
+        while (hi - lo > 1) { const m = (lo + hi) >> 1; if (P.S[m] <= s) lo = m; else hi = m; }
+        const t = P.t[lo] + (P.t[hi] - P.t[lo]) * ((s - P.S[lo]) / Math.max(P.S[hi] - P.S[lo], 1e-9));
+        return heightAt(col.x + t * col.gx, col.y + t * col.gy);
+      };
+      const fine = Math.min(du, 0.35);
+      const lowFine = P.feat.onSand > 0.5 || (route && near(col.x, col.y) > 0.5 && hAtS(0) < 20);
+      const rowsS = [0];
+      if (lowFine && fine < du * 0.95) {
+        const hF = P.feat.onSand > 0.5 ? P.feat.hFoot : hAtS(0);
+        while (rowsS.at(-1) < S) {
+          const sNow = rowsS.at(-1);
+          const k = smooth(hF + 6, hF + 10, hAtS(sNow));
+          rowsS.push(Math.min(S, sNow + fine + (du - fine) * k));
+          if (rowsS.length > 900) break;
+        }
+        // (The last step spread over the last few rows, so no row is left a sliver.)
+        if (rowsS.length > 2) {
+          const gap = S - rowsS.at(-2);
+          if (gap < fine * 0.5) { rowsS.splice(rowsS.length - 2, 1); }
+        }
+        if (rowsS.at(-1) < S) rowsS.push(S);
+      } else {
+        const R0 = Math.min(900, Math.max(4, Math.ceil(S / du) + 1));
+        for (let r = 1; r < R0; r++) rowsS.push((r / (R0 - 1)) * S);
+      }
+      const R = rowsS.length;
       col.first = bands.pos.length / 3;
       col.R = R;
+      col.sf = rowsS.map((v) => v / S);
       for (let r = 0; r < R; r++) {
-        const s = (r / (R - 1)) * S;
+        const s = rowsS[r];
         let lo = 0, hi = P.S.length - 1;
         while (hi - lo > 1) { const m = (lo + hi) >> 1; if (P.S[m] <= s) lo = m; else hi = m; }
         const u = (s - P.S[lo]) / Math.max(P.S[hi] - P.S[lo], 1e-9);
@@ -170,7 +203,7 @@ export function buildTerrainMesh(hf, layout, M) {
       const A = cols[k], B = cols[k + 1];
       let i = 0, j = 0;
       while (i < A.R - 1 || j < B.R - 1) {
-        const fa = (i + 1) / (A.R - 1), fb = (j + 1) / (B.R - 1);
+        const fa = A.sf[i + 1], fb = B.sf[j + 1];
         if (j >= B.R - 1 || (i < A.R - 1 && fa <= fb)) {
           bands.idx.push(A.first + i, B.first + j, A.first + i + 1); i++;
         } else {
@@ -180,7 +213,9 @@ export function buildTerrainMesh(hf, layout, M) {
     }
     // Normals: up the column, and across to the neighbouring columns at the same fraction.
     const at = (col, fr, out) => {
-      const x = fr * (col.R - 1), r = Math.min(Math.floor(x), col.R - 2), u = x - r;
+      let r = 0;
+      while (r < col.R - 2 && col.sf[r + 1] < fr) r++;
+      const u = Math.min(Math.max((fr - col.sf[r]) / Math.max(col.sf[r + 1] - col.sf[r], 1e-9), 0), 1);
       for (let d = 0; d < 3; d++) out[d] = bands.pos[(col.first + r) * 3 + d] * (1 - u) + bands.pos[(col.first + r + 1) * 3 + d] * u;
     };
     const pa = [0, 0, 0], pb = [0, 0, 0];
@@ -189,7 +224,7 @@ export function buildTerrainMesh(hf, layout, M) {
       for (let r = 0; r < col.R; r++) {
         const v0 = (col.first + Math.max(0, r - 1)) * 3, v1 = (col.first + Math.min(col.R - 1, r + 1)) * 3;
         const cx = bands.pos[v1] - bands.pos[v0], cy = bands.pos[v1 + 1] - bands.pos[v0 + 1], cz = bands.pos[v1 + 2] - bands.pos[v0 + 2];
-        const fr = r / (col.R - 1);
+        const fr = col.sf[r];
         at(L, fr, pa); at(Rt, fr, pb);
         const ax = pb[0] - pa[0], ay = pb[1] - pa[1], az = pb[2] - pa[2];
         // along x up-the-profile (three.js axes), outward for a strip walked land-left.
