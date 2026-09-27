@@ -417,7 +417,7 @@ export function startScroll({ params }) {
         tick(dt);
         return cam.tau;
       },
-      pace, get descent() { return descent; }, cam,
+      pace, get descent() { return descent; }, cam, look,
     };
     // Until the recorder starts, the loader runs on the real clock.
     const idle = () => { if (!started) { updateLoader(1 / 60); if (!done.has('warm')) requestAnimationFrame(idle); } };

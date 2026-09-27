@@ -27,22 +27,28 @@ ${SKY_PARS}
 uniform sampler2D uClouds;   // clouds at half resolution: rgb their light and haze, a what passes
 uniform float uHasClouds;
 varying vec3 vDir;
-// The clouds are marched at half resolution; a bicubic B-spline read (four bilinear taps)
-// hides the texel grid along their edges.
+// The clouds are marched at half resolution; a Catmull-Rom read (five bilinear taps, the
+// corners left out) keeps their edges crisp without showing the texel grid (v9; a B-spline
+// before, which blurred them by about two pixels). Clamped, so it cannot ring past the edge.
 vec4 cloudsAt(vec2 uv) {
   vec2 size = vec2(textureSize(uClouds, 0));
-  vec2 p = uv * size - 0.5;
-  vec2 f = fract(p);
-  vec2 i = floor(p);
-  vec2 w0 = (1.0 - f) * (1.0 - f) * (1.0 - f) / 6.0;
-  vec2 w1 = (4.0 - 6.0 * f * f + 3.0 * f * f * f) / 6.0;
-  vec2 w3 = f * f * f / 6.0;
-  vec2 w2 = 1.0 - w0 - w1 - w3;
-  vec2 g0 = w0 + w1, g1 = w2 + w3;
-  vec2 h0 = (w1 / g0 - 1.0 + i + 0.5) / size;
-  vec2 h1 = (w3 / g1 + 1.0 + i + 0.5) / size;
-  return g0.y * (g0.x * texture(uClouds, vec2(h0.x, h0.y)) + g1.x * texture(uClouds, vec2(h1.x, h0.y)))
-       + g1.y * (g0.x * texture(uClouds, vec2(h0.x, h1.y)) + g1.x * texture(uClouds, vec2(h1.x, h1.y)));
+  vec2 p = uv * size;
+  vec2 c = floor(p - 0.5) + 0.5;
+  vec2 f = p - c;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 t0 = (c - 1.0) / size, t3 = (c + 2.0) / size, t12 = (c + w2 / w12) / size;
+  vec4 r = texture(uClouds, vec2(t12.x, t0.y)) * w12.x * w0.y
+         + texture(uClouds, vec2(t0.x, t12.y)) * w0.x * w12.y
+         + texture(uClouds, vec2(t12.x, t12.y)) * w12.x * w12.y
+         + texture(uClouds, vec2(t3.x, t12.y)) * w3.x * w12.y
+         + texture(uClouds, vec2(t12.x, t3.y)) * w12.x * w3.y;
+  float wsum = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  r /= wsum;
+  return vec4(max(r.rgb, 0.0), clamp(r.a, 0.0, 1.0));
 }
 void main() {
   vec3 d = normalize(vDir);
