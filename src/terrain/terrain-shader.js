@@ -658,7 +658,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
       float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
       float cav = 0.0;
-      float printW = (1.0 - smoothstep(0.05, 0.15, fp)) * mix(0.1, 1.0, trample);
+      // (Out to where a print is a few pixels: from the switchbacks, 50 m above the beach, the
+      // two reads bought nothing the mottle does not give.)
+      float printW = (1.0 - smoothstep(0.035, 0.08, fp)) * mix(0.1, 1.0, trample);
       vec3 tr = vec3(0.0);
       if (printW > 0.0) {
         // Twice, turned and scaled against each other and handed over by a noise, so the tile
