@@ -30,6 +30,9 @@ export const SURFACES = [
     avg: [0.379, 0.337, 0.281], target: [0.78, 0.725, 0.65] },
   { id: 'damp_beach_sand', scan: 2.0, tile: 2.0, use: 'firm sand where the swash runs, up close',
     avg: [0.425, 0.379, 0.301], target: [0.78, 0.725, 0.65] },
+  // v10: trodden dry sand, made at load (trample.js), not a scan: only its normal layer is used.
+  { id: 'trampled', gen: 'trampled', tile: 6, use: 'footprints and lumps in the dry sand, made in code',
+    avg: [0.5, 0.5, 0.5], target: [0.5, 0.5, 0.5] },
 ];
 
 // Wet sand: what water in the pores does to the sand's colour (a little darker in blue, as

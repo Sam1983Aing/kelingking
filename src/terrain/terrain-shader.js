@@ -47,6 +47,7 @@ varying float vFoot;      // metres out from the foot of a wall on the beach (0 
 #define L_GROUND 4
 #define L_SAND_DRY 5
 #define L_SAND_FIRM 6
+#define L_TRAMPLE 7
 
 ${SUN_SHADOW_GLSL}
 ${SWASH_GLSL}
@@ -105,18 +106,10 @@ float tfbm(vec2 p, float scale, float fp) {
 }
 
 // ---------------------------------------------------------------- trampled sand (v10)
-// Relief as a height (metres) and its exact slope, so the lighting can shade it: the scan
-// alone read as a flat, even surface from eye height (Sam, on the sand). From
-// beach-people-scale.jpg and beach-under-cliff.jpg: the dry sand is trodden all over, overlapping
-// oval pits with pushed-up rims, some fresh and crisp, some softened, some in lines where people
-// walked the same way; under that, lumps and hollows of a metre or so.
+// The scan alone read as a flat, even surface from eye height (Sam, on the sand). The footprints
+// and small lumps are a layer made at load (trample.js), read here like a scan; the lumps and
+// hollows of a metre or so are worked out here, with their slope.
 
-// Hash from Dave Hoskins, "Hash without Sine" (MIT): four numbers from a cell.
-vec4 th42(vec2 p) {
-  vec4 p4 = fract(vec4(p.xyxy) * vec4(0.1031, 0.1030, 0.0973, 0.1099));
-  p4 += dot(p4, p4.wzxy + 33.33);
-  return fract((p4.xxyz + p4.yzzw) * p4.zywx);
-}
 // Value noise and its slope.
 vec3 tnd(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -125,53 +118,6 @@ vec3 tnd(vec2 p) {
   float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
   return vec3(a + k1 * u.x + k2 * u.y + k4 * u.x * u.y, du * vec2(k1 + k4 * u.y, k2 + k4 * u.x));
 }
-// One layer of footprints: cells C metres across, a print in a share (amount) of them, turned
-// along trailD (a unit vector) where trail says people walked one way. Only the four cells nearest
-// the point can reach it (each print stays within the middle of its cell). Returns the height,
-// its slope (map east, north), and how far down into a print this is (0 to 1).
-vec4 prints(vec2 q, float C, float seed, float amount, float trail, vec2 trailD, float D) {
-  vec2 p = q / C;
-  vec2 ip = floor(p), f = p - ip;
-  vec2 o0 = step(0.5, f) - 1.0;
-  vec4 acc = vec4(0.0);
-  for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
-    vec2 cell = ip + o0 + vec2(float(i), float(j));
-    vec4 r = th42(cell + seed);
-    if (r.x > amount) continue;
-    vec2 d = (p - (cell + 0.25 + 0.5 * r.yz)) * C;
-    // (A direction straight from the hash, no trigonometry: this runs twelve times a pixel.)
-    vec2 dir = normalize(mix(vec2(r.w, fract(r.w * 7.13 + r.y)) - 0.5, trailD + (vec2(fract(r.w * 3.7), fract(r.w * 5.3)) - 0.5) * 0.35, trail) + 1e-4);
-    float ca = dir.x, sa = dir.y;
-    float u = ca * d.x + sa * d.y, v = -sa * d.x + ca * d.y;
-    // Older prints are shallower and wider, the sand slumped back into them; sizes from a
-    // child's to a big adult's; some only a heel or a toe (the other end is shifted onto it),
-    // some scuffed long.
-    float age = fract(r.x * 13.7 + r.w * 3.1);
-    float size = 0.7 + 0.55 * fract(r.y * 7.1 + r.z * 3.3);
-    float kind = fract(r.z * 11.3 + r.w * 5.9);
-    float grow = (1.0 + 0.35 * age) * size;
-    float a = 0.135 * grow * (kind > 0.85 ? 1.7 : kind < 0.2 ? 0.6 : 1.0), b = 0.058 * grow * (kind > 0.85 ? 1.2 : 1.0);
-    if (kind < 0.2) u += (kind < 0.1 ? 0.07 : -0.07) * size;
-    float r2 = (u * u) / (a * a) + (v * v) / (b * b);
-    if (r2 > 2.3) continue;
-    float rr = sqrt(max(r2, 1e-6));
-    // Deeper at the heel and the ball of the foot.
-    float depth = D * mix(1.0, 0.35, age) * (0.8 + 0.25 * abs(u / a));
-    float h = 0.0, dh = 0.0;
-    if (r2 < 1.0) { float k = 1.0 - r2; h = -depth * k * k; dh = 4.0 * depth * rr * k; }
-    // The rim of pushed-up sand.
-    float rimW = 0.2 + 0.15 * age, x = rr - 1.12;
-    float rim = 0.3 * depth * exp(-x * x / (rimW * rimW));
-    h += rim; dh += rim * (-2.0 * x / (rimW * rimW));
-    vec2 dr = vec2(u / (a * a), v / (b * b)) / rr;       // dr/du, dr/dv
-    vec2 g = dh * dr;                                    // along u, v
-    acc.x += h;
-    acc.yz += vec2(ca * g.x - sa * g.y, sa * g.x + ca * g.y);
-    acc.w = max(acc.w, r2 < 1.0 ? (1.0 - r2) * mix(1.0, 0.4, age) : 0.0);
-  }
-  return acc;
-}
-
 vec4 tData(vec2 g) {
   vec2 uv = (g - uExtent.xy) / uExtent.z;
   vec4 d = texture2D(uData, clamp(uv, 0.0, 1.0));
@@ -308,6 +254,20 @@ Surf topLayer(int layer, float tile, vec2 rot, vec2 off, bool withColor) {
     s.rough = m.r; s.ao = m.g;
   }
   return s;
+}
+
+// The trampled layer at this pixel: its tilt (world x, z) and how deep in a print (0..1), read
+// turned by rot and scaled, as topLayer reads a scan.
+vec3 trampleAt(vec2 rot, float scale, vec2 off) {
+  mat2 R = mat2(rot.x, rot.y, -rot.y, rot.x);
+  float tile = uTile[L_TRAMPLE] * scale;
+  vec2 q = R * triP.xz / tile + off;
+  // (Filtered a level sharper than the pixel asks for: averaged down, the prints go flat
+  // well before they are too small to see.)
+  vec3 n = textureGrad(uSurfNormal, vec3(q, float(L_TRAMPLE)), 0.5 * R * triDx.xz / tile, 0.5 * R * triDy.xz / tile).xyz;
+  vec2 t = n.xy * 2.0 - 1.0;
+  vec3 dn = vec3(rot.x, 0.0, -rot.y) * t.x + vec3(-rot.y, 0.0, -rot.x) * t.y;
+  return vec3(dn.x, dn.z, n.z);
 }
 
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -691,36 +651,31 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     reliefW = 0.0;
 #endif
     if (reliefW > 0.0) {
-      vec3 l1 = tnd(g * 0.85 + 2.1), l2 = fp < 0.3 ? tnd(g * 2.3 - 4.7) : vec3(0.5, 0.0, 0.0), l3 = fp < 0.15 ? tnd(g * 5.3 + 1.3) : vec3(0.5, 0.0, 0.0);
-      // (Lumps: 9 cm over a metre or so, 3 cm over half a metre, 1.2 cm over 20 cm; the
-      // trampled sand is lumpy at every scale; much gentler on the firm sand.)
+      vec3 l1 = tnd(g * 0.85 + 2.1);
+      // (Lumps: 9 cm over a metre or so; the smaller ones are in the trampled layer. Gentler on
+      // the firm sand.)
       float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
-      vec2 slope = (l1.yz * 0.85 * 0.13 + l2.yz * 2.3 * 0.05 + l3.yz * 5.3 * 0.014 * (1.0 - smoothstep(0.05, 0.15, fp))) * lumpA;
-      float lumpH = ((l1.x - 0.5) * 0.13 + (l2.x - 0.5) * 0.05) * lumpA;
-      float cav = 0.0, rimLit = 0.0;
-      float printW = 1.0 - smoothstep(0.035, 0.09, fp);
-#ifdef SKIP_PRINTS
-      printW = 0.0;
-#endif
+      vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
+      float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
+      float cav = 0.0;
+      float printW = (1.0 - smoothstep(0.05, 0.15, fp)) * mix(0.1, 1.0, trample);
+      vec3 tr = vec3(0.0);
       if (printW > 0.0) {
-        float amount = mix(0.08, 0.97, trample);
-        float trail = smoothstep(0.55, 0.75, tn(g * 0.05 + 12.0));
-        float trailA = tn(g * 0.012 + 4.0) * 6.2832;
-        vec2 trailD = vec2(cos(trailA), sin(trailA));
-        vec4 P1 = prints(g, 0.27, 3.0, amount, trail, trailD, 0.045 * mix(0.4, 1.0, trample));
-        // (The second layer where a print is more than a few pixels, the third, of old slumped
-        // prints between them, up close: the sand is pocked all over.)
-        vec4 P2 = fp < 0.06 ? prints(g + vec2(0.13, 0.29), 0.4, 17.0, amount * 0.9, trail * 0.5, trailD, 0.035 * mix(0.4, 1.0, trample)) : vec4(0.0);
-        vec4 P3 = fp < 0.025 ? prints(g + vec2(0.31, 0.07), 0.22, 29.0, amount, 0.0, trailD, 0.018 * trample) : vec4(0.0);
-        slope += (P1.yz + P2.yz * (1.0 - smoothstep(0.045, 0.06, fp)) + P3.yz * (1.0 - smoothstep(0.015, 0.025, fp))) * printW;
-        cav = max(max(P1.w, P2.w), P3.w * 0.5) * printW;
-        rimLit = clamp((P1.x + P2.x + P3.x) / 0.01, 0.0, 1.0) * printW;
+        // Twice, turned and scaled against each other and handed over by a noise, so the tile
+        // does not repeat.
+        vec3 T1 = trampleAt(vec2(1.0, 0.0), 1.0, vec2(0.0));
+        vec3 T2 = trampleAt(vec2(0.6, 0.8), 1.37, vec2(0.41, 0.13));
+        // (A narrow hand-over: two unrelated reliefs averaged half and half cancel out flat.)
+        tr = mix(T1, T2, smoothstep(0.47, 0.53, tn(g * 0.21 + 6.0)));
+        cav = tr.z * printW;
       }
       slope *= reliefW * 2.0;
-      sd.dn += vec3(-slope.x, 0.0, slope.y);
+      // (The layer stores the tilt as its sine, which flattens the steep walls of a print: 3.2
+      // brings them back to what the slope worked out in the shader gave.)
+      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * 3.2 * printW * reliefW;
       // In a print the sand is disturbed, a touch darker and duller, and the pit sees less sky;
       // the pushed-up rims are fresh dry grains, a touch lighter.
-      sd.color *= (1.0 - 0.06 * cav) * (1.0 + 0.05 * rimLit) * (1.0 + lumpH * 1.5 * reliefW);
+      sd.color *= (1.0 - 0.1 * cav) * (1.0 + lumpH * 1.5 * reliefW);
       sd.ao *= 1.0 - 0.4 * cav;
       // The pits shade the sun too: grains and the pit's own rim throw tiny shadows the
       // relief is too coarse to cast. And trodden sand seen at a low angle shows more of the
