@@ -26,9 +26,9 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
   const P = {
     N: 1024,
     rect: [-260, -230, 640],   // x0, y0, size (m): the beach, the head, the islet
-    foamLife: 22,              // seconds for lace to fade to a third
-    thin: 0.3,                 // solid foam thins toward lace at this rate (per second; v9, was 0.45:
-                               // whitewater stays white a little longer after the break)
+    foamLife: 18,              // seconds for lace to fade to a third
+    thin: 0.42,                // solid foam thins toward lace at this rate (per second; v9 had 0.3,
+                               // v10 went back toward v8's 0.45: there was too much white)
     sandLife: 25,
     wind: [-0.17, 0.1],        // surface drift (m/s east, north): about 3% of a 7 m/s wind toward 300 degrees
     eddies: 0.45,              // m/s

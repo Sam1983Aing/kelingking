@@ -869,7 +869,9 @@ void main() {
     if (fp > 0.05) lumpsMid = fbm3(pl * vec2(0.28, 0.5) + vec2(uTime * 0.12, 3.0)) * 0.65 + vnoise(pl * 0.9 - uTime * 0.25) * 0.35;
     float lz = mix(lumpsMid, lumps, smoothstep(0.2, 0.06, fp));
     // (Even the thickest leaves holes: churned water shows between the heaps.)
-    lace = max(lace, fresh * smoothstep(0.3, 0.52, lz + fresh * 0.12 + pattern * 0.2));
+    // (Up close the bubble walls cut the holes, so the white water breaks up into clumps with
+    // churned water between them rather than a smooth white mass, v10.)
+    lace = max(lace, fresh * smoothstep(0.42, 0.62, lz + fresh * 0.1 + pattern * mix(0.2, 0.38, 1.0 - smoothstep(0.02, 0.08, fp))));
   }
   // Far off, where the lace is smaller than a pixel, what it covers on average: thin lace is
   // mostly holes (v9: it was taken as 80% of the amount, a white carpet from the clifftop).
@@ -889,7 +891,7 @@ void main() {
   float capLace = smoothstep(1.0 - caps - 0.1, 1.0 - caps + 0.25, mix(pattern, 0.6, smoothstep(0.1, 0.6, fp)));
   foam = max(foam, capLace * smoothstep(0.02, 0.3, caps) * 0.9);
   // Thin old foam lets the water show through; sand in the break stains it beige.
-  vec3 foamAlb = mix(vec3(0.8), vec3(0.7, 0.66, 0.56), clamp(sim.g * simW * 0.5, 0.0, 0.4));
+  vec3 foamAlb = mix(vec3(0.74), vec3(0.66, 0.63, 0.54), clamp(sim.g * simW * 0.5, 0.0, 0.4));
   // Thick fresh foam is a heap of lumps that shade each other and face the sun or not;
   // old foam is a flat film with a little texture.
   // (Relief only where a pixel is small enough to show it: further off it is just noise.)
@@ -912,7 +914,7 @@ void main() {
   float midW = smoothstep(0.05, 0.2, fp);
   float gaps = midW * max(fresh, 0.35) * (1.0 - smoothstep(0.28, 0.62, mix(lumpsMid, brk, farW)));
   // Up close, the troughs between the heaps of the bore, in their own shade.
-  gaps = max(gaps, (1.0 - midW) * fresh * (1.0 - smoothstep(0.3, 0.6, lumpsMid)) * 0.7);
+  gaps = max(gaps, (1.0 - midW) * fresh * (1.0 - smoothstep(0.3, 0.6, lumps)) * 0.7);
   foamRad = mix(foamRad, mix(col, crevice, 0.55), gaps * 0.85);
   // Up close on the sheet, the bubbles themselves: bright rims and darker middles, a few
   // millimetres to a couple of centimetres across.
