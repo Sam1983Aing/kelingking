@@ -53,7 +53,6 @@ ${SWASH_GLSL}
 
 // Filled in while working out the surface, used later by the lighting.
 float tBanked = 0.0;
-float tDirectK = 1.0;   // (v10) what the sand's own relief takes off the direct sun
 float tShadow = 1.0;
 float tAO = 1.0;
 float tRough = 0.9;
@@ -328,6 +327,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   // Triplanar frame.
   triP = P; triDx = dFdx(P); triDy = dFdy(P);
+  vec3 Ng = normalize(cross(triDx, triDy));   // the triangle's own normal
   // Horizontal position along a face, for things that run along it.
   float wx = abs(N.x), wz = abs(N.z);
   float along = (wx * P.z - wz * P.x) / max(wx + wz, 1e-3);
@@ -351,11 +351,13 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // the path, the corners where a wall meets the beach), the triangle's decides which way the
   // texture is projected: from the smoothed one, a vertical bank got the view from above and
   // its texture ran down it in streaks.
-  vec3 Ng = normalize(cross(triDx, triDy));
   Ng *= sign(dot(Ng, N) + 1e-4);
   // (Half way, and the projections blended more gently there, so neighbouring facets do not
   // each get their own projection and show as a patchwork.)
   float disagree = smoothstep(0.9, 0.6, dot(Ng, N));
+#ifdef SKIP_NG
+  disagree = 0.0;
+#endif
   vec3 Nt = normalize(mix(N, Ng, 0.5 * disagree));
   // (Squares and fourth powers by multiplying: a pow with a varying exponent is dear.)
   vec3 a2 = Nt * Nt;
@@ -375,7 +377,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // enough to hold it, and the rock starts where it steepens, with a ragged contact.
   // (Less of the triangle's own than at first, v10: at 0.75 the sand's edge followed the
   // facets of the rock and drew them.)
-  float upG = abs(normalize(cross(triDx, triDy)).y);
+  float upG = abs(Ng.y);
   float upC = mix(up, upG, 0.4) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
   float sand = sandZone * smoothstep(0.64, 0.72, upC) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
   // Sand banked against the foot of the rock: up to a metre and more above the beach just in
@@ -416,11 +418,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
   // (v10: from 0.3..0.46: on the steep faces of the head it painted olive smears over the rock,
   // where the photos show white rock and the plants on it.)
-#ifdef SKIP_VEGSTEEP
-  float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
-#else
-  float veg = smoothstep(0.36, 0.52, up + (n1 - 0.5) * 0.25);
-#endif
+  // (A narrow band: where it is part rock and part cover both are worked out, the dearest
+  // thing this shader does.)
+  float veg = smoothstep(0.41, 0.47, up + (n1 - 0.5) * 0.25);
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
@@ -726,8 +726,10 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       // relief is too coarse to cast. And trodden sand seen at a low angle shows more of the
       // shaded sides of its lumps than it does from above (from the clifftop, looking down at
       // 25 degrees and more, this is 1: the viewpoint's sand stays as measured).
+      // (Into the occlusion, which the lighting already takes for the sun too: another value
+      // kept alive to the lighting costs this shader a lot, whatever it does.)
       vec3 Vs = normalize(cameraPosition - P);
-      tDirectK = (1.0 - 0.15 * cav) * mix(1.0, 0.84 + 0.16 * smoothstep(0.06, 0.4, Vs.y), trample * reliefW);
+      sd.ao *= (1.0 - 0.3 * cav) * mix(1.0, 0.62 + 0.38 * smoothstep(0.06, 0.4, Vs.y), trample * reliefW);
     }
     // Further off, where a print is smaller than a few pixels: trodden sand as a mottle of
     // slightly darker and lighter patches, so the beach still has a grain going into the distance.
@@ -775,7 +777,6 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   }
 
   tNormalW = normalize(N + s.dn * 0.9);
-  tDirectK = mix(1.0, tDirectK, sand);
   // Banked sand lies at its angle of repose (about 33 degrees), whatever the rock under it does.
   if (tBanked > 0.0) {
     vec2 oh = vec2(N.x, N.z);

@@ -135,7 +135,7 @@ export function createTerrain(atmosphereUniforms = {}, gradeUniforms = {}) {
         'getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= tShadow;'))
       // The sky light is cut by rock hanging overhead (the mesh builder's sky share, vRock.y);
       // the light bounced up from the ground below comes in under it.
-      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO * vRock.y * tLedgeSky;\n' + TERRAIN_BOUNCE + '\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4) * tDirectK;')
+      .replace('#include <aomap_fragment>', '#include <aomap_fragment>\nreflectedLight.indirectDiffuse *= tAO * vRock.y * tLedgeSky;\n' + TERRAIN_BOUNCE + '\nreflectedLight.directDiffuse *= mix(1.0, tAO, 0.4);')
       // The haze between the camera and the ground, in linear light before the tone curve.
       .replace('#include <tonemapping_fragment>', 'gl_FragColor.rgb = gl_FragColor.rgb * vAp.a + vAp.rgb;\n#include <tonemapping_fragment>')
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + TERRAIN_LABEL));
