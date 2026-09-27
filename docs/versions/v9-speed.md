@@ -183,3 +183,34 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   as one instanced draw per species and variant, all of them every frame (off-screen ones stop
   in the vertex shader). A grid of chunks culled on the CPU would save the vertex work, which
   measured as small here.
+
+**From v8 (the scroll).**
+
+- **Loading is the slow part now.** The landing page takes about 14 to 16 s from opening to the
+  loader lifting (headless Chrome, M1 Max): the terrain in the worker (3.3 to 3.7 s at q=1024,
+  plus 1.3 s for the mesh), growing the plants on the main thread (2.2 to 2.6 s, during which
+  the loader's counter freezes), 26 MB of textures, then every shader compiling while the
+  loader draws one frame at fifteen points down the path (`warmUp()` in `scroll.js`, which
+  also times four of them to pick the pixel ratio). Shipping the generated terrain, and growing
+  the plants in a worker, would take most of it away. One warm-up frame on the sand once took
+  96 ms (a first use of something there, never seen again).
+- **Frame times along the path** (`tools/path-bench.mjs`, 21 cameras, 1400 x 788 at pixel
+  ratio 1): 5 to 13 ms a frame, still or moving. The slowest stretch is the start of the
+  flight (tau 0 to 0.5, 10 to 13 ms), then the water's edge at the end. The page itself held
+  60 fps scrolling top to bottom at 2268 x 1417 (pixel ratio 1.5; `--pace --dpr=2
+  --size=1512x945`), 3 frames of 2,479 over 25 ms, none over 50. The same as v7 drawing the
+  same cameras (median +1 to +3%, inside the noise).
+- **The standalone build has new dependencies**: GSAP 3.15 (`index.js` and `SplitText.js` as
+  ES modules), Lenis 1.3.26 (`dist/lenis.mjs`, `export { Lenis as default }`), and the fonts
+  from Google Fonts (Instrument Serif, Inter). `scroll.js` imports `buildPanel` from
+  `debug.js` for `?debug`, which pulls in lil-gui and OrbitControls, and `debug.js` has the
+  tools' dynamic imports (`measure.js`, `fit.js`); a standalone build can leave the tools out.
+  No top-level await was added.
+- **Phones have not run it.** The layout was checked at 390 x 844 in headless Chrome. The scene
+  is the desktop's: 3.4 M terrain triangles at q=1024 and 215,000 plants. A phone will need a
+  lighter scene (q=512, fewer and simpler plants), picked before loading.
+- **The opening is limited by the terrain's extent.** It is 1.6 km across, so on a wide screen
+  the flight has to start low enough that the frame stays on it: about 670 m at 16:9 and 570 m
+  at 21:9 (`startHeight()` in `path.js`), not the overview's 1.1 km. A coarse ring of far
+  terrain around the model (the rest of the island) would let it start higher, and would also
+  give the far coast the drone photos have.

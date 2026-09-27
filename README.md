@@ -24,8 +24,8 @@ moving on. The plan, the rules and a brief per version are in
 | v5 | Sand and the waterline | done |
 | v6 | Trail and stairs | done |
 | v7 | Plants | done |
-| v8 | The scroll descent | next |
-| v9 | Speed and the shareable build | |
+| v8 | The scroll descent | done |
+| v9 | Speed and the shareable build | next |
 
 ## Run it
 
@@ -33,12 +33,58 @@ moving on. The plan, the rules and a brief per version are in
 python3 -m http.server 5178
 ```
 
-Then open http://localhost:5178. It needs a local server (module workers do not run from
-`file://`). A standalone single-file build comes later.
+Then open http://localhost:5178: the landing page, the scroll from high over the bay down
+to the water's edge (v8). It needs a local server (module workers do not run from `file://`).
+A standalone single-file build comes later (v9).
 
-Keys: `1` to `9` switch shots, `O` photo overlay, `D` difference blend, `L` outline mode,
-`F` free camera, `C` contour lines. The panel on the right tunes the camera and the terrain
-live.
+The tools that match the scene to photos are the same page with a shot in the URL:
+http://localhost:5178/?shot=viewpoint. There, keys `1` to `9` switch shots, `O` photo overlay,
+`D` difference blend, `L` outline mode, `F` free camera, `C` contour lines, and the panel on the
+right tunes the camera and the terrain live. On the landing page the panel, a readout and keys
+`1` to `6` (the stops) only appear with `?debug`.
+
+## How the scroll works
+
+v8 made the page itself (`src/scroll/`, `index.html`). The scene is `src/app.js`, shared with
+the tools (`src/debug.js`), which `src/main.js` picks from the URL.
+
+- **One path, one number.** `path.js` turns the scroll into `tau`, from 0 over the bay to 5 at
+  the water, through six stops: the bay from the air, the clifftop viewpoint, the ridge
+  (`trailTop`), the switchbacks (`trailLow`), the foot of the path, the water's edge. From 0
+  to 1 the camera flies: it turns while still looking straight down, then tilts up and drops
+  onto the platform along the viewpoint's own line of sight. From 1 on it walks v6's walk line
+  at eye height and crosses the sand to where the `swash` frame stands.
+- **It looks at the place, not at its feet.** The path swings through every compass
+  direction on the switchbacks, but the head stays within about 20 degrees of south-west from
+  all of it, so the camera looks at the head (and, past the hairpin, at the south end of the
+  beach) while it walks. Pitch and lens are keyframed by metres walked and smoothed over a few
+  metres. `node tools/descent.mjs` prints how fast it moves and turns per screen of scroll.
+- **Pacing** is a monotone curve through `PACE` knots (screens of scroll against `tau`), with
+  beats at the stops where the camera slows almost to a stop while the words come in. About
+  15 screens top to bottom.
+- **The page layer** (`scroll.js`, `page.css`): Lenis for a weighted smooth scroll, GSAP for
+  the words (lines rising out of masks, SplitText), all driven from GSAP's ticker in one loop
+  with the camera and the frame. Each block of words shows while the camera's `tau` is in its
+  `data-tau` range in `index.html`, so the words follow the camera, not the raw scroll. The
+  top bar gives the camera's live latitude, longitude and height, and a rule down the right
+  edge draws as the camera goes down.
+- **Loading.** The loader counts through the real stages (terrain in the worker, textures,
+  growing the plants, the path), then draws a frame at fifteen points down the path behind
+  it, so no shader compiles and no texture uploads the first time the camera gets somewhere,
+  and times a few of them to pick the pixel ratio (aiming for 13 ms a frame).
+- **Phones.** The lens widens on a tall screen, the flight starts higher so the frame stays on
+  the modelled ground, the words sit at the bottom and a line across the top replaces the rule.
+
+```bash
+node tools/descent.mjs                 # the path's speeds, turn rates and clearance per stretch
+node tools/scroll-clip.mjs             # a recording of the whole page, frame by frame (1080p)
+node tools/scroll-clip.mjs --phone     # the same at 390 x 844
+node tools/path-bench.mjs              # frame times all the way down, against the last version
+node tools/path-bench.mjs --pace       # real frame pacing while the page scrolls itself
+```
+
+Landing page switches: `debug`, `at=2.5` (start at that `tau`), `notext`, `record` (for
+`scroll-clip.mjs`), and every scene switch (`pr=`, `q=`, `hour=`, ...).
 
 ## How the terrain is made
 
@@ -287,4 +333,5 @@ caught.
   `node tools/prepare-assets.mjs` makes the 24 MB of textures in `assets/textures/`. See
   `assets/textures/CREDITS.md`. The plants are not scans: they are grown in code at load
   (`src/veg/grow/`, v7). v1 to v6 used three Poly Haven tree scans.
-- three.js and lil-gui load from jsDelivr.
+- three.js, lil-gui, GSAP and Lenis load from jsDelivr, the fonts (Instrument Serif, Inter)
+  from Google Fonts.

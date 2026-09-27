@@ -1409,3 +1409,163 @@ are taken as over, and handed to v9 with the measurements.
   for geometry from the carve's mask).
 - The grass stops at 15 m, where the ground's straw takes over. From low angles the line
   between them can show.
+
+## v8: the scroll descent (2026-09-26)
+
+The landing page itself. `index.html` is now the page: scroll, and the camera comes down from
+high over the bay, lands on the clifftop platform, walks the steps, the ridge and the
+switchbacks, crosses the sand and stops at the water's edge in front of the break. The tools
+that match the scene to photos are the same page with a shot in the URL (`?shot=viewpoint`).
+
+### The split
+
+`main.js` had grown to 760 lines of scene, tools and loop together. It is three files now:
+`app.js` (the scene, its worker, the work done every frame, and nothing about where the camera
+is or how big the canvas is), `debug.js` (the shots, the photo overlay and outline, the free
+camera, the panel, the keys and the handles the capture scripts use) and `scroll/` (the page).
+`main.js` picks one from the URL, and `index.html` sets a class on `<html>` from the same test
+before anything draws, so neither flashes the other's layout. The hero frames came out
+pixel-identical before and after the split (PSNR infinite on three of them), which is what
+said it was a move and not a change.
+
+### The way down
+
+`src/scroll/path.js` turns the scroll into one number, `tau`, from 0 over the bay to 5 at the
+water, through six stops. It is plain maths with no three.js in it, so node can check it
+(`tools/descent.mjs`).
+
+- **The flight** circles a point that slides from the bay to a spot 250 m out along the
+  viewpoint's line of sight. The camera turns while it still looks straight down (the picture
+  turns about its middle, which does not read as a pan), then tilts up to the horizon as it
+  drops, and arrives on the platform exactly in the viewpoint frame, having come in along the
+  line it looks down. The distance runs on a log scale, so the descent feels even from 700 m
+  to 150.
+- **The walk** follows v6's walk line at eye height, then a curve across the sand to where the
+  `swash` frame stands. The look was the question. Following the path's heading would spin
+  the view on every switchback (the path turns through every compass direction there). But
+  from anywhere on the path the head's summit lies within about 20 degrees of south-west, so
+  the camera looks at the head while it walks, and past the hairpin at the south end of the
+  beach. The yaw changes by less than 30 degrees per screen of scroll from the platform to
+  the sand. Pitch and lens are keyframed by metres walked; all three are smoothed over 3 m.
+- **Pacing** is a monotone cubic through `PACE` knots (screens of scroll against `tau`): no
+  overshoot, so the camera never backs up, and pairs of knots close in `tau` make beats where
+  it slows almost to a stop while the words come in. About 17 screens top to bottom.
+- **Comfort.** Roll is always zero. Hairpins are rounded off (the camera cuts up to a metre
+  inside a 1.2 m bend, as a gimbal would), and on the switchbacks the eye is held a metre
+  higher, over the tall verge. `descent.mjs` checks the least clearance over the ground (1.45
+  m, at the stairs) and how far the camera ever leaves the path (under a metre).
+
+### The page
+
+- **One loop.** GSAP's ticker drives Lenis (the weighted smooth scroll), then the camera, the
+  words and the frame, so the scene and the page cannot disagree by a frame. ScrollTrigger is
+  not used, although Sam's conventions name it: every animation here keys off the camera's
+  place on the path, which follows the scroll through a little extra smoothing (so a keyboard
+  jump or a drag of the scrollbar still glides), and ScrollTrigger only knows the scroll.
+- **Words** (`index.html`, one `data-tau` range per block) show while the camera is in their
+  range: the line rises out of a mask (SplitText), the label, number and body follow, and the
+  line drifts a little across the screen while it is up (the number the other way). The top
+  bar gives the camera's live latitude, longitude and height; a rule down the right edge draws
+  as the camera goes down, a dot per stop. The end is a cream card over the last frame, with
+  the credits (OpenStreetMap's attribution among them) and a button that climbs the whole way
+  back up in about eight seconds, the words out of the way until the top.
+- **The copy is a draft** for Sam: the title, five short chapters (the air, the clifftop, the
+  ridge, the switchbacks, the sand) and the end card.
+- **Loading.** The loader counts through the real stages (the terrain from the worker, the
+  textures, growing the plants, the path), creeping between them. Then, behind it, one frame
+  at fifteen points down the path, so every shader compiles and every texture uploads before
+  the page shows, and four of them timed to pick the pixel ratio (aiming at 13 ms a frame).
+  It lifts from black onto the bay and the title comes up line by line.
+- **Phones.** The lens widens on a tall screen (not all the way, or the head shrinks to a
+  speck), the words sit at the bottom over a darker scrim, and a line across the top stands in
+  for the rule. The layout was checked at 390 x 844; nothing has run on a real phone.
+- **Reduced motion** keeps the camera (it is the content) but drops the smooth scroll and
+  shows the words without animating them.
+- **`?debug`** is the only way to the panel, the readout and the keys on the page.
+
+### What went wrong
+
+- **The switchbacks looked into the slope.** The first look keys matched the hero frames:
+  `trailLow` looks 40 degrees down into the overhang. But that photo was taken from over the
+  beach (v6); from the path the same look fills the frame with the slope and the grass. And
+  past the hairpin the path runs north along the face above the beach, where looking at the
+  head means looking along the slope. Fixed by turning the view to the south end of the beach
+  there, looking out rather than down (about -24 degrees), and lifting the eye a metre.
+- **The edge of the world at the start.** From 1.1 km on a 16:9 screen the frame is wider than
+  the 1.6 km of modelled ground, and turning the view put a straight edge of coast in the top
+  corner. The flight now starts as high as the screen's shape allows with every corner on the
+  ground: about 670 m on 16:9, 810 m on a phone. So the page opens closer than the `overview`
+  frame, and turned south-east up (which put the head beside the title, not under it).
+- **Leaves in the lens.** On the switchbacks the camera walks under hanging scrub. Nudging the
+  camera sideways did nothing useful: the scrub hangs in a curtain 1.7 m out from where it is
+  rooted and up to 5 m wide, over the path. So a plant whose crown the lens is inside, or
+  within a fifth of a radius of, now dissolves with the same stipple its hand-overs use
+  (`near.js`, `LENS`). It only fires when the camera is in a plant, so the hero frames did not
+  change (all nine hero frames match v7's).
+- **Hairpins whipped.** A recording's frame-to-frame differences put the biggest jumps on the
+  lower switchbacks: the camera ran round 1.2 m bends with the steps half a metre away. Rounder
+  bends and a screen more of scroll for the switchbacks halved them.
+- **A 1,800 degree spin** at the viewpoint, caught by `descent.mjs` before it was ever drawn:
+  the look was unwrapped from `atan2`'s -139 degrees and blended with the viewpoint's 220.7.
+- **The accent word vanished on the sand.** Terracotta over bright sand has no contrast, so the
+  sand chapter is dark ink on the light scene, the light side of Sam's cream and ink.
+- **The title showed through the loader** as it faded. The words now wait until it has mostly
+  lifted.
+
+### Tools
+
+- `tools/descent.mjs`: the path worked out in node from the same heightfield: speed, turn,
+  tilt and zoom rates per screen of scroll, clearance and distance from the path, per stretch.
+  `--cams=N` or `--taus=` write cameras for `__app.contactSheet`.
+- `tools/scroll-clip.mjs`: the page recorded frame by frame on the recording's clock (the page
+  is stepped through `?record`, GSAP's own clock included), so the sea, the plants, the camera
+  and the words move as they would at 30 fps however long a frame takes here. `--phone` for
+  390 x 844, `--from= --to=` for part of it. `ffmpeg`'s scene score over its output finds pops.
+- `tools/path-bench.mjs`: frame times at 21 cameras down the path, this build against the last
+  tag side by side in one browser (still, and with the clock and camera moving); `--pace`
+  times the real page scrolling itself.
+- `__scroll` on the page: `jumpTo(screens)`, `pace`, `descent`, `cam`.
+
+### Speed
+
+v8 draws nothing new, so the question was whether the path finds somewhere slow that the
+hero frames miss, and whether the page plays smoothly.
+
+- **Along the path** (`path-bench.mjs`, 21 cameras from tau 0 to 5, 1400 x 788, pixel ratio 1,
+  side by side with v7 drawing the same cameras, 6 rounds): 5.3 to 11.6 ms a frame still, 6.8
+  to 12.9 ms with the clock and the camera moving (the sea's passes, the sky tables, the clouds
+  and the near plants all redone every frame). The same as v7: median +3% still and +1%
+  moving, every point within noise. The slowest stretch is the start of the flight (tau 0 to
+  0.5, 10 to 13 ms), then the water's edge at the end.
+- **The page itself** (`path-bench.mjs --pace`, 1512 x 945 at 2x, the canvas 2268 x 1417 at
+  pixel ratio 1.5, scrolling itself top to bottom in 40 s): 2,479 frames, median interval
+  16.7 ms, 99% under 20.5 ms, 3 over 25 ms and none over 50. No hitches when the camera first
+  reaches the switchbacks or the sand: the warm-up behind the loader had already drawn there.
+- **The hero frames**: `hero.mjs` put four over budget and one 42% faster, on frames that are
+  bit-identical to v7's (eight of nine; `sideFromSea` differs in a handful of pixels); side by side (`ab.mjs --hero`, 16 rounds) all within budget, -7%
+  to +10%.
+- **Loading** is now the slowest part of the experience: 14 to 16 s before the loader lifts.
+  The breakdown is in the v9 brief.
+
+### Still weak
+
+- **The copy is mine, not Sam's**, and unapproved. It is all in `index.html`.
+- **Loading takes 14 to 16 s** (the breakdown is in the v9 brief). The loader makes it bearable,
+  it does not make it short.
+- **Nothing has run on a real phone.** The layout holds at 390 x 844; the scene is the
+  desktop's, which a phone will struggle with.
+- **The switchbacks are the weakest stretch to look at.** Close slopes of ground texture and
+  grass, steps sweeping past at arm's length. Hanging scrub that the lens goes into dissolves,
+  and if the scroll stops in the middle of that (a fifth of a crown radius) the stipple shows.
+- **The opening is not the `overview` frame**: 670 m and south-east up on 16:9, not 1.1 km
+  and north up, because the modelled ground is only 1.6 km across.
+- **Found along the path, belonging to versions that are done** (left as they are, the camera
+  steers round them):
+  - v6: the side of the viewpoint's concrete pad reads as a smooth pale block from a metre
+    away. The camera now stands higher leaving the platform, so it passes below the frame.
+  - v7: hanging scrub grows on the cut bank above the hairpin where the path leaves the
+    ridge, six plants up to 5 m tall hanging over the tread. The scatter keeps plants off the
+    path, but not what hangs from beside it.
+  - v7's worry that the hand-over bands would shimmer when the camera sweeps them across a
+    slope: I did not see it in the recordings at 1080p, but did not hunt for it frame by
+    frame either.

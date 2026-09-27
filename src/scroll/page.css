@@ -1,0 +1,146 @@
+/* The landing page (v8): a fixed 3D stage, a tall empty track that scrolls, and words laid
+   over the stage that come and go with the camera's place on the way down (scroll.js).
+
+   Direction
+     Mood       quiet, sun-bleached, a long walk down. Slow and weighted.
+     Palette    cream text over the scene, near-black loader and end, one terracotta accent
+     Type       Instrument Serif for the lines, Inter for the small labels
+     Motion     one ease (expo.out), reveals of 1.1 s, a heavy smooth scroll */
+
+:root {
+  --ink: #12110e;
+  --cream: #f3efe6;
+  --cream-dim: rgba(243, 239, 230, 0.78);
+  --accent: #d9774f;          /* terracotta, lifted to read over sea and sky */
+  --accent-deep: #b85a36;     /* on the dark loader */
+  --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Inter", -apple-system, system-ui, sans-serif;
+  --gutter: clamp(20px, 5.5vw, 88px);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow: 0 1px 2px rgba(10, 9, 7, 0.25), 0 2px 28px rgba(10, 9, 7, 0.35);
+}
+
+/* ------------------------------------------------------------ the tools (?shot=...) */
+
+html.tool, html.tool body { margin: 0; height: 100%; background: #0d0f11; overflow: hidden; font: 12px/1.4 -apple-system, system-ui, sans-serif; color: #ddd; }
+html.tool #stage { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+html.tool #stage canvas { display: block; }
+html.tool #ref, html.tool #outline { position: absolute; top: 0; left: 0; pointer-events: none; }
+html.tool #ref { opacity: 0; }
+html.tool #outline { display: none; }
+html.tool #status { position: fixed; left: 10px; bottom: 8px; opacity: .8; pointer-events: none; white-space: pre; text-shadow: 0 1px 2px #000; }
+html.tool .capture #status { display: none; }
+html.tool .page { display: none; }
+
+/* ------------------------------------------------------------ the landing page */
+
+html.scroll { background: var(--ink); }
+html.scroll body { margin: 0; background: var(--ink); color: var(--cream); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+html.scroll #ref, html.scroll #status:empty { display: none; }
+html.scroll #stage { position: fixed; inset: 0; width: 100vw; height: 100lvh; overflow: hidden; }
+html.scroll #stage canvas { display: block; width: 100% !important; height: 100% !important; }
+html.scroll #status { position: fixed; left: 10px; bottom: 8px; z-index: 30; font: 11px/1.4 ui-monospace, monospace; color: #fff; white-space: pre; text-shadow: 0 1px 2px #000; pointer-events: none; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+
+html.scroll.loading { overflow: hidden; }
+.track { position: relative; width: 1px; pointer-events: none; }
+.notext .words, .notext .hud, .notext .rail, .notext .scrim { display: none !important; }
+
+.label { margin: 0; font: 500 11px/1.3 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; }
+.display { margin: 0; font: 400 clamp(2.5rem, 1.4rem + 3.6vw, 5.4rem)/0.98 var(--serif); letter-spacing: -0.012em; text-wrap: balance; }
+.display em { font-style: italic; color: var(--accent); }
+.body { margin: 0; font: 400 clamp(0.95rem, 0.9rem + 0.2vw, 1.05rem)/1.55 var(--sans); color: var(--cream-dim); max-width: 31rem; text-wrap: pretty; }
+/* Masks for the line reveals (SplitText). */
+.line-mask { overflow: clip; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+
+/* A soft dark corner behind the words, so they read over sand and sky alike. */
+.scrim { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0;
+  background: radial-gradient(120% 90% at 0% 100%, rgba(12, 11, 9, 0.62) 0%, rgba(12, 11, 9, 0.28) 38%, rgba(12, 11, 9, 0) 68%); }
+
+/* ------------------------------------------------------------ loader */
+
+.loader { position: fixed; inset: 0; z-index: 50; background: var(--ink); display: grid; place-content: center; justify-items: center; gap: 22px; text-align: center; padding: 0 var(--gutter); }
+.loader .label { color: var(--cream-dim); }
+.loader__title { margin: 0; font: 400 clamp(3.4rem, 2rem + 7vw, 8.5rem)/0.9 var(--serif); letter-spacing: -0.015em; }
+.loader__bar { width: min(340px, 60vw); height: 1px; background: rgba(243, 239, 230, 0.16); overflow: hidden; }
+.loader__bar span { display: block; height: 100%; background: var(--accent-deep); transform-origin: 0 50%; transform: scaleX(0); }
+.loader__step { margin: 0; display: flex; gap: 14px; align-items: baseline; justify-content: center; font: 500 11px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--cream-dim); min-height: 1em; }
+.loader__count { font-variant-numeric: tabular-nums; color: var(--cream); }
+.loader__fail { display: none; max-width: 30rem; font: 400 15px/1.5 var(--sans); color: var(--cream-dim); letter-spacing: 0; text-transform: none; }
+.loader.failed .loader__fail { display: block; }
+.loader.failed .loader__step, .loader.failed .loader__bar { display: none; }
+
+/* ------------------------------------------------------------ the frame around the scene */
+
+.hud { position: fixed; z-index: 10; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: max(18px, env(safe-area-inset-top)) var(--gutter) 0; pointer-events: none; text-shadow: var(--shadow); opacity: 0; }
+.hud a { pointer-events: auto; color: inherit; text-decoration: none; }
+.hud__mark { font: 400 22px/1 var(--serif); letter-spacing: 0; }
+.hud__where { margin: 0; display: flex; gap: 14px; font: 500 11px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; font-variant-numeric: tabular-nums; color: var(--cream); }
+.hud__alt { color: var(--accent); min-width: 6.5em; text-align: right; }
+
+/* The altimeter: a rule that draws down the right edge as the camera goes down, a dot per
+   stop, the height beside the marker. */
+.rail { position: fixed; z-index: 10; right: var(--gutter); top: 22vh; bottom: 22vh; width: 1px; pointer-events: none; opacity: 0; }
+.rail__line, .rail__fill { position: absolute; left: 0; top: 0; bottom: 0; width: 1px; }
+.rail__line { background: rgba(243, 239, 230, 0.35); }
+.rail__fill { background: var(--accent); transform-origin: 50% 0; transform: scaleY(0); }
+.rail__stop { position: absolute; left: -3px; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%; background: var(--ink); box-shadow: inset 0 0 0 1px rgba(243, 239, 230, 0.7); transition: background 0.6s var(--ease), box-shadow 0.6s var(--ease); }
+.rail__stop.passed { background: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.rail__mark { position: absolute; left: 0; top: 0; width: 13px; height: 1px; margin-left: -6px; background: var(--cream); }
+.rail__mark span { position: absolute; right: 22px; top: -6px; font: 500 11px/1 var(--sans); letter-spacing: 0.14em; white-space: nowrap; font-variant-numeric: tabular-nums; text-shadow: var(--shadow); }
+
+/* ------------------------------------------------------------ the words */
+
+.words { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+.words > * { position: absolute; visibility: hidden; }
+.chapter { left: var(--gutter); bottom: clamp(40px, 11vh, 132px); max-width: min(46rem, calc(100vw - 2 * var(--gutter) - 60px)); display: grid; gap: 18px; text-shadow: var(--shadow); }
+.chapter__head { display: flex; align-items: baseline; gap: 18px; }
+.chapter__num { font: italic 400 clamp(2.4rem, 1.8rem + 2vw, 3.6rem)/0.8 var(--serif); color: var(--accent); }
+.chapter .label { color: var(--cream); opacity: 0.9; }
+
+.hero { left: var(--gutter); bottom: clamp(48px, 13vh, 150px); max-width: min(52rem, calc(100vw - 2 * var(--gutter))); display: grid; gap: 22px; text-shadow: var(--shadow); }
+.hero .display { font-size: clamp(3rem, 1.6rem + 5.2vw, 7.4rem); }
+.cue { display: flex; align-items: center; gap: 14px; margin: 10px 0 0; font: 500 11px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; }
+.cue i { display: block; width: 56px; height: 1px; background: currentColor; transform-origin: 0 50%; animation: cue 2.6s var(--ease) infinite; }
+@keyframes cue { 0% { transform: scaleX(0); } 55% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1); opacity: 0; } }
+
+/* The end: over the last frame, on a cream card (the one light surface on the page). */
+.end { left: var(--gutter); bottom: clamp(24px, 6vh, 72px); }
+.end__card { background: rgba(243, 239, 230, 0.94); color: var(--ink); padding: clamp(24px, 3.2vw, 44px); max-width: 36rem; display: grid; gap: 16px; box-shadow: 0 30px 80px -30px rgba(10, 9, 7, 0.55); }
+.end__card .label { color: rgba(18, 17, 14, 0.62); }
+.end__card .display { font-size: clamp(2.6rem, 1.6rem + 3.4vw, 5rem); }
+.end__card .display em { color: var(--accent-deep); }
+.end__card .body { color: rgba(18, 17, 14, 0.72); }
+.end__actions { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin-top: 6px; }
+.button { pointer-events: auto; appearance: none; border: 0; cursor: pointer; background: var(--ink); color: var(--cream); padding: 15px 22px 14px; font: 500 11px/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; transition: background 0.5s var(--ease); }
+.button:hover, .button:focus-visible { background: var(--accent-deep); }
+.end__credits { pointer-events: auto; margin: 10px 0 0; padding-top: 16px; border-top: 1px solid rgba(18, 17, 14, 0.14); font: 400 11.5px/1.6 var(--sans); color: rgba(18, 17, 14, 0.6); }
+.end__credits a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+/* Over bright sand: dark ink, no scrim (the light-surface side of the page). */
+.chapter.on-light { color: var(--ink); text-shadow: none; }
+.chapter.on-light .label { color: rgba(18, 17, 14, 0.7); }
+.chapter.on-light .body { color: rgba(18, 17, 14, 0.74); }
+.chapter.on-light .display em, .chapter.on-light .chapter__num { color: var(--accent-deep); }
+
+/* ------------------------------------------------------------ small screens */
+
+@media (max-width: 720px) {
+  .hud__where .hud__lon, .hud__where .hud__lat { display: none; }
+  .rail { right: auto; bottom: auto; left: 0; top: 0; width: 100vw; height: 2px; }
+  .rail__line, .rail__fill { top: 0; bottom: auto; left: 0; right: 0; width: auto; height: 2px; }
+  .rail__line { background: rgba(243, 239, 230, 0.2); }
+  .rail__fill { transform-origin: 0 50%; transform: scaleX(0); }
+  .rail__stop, .rail__mark { display: none; }
+  .chapter { bottom: max(28px, calc(env(safe-area-inset-bottom) + 20px)); gap: 12px; }
+  .chapter__head { gap: 12px; }
+  .hero { bottom: max(36px, calc(env(safe-area-inset-bottom) + 24px)); }
+  .end { right: var(--gutter); bottom: max(16px, env(safe-area-inset-bottom)); }
+  .scrim { background: linear-gradient(to top, rgba(12, 11, 9, 0.66) 0%, rgba(12, 11, 9, 0.3) 34%, rgba(12, 11, 9, 0) 58%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cue i { animation: none; transform: scaleX(1); }
+}
