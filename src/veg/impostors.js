@@ -27,13 +27,13 @@ uniform vec4 uWindShape;      // as the 3D plant's (plant-material.js)
 ${WIND_GLSL}
 varying vec2 vUv;
 varying vec3 vCard;           // the point on the card, before it is nudged toward the camera
-varying vec3 vFrameDir;       // world direction the chosen frame was baked from
+varying mediump vec3 vFrameDir;       // world direction the chosen frame was baked from
 varying vec3 vFoot;
-varying float vYaw;
-varying float vScale;
-varying float vTint;
-varying float vFade;
-varying float vGust;
+varying mediump float vYaw;
+varying mediump float vScale;
+varying mediump float vTint;
+varying mediump float vFade;
+varying mediump float vGust;
 ${AERIAL_VERT_PACKED}
 #include <common>
 
@@ -105,13 +105,13 @@ uniform float uDensity;
 uniform vec2 uLeafLook;       // how much light the leaves let through, gloss
 varying vec2 vUv;
 varying vec3 vCard;
-varying vec3 vFrameDir;
+varying mediump vec3 vFrameDir;
 varying vec3 vFoot;
-varying float vYaw;
-varying float vScale;
-varying float vTint;
-varying float vFade;
-varying float vGust;
+varying mediump float vYaw;
+varying mediump float vScale;
+varying mediump float vTint;
+varying mediump float vFade;
+varying mediump float vGust;
 uniform float uWindTime;
 ${SUN_SHADOW_GLSL}
 ${GUST_SHEEN_GLSL}
@@ -144,10 +144,6 @@ void main() {
   float crisp = (c.a - 0.45) / max(fwidth(c.a), 1e-3) + 0.5;
   float alpha = mix(crisp, c.a * 1.6, smoothstep(0.5, 2.0, mip));
   if (alpha < 0.02) discard;
-#ifdef DBG_IMPFLAT
-  gl_FragColor = vec4(c.rgb * 0.3, clamp(alpha, 0.0, 1.0));
-  return;
-#endif
   vec4 dt = texture2D(uData, vUv);
   vec3 N = rotY(octDecode(dt.rg), vYaw);
   // Where this pixel really is: in front of or behind the card, from the baked depth.
@@ -200,9 +196,7 @@ export function createImpostors(shared) {
         uLeafLook: { value: new THREE.Vector2(info.trans ?? 0.3, info.gloss ?? 0.6) },
       },
       vertexShader: VERT, fragmentShader: FRAG,
-      // (Switches for finding what costs what: vegFlags=IMPFLAT,IMPNOA2C on the page.)
-      defines: Object.fromEntries((new URLSearchParams(location.search).get('vegFlags') || '').split(',').filter((f) => f.startsWith('IMP')).map((f) => ['DBG_' + f, 1])),
-      alphaToCoverage: !(new URLSearchParams(location.search).get('vegFlags') || '').includes('IMPNOA2C'),
+      alphaToCoverage: true,
     });
     const geo = new THREE.InstancedBufferGeometry();
     geo.index = quad.index;

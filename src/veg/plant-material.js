@@ -34,8 +34,8 @@ uniform vec3 uExtent;
 ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
 ${FOLIAGE_LIGHT_GLSL}
-varying vec3 vDiffE;         // light falling on the leaf (times albedo / pi gives its colour)
-varying vec3 vSpec;          // its sheen
+varying mediump vec3 vDiffE;         // light falling on the leaf (times albedo / pi gives its colour)
+varying mediump vec3 vSpec;          // its sheen
 varying vec4 vAp;
 // (The haze per vertex, as AERIAL_VERT_PACKED does it; SKY_PARS already declares its inputs.)
 vec4 aerialSliceA(float k, vec2 uv) {
@@ -68,15 +68,15 @@ uniform float uDensity;      // extinction in the crown, per metre
 uniform vec4 uWindShape;     // sway frequency, stiffness, branch amplitude (m), branch frequency
 uniform vec2 uLeafWind;      // leaf flutter amplitude (m), frequency
 ${WIND_GLSL}
-varying vec2 vUv;
-varying vec3 vN;
+varying mediump vec2 vUv;
+varying mediump vec3 vN;
 varying vec3 vWorld;
-varying vec4 vCol;
-varying vec4 vLeaf;
-varying vec2 vKeep;
-varying float vSelf;         // sunlight left after the crown
-varying float vTint;
-varying float vGust;         // a gust turning the leaves over (foliage-glsl.js)
+varying mediump vec4 vCol;
+varying mediump vec4 vLeaf;
+varying mediump vec2 vKeep;
+varying mediump float vSelf;         // sunlight left after the crown
+varying mediump float vTint;
+varying mediump float vGust;         // a gust turning the leaves over (foliage-glsl.js)
 
 vec3 rotY(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 
@@ -100,11 +100,7 @@ void main() {
 
   // Wind, in world space.
   vec2 wd = uWind.xy;
-#ifdef DBG_NOWIND
-  float push = 0.0;
-#else
   float push = windPush(iPosScale.xz);
-#endif
   float t = uWindTime;
   float sway = sin(t * uWindShape.x + seed * 6.2832) * 0.6 + sin(t * uWindShape.x * 2.13 + seed * 17.0) * 0.25;
   float bend = push * uWindShape.y * (0.7 + 0.5 * sway);
@@ -133,11 +129,7 @@ void main() {
   vGust = floor(aLeaf.x * 255.0 + 0.5) == 0.0 ? 0.0 : windGust(iPosScale.xz) * uWind.z * uWind.w * (0.3 + 0.7 * (0.5 + 0.5 * sin(t * 7.0 + aWind.w * 40.0)));
   vec4 mv = viewMatrix * vec4(wp, 1.0);
   gl_Position = projectionMatrix * mv;
-#ifdef DBG_NOAERIAL
-  vAp = vec4(0.0, 0.0, 0.0, 1.0);
-#else
   aerialVertex(wp);
-#endif
 #ifdef VERTEX_LIGHT
   {
     float kind = floor(aLeaf.x * 255.0 + 0.5);
@@ -158,19 +150,19 @@ ${SKY_PARS}
 ${AERIAL_FRAG_PACKED}
 uniform sampler2D uLeafTex;
 uniform vec3 uExtent;
-varying vec2 vUv;
-varying vec3 vN;
+varying mediump vec2 vUv;
+varying mediump vec3 vN;
 varying vec3 vWorld;
-varying vec4 vCol;
-varying vec4 vLeaf;
-varying vec2 vKeep;
-varying float vSelf;
-varying float vTint;
-varying float vGust;
+varying mediump vec4 vCol;
+varying mediump vec4 vLeaf;
+varying mediump vec2 vKeep;
+varying mediump float vSelf;
+varying mediump float vTint;
+varying mediump float vGust;
 ${GUST_SHEEN_GLSL}
 #ifdef VERTEX_LIGHT
-varying vec3 vDiffE;
-varying vec3 vSpec;
+varying mediump vec3 vDiffE;
+varying mediump vec3 vSpec;
 #else
 ${SUN_SHADOW_GLSL}
 ${CLOUD_SHADOW_GLSL}
@@ -185,11 +177,7 @@ float pHash(vec2 p) {
 }
 
 void main() {
-#ifdef DBG_NOFRAG
-  gl_FragColor = vec4(0.1, 0.2, 0.05, 1.0);
-  return;
-#endif
-#if !defined(DBG_NODISCARD) && !defined(SOLID)
+#ifndef SOLID
   // Handing over (to the impostor, or between levels of detail): a stipple, each side keeps
   // its band of it.
   if (vKeep.x > 0.001 || vKeep.y < 0.999) {
@@ -209,11 +197,9 @@ void main() {
     vec2 sz = vec2(textureSize(uLeafTex, 0));
     vec2 dx = dFdx(auv * sz), dy = dFdy(auv * sz);
     float mip = max(0.0, 0.5 * log2(max(dot(dx, dx), dot(dy, dy))));
-#ifndef DBG_NODISCARD
     alpha = t.a * (1.0 + mip * 0.25);
     alpha = (alpha - 0.5) / max(fwidth(alpha), 1e-4) + 0.5;
     if (alpha < 0.02) discard;
-#endif
     alb *= t.rgb * 2.0;
   } else
 #endif
@@ -230,11 +216,8 @@ void main() {
   if (vGust > 0.01) alb = gustSheen(alb, vGust, 1.0);
 
   vec3 P = vWorld;
-#if defined(VERTEX_LIGHT)
+#ifdef VERTEX_LIGHT
   vec3 col = alb / PI * vDiffE + vSpec;
-  float lit = 1.0;
-#elif defined(DBG_FLAT)
-  vec3 col = alb * 30.0;
   float lit = 1.0;
 #else
   vec3 V = normalize(cameraPosition - P);
@@ -267,8 +250,6 @@ export function plantMaterial(shared, info, leafTex, { vertexLight = false, soli
   const defines = {};
   if (solid) defines.SOLID = 1;
   if (solid && !alpha) defines.NO_ALPHA = 1;
-  // (Switches for finding what costs what: vegFlags=NOAERIAL,FLAT on the page.)
-  for (const f of (new URLSearchParams(location.search).get('vegFlags') || '').split(',').filter(Boolean)) defines['DBG_' + f] = 1;
   if (vertexLight) defines.VERTEX_LIGHT = 1;
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -285,6 +266,6 @@ export function plantMaterial(shared, info, leafTex, { vertexLight = false, soli
     vertexShader: VERT,
     fragmentShader: FRAG,
     side: THREE.DoubleSide,
-    alphaToCoverage: !defines.DBG_NODISCARD && !defines.NO_ALPHA,
+    alphaToCoverage: !defines.NO_ALPHA,
   });
 }

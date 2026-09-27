@@ -139,7 +139,9 @@ export class PlantBuilder {
   // it), so the light runs over each leaf as over a curved one, without the vertices.
   // cut: build the leaf to its outline (leaves.js), instead of a rectangle cut out by the
   // texture: in rows along it at these fractions of its length (true: the full set).
-  leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35, cut = false }) {
+  // flat: no midrib vertex (two across instead of three: half the triangles), the fold left
+  // to the normals.
+  leafBlade(p, dir, up, l, w, { color, wind, leafPhase, shade, cell, gloss = 0.5, fold = 0.35, droop = 0, rows = 2, twist = 0, cup = 0.55, arch = 0.35, cut = false, flat = false }) {
     const outline = cut ? leafOutline(cell) : null;
     const ts = outline ? (Array.isArray(cut) ? cut : [0, 0.36, 0.7, 0.9, 1]) : null;
     if (outline) rows = ts.length; else this.alphaLeaves = true;
@@ -158,8 +160,8 @@ export class PlantBuilder {
       const uu = norm(cross(s, tan));
       const hw = outline ? Math.max(outline(t), 0.02) : 1;   // share of the width here
       const half = w * 0.5 * hw;
-      const lift = Math.sin(fold) * half;
-      const inward = Math.cos(fold) * half;
+      const lift = flat ? 0 : Math.sin(fold) * half;
+      const inward = flat ? half : Math.cos(fold) * half;
       const left = madd(madd(c, s, -inward), uu, lift);
       const right = madd(madd(c, s, inward), uu, lift);
       // Normals of the two panels, tilted outward by the fold and the cup, and along the leaf
@@ -170,7 +172,10 @@ export class PlantBuilder {
       const la = [wind[0], wind[1], t, leafPhase];
       const L = [outline ? KIND.CUT : KIND.LEAF, shade, cell, gloss];
       const u0 = 0.5 - 0.5 * hw, u1 = 0.5 + 0.5 * hw;
-      verts.push([
+      verts.push(flat ? [
+        this.vertex(left, nl, [u0, t], color, la, L),
+        this.vertex(right, nr, [u1, t], color, la, L),
+      ] : [
         this.vertex(left, nl, [u0, t], color, la, L),
         this.vertex(c, nm, [0.5, t], color, la, L),
         this.vertex(right, nr, [u1, t], color, la, L),
@@ -178,6 +183,7 @@ export class PlantBuilder {
     }
     for (let j = 0; j < rows - 1; j++) {
       const a = verts[j], b = verts[j + 1];
+      if (flat) { this.quad(a[0], b[0], b[1], a[1]); continue; }
       this.quad(a[0], b[0], b[1], a[1]);
       this.quad(a[1], b[1], b[2], a[2]);
     }

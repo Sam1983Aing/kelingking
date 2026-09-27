@@ -16,11 +16,11 @@ import { SPECIES, SP } from './scatter.js';
 // few pixels further off, where tiny triangles cost more than the pixels they cover (v7).
 const LOD = {
   scaevola: { near: 10, far: 15, detail: [5] },
-  grass: { near: 16, far: 24, detail: [7] },
-  tree: { near: 40, far: 55 },
-  palm: { near: 50, far: 70 },
-  pandanus: { near: 30, far: 42 },
-  creeper: { near: 26, far: 36 },
+  grass: { near: 11, far: 15, detail: [6] },
+  tree: { near: 22, far: 32 },
+  palm: { near: 30, far: 44 },
+  pandanus: { near: 15, far: 22 },
+  creeper: { near: 14, far: 20 },
 };
 
 // detailScale scales the full plants' reach (0: the lighter level everywhere, for looking at

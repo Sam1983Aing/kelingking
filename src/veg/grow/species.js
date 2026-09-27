@@ -107,7 +107,7 @@ export function scaevola(seed, o = {}) {
       if (old) c = mixc(c, yellow, rand.range(0.25, 0.6));
       if (!skip) b.leafBlade(madd(base, dir, 0.012), dir, faceUp, L * grow1, Wl * grow1, {
         color: [...c, 0.3], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade * (0.8 + 0.2 * (1 - age)),
-        cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, cut: b.lod === 0,
+        cell: old ? LEAF.SPOON_OLD : LEAF.SPOON, gloss: 0.75, fold: rand.range(0.15, 0.4), droop: L * 0.15 * age, cut: b.lod === 0 ? [0, 0.38, 0.74, 1] : [0, 0.72, 1], flat: true,
       });
       area += L * Wl * 0.72;
     }
