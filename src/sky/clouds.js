@@ -275,13 +275,13 @@ uniform vec2 uCloudBank;      // how much of the far sea the bank covers, the hi
 #define SHAPE_KM 2.4
 #endif
 #ifndef DETAIL_KM
-#define DETAIL_KM 0.28
+#define DETAIL_KM 0.19
 #endif
 #ifndef EDGE
-#define EDGE 0.2
+#define EDGE 0.12
 #endif
 #ifndef ERODE
-#define ERODE 0.6
+#define ERODE 0.72
 #endif
 #define BANK_TOP 0.16
 
@@ -337,6 +337,8 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
     // (Far out, where the detail noise is gone, a softer edge.)
     float thr = mix(0.6, 0.3, w.r);
     dc = remap(shape * prof, thr, thr + EDGE * (1.0 + 2.0 * (1.0 - detail))) * smoothstep(0.02, 0.2, w.r);
+    // (v10) A puff smaller than a couple of pixels fades out rather than showing as a speck.
+    dc *= smoothstep(2.0, 6.0, top * (uCloudLayer.y - uCloudLayer.x) / max(gPixKm, 1e-3));
   }
   // The bank: flat sheets a couple of hundred metres thick.
   float hk = h - uCloudLayer.x;
@@ -386,6 +388,7 @@ uniform vec2 uHalfRes;        // the clouds' full size (half the drawing buffer)
 uniform vec2 uMarchOffset;    // this frame's pixel within each 4 x 4 block (stride 4), or 0
 uniform float uMarchStride;   // 1 for a whole march, 4 for one pixel in sixteen
 uniform float uMarchFrame;    // moves the steps' jitter on from frame to frame
+uniform vec2 uSubPixel;       // (v10) where in its pixel this march's ray goes (-0.5..0.5)
 ${CLOUD_PARS}
 float meanDensity(float h0, float h1, float H) {
   float dh = h1 - h0;
@@ -426,7 +429,9 @@ vec4 highVeil(vec3 ro, vec3 rd, float cosT) {
 void main() {
   // Which of the clouds' pixels this is.
   vec2 px = floor(gl_FragCoord.xy) * uMarchStride + uMarchOffset;
-  vec2 vUv = (px + 0.5) / uHalfRes;
+  // (Each time a pixel is marched again its ray goes through another point of the pixel, so
+  // the edges of far clouds, where a pixel is all cloud or none, average out over time.)
+  vec2 vUv = (px + 0.5 + uSubPixel) / uHalfRes;
   vec3 rd = normalize(uCamFwd + (vUv.x * 2.0 - 1.0) * uCamRight + (vUv.y * 2.0 - 1.0) * uCamUp);
   vec3 ro = vec3(uCamPos.x * 0.001, uRg + uCamPos.y * 0.001, uCamPos.z * 0.001);
   // Nothing to do below the horizon (the sea covers it) or where the ray never gets up to
@@ -479,7 +484,9 @@ void main() {
     float h = length(p) - uRg;
     vec3 w = cloudWeather(p.xz);
     if (w.r < 0.02 && w.b < 0.02) { fine = 0.0; t += coarse * 2.5; continue; }
-    float detail = smoothstep(0.25, 0.06, ds);
+    // (And not where a pixel is wider than the eroded billows: v10, it cut the far clouds'
+    // edges into pixel-sized holes.)
+    float detail = min(smoothstep(0.25, 0.06, ds), smoothstep(0.06, 0.02, gPixKm));
     float dens = cloudDensity(p, h, w, detail);
     if (dens > 0.0 && fine <= 0.0) {
       fine = 12.0;                 // fine steps for a while
@@ -513,16 +520,24 @@ void main() {
         ms += a * exp(-tau * b) * mix(hg(cosT, 0.8 * c), hg(cosT, -0.3 * c), 0.2);
         a *= 0.55; b *= 0.35; c *= 0.5;
       }
-      float diff = 0.22 / (1.0 + 0.09 * tau);
+      // (v10: falls off faster with the depth of cloud toward the sun, 0.25 where it was 0.09,
+      // so the turrets' shaded sides and the gaps between them are grey, not the same white as
+      // their sunlit tops: the clouds read as cotton wool.)
+      float diff = 0.24 / (1.0 + 0.25 * tau);
       // Powder: the thin outer shell has taken light in but not yet scattered it back out,
       // so it is darker, except toward the sun, where the forward lobe lights it.
       float powder = 1.0 - exp(-2.0 * (tau + sigma * 0.03));
       powder = mix(powder, 1.0, smoothstep(0.2, 0.9, cosT));
       float sunT = (ms + diff) * mix(0.35, 1.0, powder);
       float hn = clamp((h - uCloudLayer.x) / (max(w.g, BANK_TOP / layerKm) * layerKm), 0.0, 1.0);
-      vec3 amb = mix(skyBottom * 0.55, skyTop, smoothstep(0.0, 0.9, hn)) / (4.0 * 3.14159265) * mix(0.9, 1.7, hn);
+      vec3 amb = mix(skyBottom * 0.55, skyTop, smoothstep(0.0, 0.9, hn)) / (4.0 * 3.14159265) * mix(0.75, 1.5, hn);
       vec3 S = uSunIrr * sunT + amb;
-      float Ts = exp(-sigma * ds);
+      // (v10) Far off, where a cloud's edge is narrower than a pixel, thin cloud covers only
+      // part of the pixel: it may only take away as much light as its density says it covers,
+      // however opaque one step through it is. (A step through 100 km of haze-blue sky and a
+      // wisp of cloud was all or nothing, and the far clouds' edges came out as blocks.)
+      float cover = mix(1.0, clamp(dens / 0.35, 0.0, 1.0), smoothstep(4.0, 20.0, t));
+      float Ts = 1.0 - (1.0 - exp(-sigma * ds)) * cover;
       L += Tl * S * (1.0 - Ts);
       dSum += t * Tl * (1.0 - Ts);
       wSum += Tl * (1.0 - Ts);
@@ -563,6 +578,28 @@ uniform vec4 uCloudLayer;
 uniform vec2 uDrift;          // how far the clouds drifted since last frame (m, x and z)
 uniform mat4 uPrevViewProj;
 uniform float uHistoryOk;
+// (v10) Last frame's clouds read with a Catmull-Rom filter (five bilinear taps), not a plain
+// bilinear one: with the clock running they are resampled every frame at a small offset, and
+// bilinear reads, repeated, blurred them to cotton wool within a second or two.
+vec4 historyAt(vec2 uv) {
+  vec2 size = uHalfRes;
+  vec2 p = uv * size;
+  vec2 c = floor(p - 0.5) + 0.5;
+  vec2 f = p - c;
+  vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+  vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+  vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+  vec2 w3 = f * f * (-0.5 + 0.5 * f);
+  vec2 w12 = w1 + w2;
+  vec2 t0 = (c - 1.0) / size, t3 = (c + 2.0) / size, t12 = (c + w2 / w12) / size;
+  vec4 r = texture2D(uHistory, vec2(t12.x, t0.y)) * w12.x * w0.y
+         + texture2D(uHistory, vec2(t0.x, t12.y)) * w0.x * w12.y
+         + texture2D(uHistory, vec2(t12.x, t12.y)) * w12.x * w12.y
+         + texture2D(uHistory, vec2(t3.x, t12.y)) * w3.x * w12.y
+         + texture2D(uHistory, vec2(t12.x, t3.y)) * w12.x * w3.y;
+  r /= w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  return vec4(max(r.rgb, 0.0), clamp(r.a, 0.0, 1.0));
+}
 void main() {
   vec2 px = floor(gl_FragCoord.xy);
   vec2 cell = floor(px / 4.0);
@@ -580,10 +617,10 @@ void main() {
     // This frame's march, blended with what was there: the jitter moves from frame to frame,
     // so an edge settles to its average (smooth) instead of one sample's step.
     vec4 now = texture2D(uMarch, (cell + 0.5) / uMarchRes);
-    gl_FragColor = ok ? mix(texture2D(uHistory, prev), now, 0.45) : now;
+    gl_FragColor = ok ? mix(historyAt(prev), now, 0.45) : now;
     return;
   }
-  gl_FragColor = ok ? texture2D(uHistory, prev) : texture2D(uMarch, ((px - uMarchOffset) / 4.0 + 0.5) / uMarchRes);
+  gl_FragColor = ok ? historyAt(prev) : texture2D(uMarch, ((px - uMarchOffset) / 4.0 + 0.5) / uMarchRes);
 }
 `;
 
@@ -607,6 +644,7 @@ export function createClouds(renderer, atmosphere, opts = {}) {
     uMarchOffset: { value: new THREE.Vector2() },
     uMarchStride: { value: 1 },
     uMarchFrame: { value: 0 },
+    uSubPixel: { value: new THREE.Vector2() },
   };
   let weatherKey = '';
   function applyParams() {
@@ -701,10 +739,15 @@ export function createClouds(renderer, atmosphere, opts = {}) {
       if (full) {
         uniforms.uMarchStride.value = 1;
         uniforms.uMarchOffset.value.set(0, 0);
+        uniforms.uSubPixel.value.set(0, 0);
         pass(material, front);
       } else {
         const b = BAYER[frame++ % 16];
         uniforms.uMarchFrame.value = Math.floor(frame / 16) % 64;
+        // Halton (2, 3), a new point every cycle of sixteen frames.
+        const hk = Math.floor(frame / 16) % 16 + 1;
+        const halton = (i, b) => { let f = 1, r = 0; while (i > 0) { f /= b; r += f * (i % b); i = Math.floor(i / b); } return r; };
+        uniforms.uSubPixel.value.set(halton(hk, 2) - 0.5, halton(hk, 3) - 0.5);
         uniforms.uMarchStride.value = 4;
         uniforms.uMarchOffset.value.set(b % 4, b >> 2);
         pass(material, sparse);
