@@ -14,7 +14,9 @@ section in `PROCESS.md`. Problems that belong to another version go into that ve
 
 - **The browser pane lies.** It stops rendering when hidden and its screenshots go stale. Use
   `tools/capture.mjs` (headless Chrome, nothing to install) and read numbers back from the
-  page. The server is `python3 -m http.server 5178` (`.claude/launch.json`, "kelingking").
+  page. The server is `python3 tools/serve.py` (`.claude/launch.json`, "kelingking"): port 5178, and
+  it tells browsers not to reuse stale files (with plain `http.server`, Safari mixed an old
+  script with new ones and the loader hung at 99).
 - **`node --check` on a `.js` file treats it as a script**, so module-only mistakes pass.
   Check a copy named `.mjs` instead.
 - **A backtick inside a comment inside a GLSL template string ends the JavaScript string.**

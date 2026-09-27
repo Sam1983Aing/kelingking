@@ -5,8 +5,7 @@
       "name": "kelingking",
       "runtimeExecutable": "python3",
       "runtimeArgs": [
-        "-m",
-        "http.server",
+        "tools/serve.py",
         "5178"
       ],
       "port": 5178

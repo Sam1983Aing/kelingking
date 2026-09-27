@@ -210,7 +210,9 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     })
     .catch((e) => { console.error('plants failed', e); plantsReady = true; checkLoaded(); });
   loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true; emit('textures'); checkLoaded(); })
-    .catch((e) => { console.error('surface textures failed', e); texturesReady = true; checkLoaded(); });
+    // (Without the scans the ground's own noise stands in; the page still has to go on, or the
+    // loader waits for this step forever, v10.)
+    .catch((e) => { console.error('surface textures failed', e); texturesReady = true; emit('textures'); checkLoaded(); });
   terrain.uniforms.uSunShadow = water.uniforms.uSunShadow; // and the same baked shadow
   // The swash on the sand runs on the sea's clock and settings, and the sheet over it sees the
   // ground's wet sand through it.

@@ -91,7 +91,7 @@ Other shots in `src/shots.js` (`surfTop`, `cove`) are extra targets for the wate
 ## Tools
 
 ```bash
-python3 -m http.server 5178                          # the page, at http://localhost:5178
+python3 tools/serve.py                               # the page, at http://localhost:5178
 node tools/capture.mjs beach --compare               # render and photo side by side
 node tools/capture.mjs viewpoint --outline           # render edges over the photo
 node tools/capture.mjs beach --clip=9                # 9 s clip (needs ffmpeg)

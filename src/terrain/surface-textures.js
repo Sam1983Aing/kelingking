@@ -26,7 +26,9 @@ async function pixels(url, size) {
 }
 
 async function arrayTexture(kind, size, colorSpace, base, list) {
-  const layers = await Promise.all(list.map((s) => (s.gen ? generated(s, kind, size) : pixels(`${base}${s.id}_${kind}.jpg`, size))));
+  // (A layer that will not load is left flat, with a warning, rather than failing the rest.)
+  const layers = await Promise.all(list.map((s) => (s.gen ? generated(s, kind, size)
+    : pixels(`${base}${s.id}_${kind}.jpg`, size).catch((e) => { console.warn(`texture ${s.id} ${kind}: ${e.message}`); return generated({}, kind, size); }))));
   const data = new Uint8Array(size * size * 4 * layers.length);
   layers.forEach((px, i) => data.set(px, i * size * size * 4));
   const tex = new THREE.DataArrayTexture(data, size, size, layers.length);

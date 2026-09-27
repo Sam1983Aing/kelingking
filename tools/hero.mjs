@@ -9,7 +9,7 @@
 // Frame times swing by 2x or more with whatever else is using the GPU, so numbers from another
 // day mean nothing. The previous version is checked out from its tag and both are timed back
 // to back, alternating, in the same run. Close the page in the browser pane first.
-// Needs the local server (python3 -m http.server 5178).
+// Needs the local server (python3 tools/serve.py).
 
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, readdirSync, rmSync, mkdirSync } from 'node:fs';

@@ -7,7 +7,7 @@
 //
 //   node tools/veg-parts.mjs trailTop trailLow --groups=near:grass,near:scaevola,impostor --rounds=16
 //
-// Needs the local server (python3 -m http.server 5178).
+// Needs the local server (python3 tools/serve.py).
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
