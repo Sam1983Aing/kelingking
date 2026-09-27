@@ -14,14 +14,16 @@ version. A session works on its element only, and goes deep on it.
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
 | v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | done, tag `v8` |
-| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, waiting for Sam |
-| v10 | Speed and the shareable build | [v10-speed.md](v10-speed.md) | |
+| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, tag `v9` |
+| v10 | Polish pass over v1 to v9, from Sam's notes on the v9 page | [v10-polish.md](v10-polish.md) | next |
+| v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
 plants can leave room for the path. The scroll once there is something worth scrolling
 through. Then a final pass on what Sam saw still reading as fake once he watched the whole
-descent (v9, four parts in one session, by his choice). Speed last, once the look is settled,
+descent (v9, four parts in one session, by his choice), and a polish pass over everything from
+his notes on the v9 page (v10). Speed last, once the look is settled,
 although no version may make it worse (see the budget below). Until 2026-09-27 speed was v9,
 so the older sections of `PROCESS.md` call its brief the v9 brief.
 
@@ -29,7 +31,7 @@ so the older sections of `PROCESS.md` call its brief the v9 brief.
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v9-final.md, then start v9.
+> Read docs/versions/README.md and docs/versions/v10-polish.md, then start v10.
 
 ## Rules for every version
 
@@ -45,7 +47,7 @@ Open a new chat in this folder and paste:
    `node tools/hero.mjs` checks it by timing the previous version (checked out from its tag)
    and yours back to back, because absolute times on this Mac swing with background GPU load.
    Close the page in the browser pane before timing. If a gain in realism really needs more,
-   say so in PROCESS.md and add it to the v10 brief.
+   say so in PROCESS.md and add it to the v11 (speed) brief.
 5. **Stay publishable.** Reference photos never go into git or anywhere public (they are
    gitignored). Only CC0 assets ship, each credited in a CREDITS.md next to it. Ask Sam before
    any download, with the source and the size.

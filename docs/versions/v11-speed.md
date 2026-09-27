@@ -1,7 +1,8 @@
-# v10: speed and the shareable build
+# v11: speed and the shareable build
 
-(This was v9 until 2026-09-27, when Sam added a final pass on the look as v9. Earlier
-sections of `PROCESS.md` call it the v9 brief.)
+(This was v9 until 2026-09-27, when Sam added a final pass on the look as v9, and v10 until
+later that day, when he asked for a polish pass as v10. Earlier sections of `PROCESS.md` call
+it the v9 or the v10 brief.)
 
 **Goal.** Smooth along the whole descent on a laptop, a single file Sam can double-click, and
 the repo ready to go public.
