@@ -215,7 +215,8 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   }
   // (The yaw unwrapped again: fwd + pull can cross north between samples.)
   for (let i = 1; i < n; i++) yawRaw[i] = yawRaw[i - 1] + wrap(yawRaw[i] - yawRaw[i - 1]);
-  const yawS = gauss(yawRaw, 2 / DW), pitchS = gauss(pitchRaw, 3 / DW), fovS = gauss(fovRaw, 3 / DW);
+  // (Pitch over 5 m, v10: with the grade in it, it nodded at the top and foot of each flight.)
+  const yawS = gauss(yawRaw, 2 / DW), pitchS = gauss(pitchRaw, 5 / DW), fovS = gauss(fovRaw, 3 / DW);
   // The viewpoint's frame exactly at the start (smoothing pulls it toward what comes next).
   const vp = shots.viewpoint;
   const vpYaw = yawS[0] + wrap(vp.yaw - yawS[0]);
@@ -267,7 +268,7 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   // the view turns over it, so the camera slows through the bends and walks the straights.
   const cost = new Float64Array(n);
   for (let i = 1; i < n; i++) {
-    const turn = Math.abs(yawS[i] - yawS[i - 1]) + 0.5 * Math.abs(pitchS[i] - pitchS[i - 1]);
+    const turn = Math.abs(yawS[i] - yawS[i - 1]) + Math.abs(pitchS[i] - pitchS[i - 1]);
     cost[i] = cost[i - 1] + DW + turn / TURN_PACE;
   }
   const costAt = (w) => { const f = Math.min(Math.max(w / DW, 0), n - 1.0001), i = Math.floor(f); return cost[i] + (cost[i + 1] - cost[i]) * (f - i); };
