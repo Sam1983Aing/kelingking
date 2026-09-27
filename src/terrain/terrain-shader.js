@@ -410,7 +410,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   sand = max(sand, underSand);
 
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
-  float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
+  // (v10: from 0.3..0.46: on the steep faces of the head it painted olive smears over the rock,
+  // where the photos show white rock and the plants on it.)
+  float veg = smoothstep(0.36, 0.52, up + (n1 - 0.5) * 0.25);
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
@@ -560,7 +562,10 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float headland = 1.0 - smoothstep(180.0, 320.0, length(g - vec2(60.0, 60.0)));
     // (From the noise already worked out: another fbm here cost 5% of the overview.)
     float dryG = headland * smoothstep(0.4, 0.62, n2 * 0.7 + n1 * 0.3) * smoothstep(0.85, 0.6, up);
-    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(1.5, 1.2, 0.62), clamp(headland * 0.35 + dryG * 0.5, 0.0, 0.8));
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(1.5, 1.2, 0.62), clamp(headland * 0.15 + dryG * 0.3, 0.0, 0.5));
+    // And from a way off the cover is greyer, as the plants are (impostors.js).
+    float farG = smoothstep(50.0, 220.0, distance(P, cameraPosition));
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(0.98, 1.04, 0.8), 0.5 * farG);
     // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
     // litter and bare earth, and shade, which the lighting takes from tCanopy.
     float canopy = clamp(-D.a, 0.0, 1.0);
