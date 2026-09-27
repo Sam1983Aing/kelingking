@@ -239,3 +239,13 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   can turn with the path without spinning.
 - **Drag to look around** adds pointer handlers and `touch-action: pan-y` on the stage; nothing
   per frame when nobody drags.
+
+**From v10 (the polish pass).**
+
+- Every hero frame within +4% of v9 side by side. New costs, all small: the close-range rock
+  layer on the ground (two more triplanar reads, only within about 20 m of a face), the loose
+  stones by the path (about 1,500 instances of 20 triangles), the tread geometry's extra
+  per-vertex data (distances to each tread's back and front edge).
+- The cloud march's sub-pixel jitter means a still page keeps marching (the clock runs), as it
+  did in v9; nothing new per frame.
+
