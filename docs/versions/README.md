@@ -12,8 +12,8 @@ version. A session works on its element only, and goes deep on it.
 | v4 | Water | [v4-water.md](v4-water.md) | done, tag `v4` |
 | v5 | Sand and the waterline | [v5-sand.md](v5-sand.md) | done, tag `v5` |
 | v6 | Trail and stairs | [v6-trail.md](v6-trail.md) | done, tag `v6` |
-| v7 | Plants | [v7-plants.md](v7-plants.md) | built, waiting for review |
-| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | |
+| v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
+| v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | next |
 | v9 | Speed and the shareable build | [v9-speed.md](v9-speed.md) | |
 
 Why this order: light first, because every colour decision after it is made under it. Then
@@ -26,7 +26,7 @@ through. Speed last, once the look is settled, although no version may make it w
 
 Open a new chat in this folder and paste:
 
-> Read docs/versions/README.md and docs/versions/v7-plants.md, then start v7.
+> Read docs/versions/README.md and docs/versions/v8-scroll.md, then start v8.
 
 ## Rules for every version
 
