@@ -357,7 +357,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // each get their own projection and show as a patchwork.)
   float disagree = smoothstep(0.9, 0.6, dot(Ng, N));
   vec3 Nt = normalize(mix(N, Ng, 0.5 * disagree));
-  vec3 w = pow(abs(Nt), vec3(mix(4.0, 2.0, disagree)));
+  // (Squares and fourth powers by multiplying: a pow with a varying exponent is dear.)
+  vec3 a2 = Nt * Nt;
+  vec3 w = mix(a2 * a2, a2, disagree);
   w /= w.x + w.y + w.z;
   w = max(w - 0.03, 0.0);
   triW = w / (w.x + w.y + w.z);
@@ -387,12 +389,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 #ifdef SKIP_BANK
   if (false) {
 #else
-  if (sandZone > 0.05 && up < 0.72 && h < uBeachTop + 6.0 && length(nhB) > 0.3 && carveM < 0.3) {
+  if (sandZone > 0.05 && up < 0.72 && h < uBeachTop + 6.0 && h > -0.3 && length(nhB) > 0.3 && carveM < 0.3) {
 #endif
     float front = tData(g + normalize(nhB) * 3.0).r;
-    float bankTop = 0.2 + 1.1 * tn(vec2(along * 0.16, 2.3)) + 0.35 * tn(vec2(along * 0.7, 5.1))
-                  + (tn(vec2(along * 3.1, h * 2.3)) - 0.5) * 0.18
-                  + (tn(g * 1.1 + h * 0.7) - 0.5) * 0.7 + (tn(g * 3.7 - h * 1.3) - 0.5) * 0.3
+    float bankTop = 0.2 + 1.3 * tn(vec2(along * 0.16, 2.3))
+                  + (tn(g * 1.1 + h * 0.7) - 0.5) * 0.8 + (tn(g * 3.7 - h * 1.3) - 0.5) * 0.35
                   + 1.4 * smoothstep(0.2, 0.55, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
     banked = sandZone * (1.0 - smoothstep(bankTop - 0.05, bankTop + 0.1, h - front)) * smoothstep(-3.0, -1.0, h - front + 3.0);
     sand = max(sand, banked);
@@ -415,7 +416,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
   // (v10: from 0.3..0.46: on the steep faces of the head it painted olive smears over the rock,
   // where the photos show white rock and the plants on it.)
+#ifdef SKIP_VEGSTEEP
+  float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
+#else
   float veg = smoothstep(0.36, 0.52, up + (n1 - 0.5) * 0.25);
+#endif
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
@@ -460,6 +465,9 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // the rough rock scan, for the relief the face's big scans are too coarse to have there.
     // The marble scan's crack network, which reads as marble up close, pulled further to grey.
     float closeR = max(wallF, footDust) * smoothstep(0.02, 0.006, fp);
+#ifdef SKIP_CLOSER
+    closeR = 0.0;
+#endif
     if (closeR > 0.01) {
       Surf fine = triplanar(L_BEDS, uTile[L_BEDS] / 3.0, vec2(0.23, 0.57));
       Surf grain = triplanar(L_WET, 0.8, vec2(0.61, 0.19));
@@ -676,12 +684,14 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     }
     // The relief: lumps and hollows, and footprints up close. The footprints lie on the dry
     // sand; below the swash's reach only a few fresh ones, shallow.
-    float reliefW = 1.0 - smoothstep(0.15, 0.5, fp);
+    // (Only above the water: the seabed of the whole bay counts as sand, and from the air this
+    // ran over all of it, under water where none of it shows.)
+    float reliefW = (1.0 - smoothstep(0.15, 0.5, fp)) * smoothstep(-0.6, -0.2, h);
 #ifdef SKIP_SANDRELIEF
     reliefW = 0.0;
 #endif
     if (reliefW > 0.0) {
-      vec3 l1 = tnd(g * 0.85 + 2.1), l2 = tnd(g * 2.3 - 4.7), l3 = fp < 0.15 ? tnd(g * 5.3 + 1.3) : vec3(0.5, 0.0, 0.0);
+      vec3 l1 = tnd(g * 0.85 + 2.1), l2 = fp < 0.3 ? tnd(g * 2.3 - 4.7) : vec3(0.5, 0.0, 0.0), l3 = fp < 0.15 ? tnd(g * 5.3 + 1.3) : vec3(0.5, 0.0, 0.0);
       // (Lumps: 9 cm over a metre or so, 3 cm over half a metre, 1.2 cm over 20 cm; the
       // trampled sand is lumpy at every scale; much gentler on the firm sand.)
       float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
@@ -721,8 +731,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     }
     // Further off, where a print is smaller than a few pixels: trodden sand as a mottle of
     // slightly darker and lighter patches, so the beach still has a grain going into the distance.
-    float farMottle = smoothstep(0.03, 0.09, fp) * (1.0 - firm);
-    if (farMottle > 0.0) sd.color *= 1.0 + farMottle * ((tn(g * 3.1) - 0.5) * 0.24 + (tn(g * 0.9 + 3.0) - 0.5) * 0.18 + (tn(g * 7.3) - 0.5) * 0.16 * (1.0 - smoothstep(0.1, 0.25, fp)) - 0.08 * trample);
+    float farMottle = smoothstep(0.03, 0.09, fp) * (1.0 - firm) * step(0.0, h);
+#ifdef SKIP_FARMOTTLE
+    farMottle = 0.0;
+#endif
+    if (farMottle > 0.0) sd.color *= 1.0 + farMottle * ((tn(g * 3.1) - 0.5) * 0.3 + (n1 - 0.5) * 0.2 - 0.08 * trample);
     // Along the foot of the walls (vFoot: metres out from it).
     // Where the swash reaches the rock it leaves a narrow maroon band (the red grains of
     // foraminifera and coralline algae it sorts out there, beach-white-sand-surf.jpg); all
