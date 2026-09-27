@@ -452,6 +452,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     gr.color *= mix(vec3(1.0), vec3(0.8, 0.88, 0.78), smoothstep(0.52, 0.68, cover));
     gr.color *= mix(vec3(1.0), vec3(1.15, 1.12, 1.08), smoothstep(0.42, 0.3, cover));
     gr.color = mix(gr.color, gr.color * vec3(1.9, 1.5, 1.35), smoothstep(0.6, 0.78, n2) * 0.6);
+    // (v10) Up on the headland the ground between the scrub is drier, olive and straw with
+    // bare earth, where it was a lime lawn; greener down the gullies.
+    float headland = 1.0 - smoothstep(180.0, 320.0, length(g - vec2(60.0, 60.0)));
+    float dryG = headland * smoothstep(0.35, 0.65, tfbm(g * 0.018 + 21.0, 55.0, fp)) * smoothstep(0.85, 0.6, up);
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(1.5, 1.2, 0.62), clamp(headland * 0.35 + dryG * 0.5, 0.0, 0.8));
     // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
     // litter and bare earth, and shade, which the lighting takes from tCanopy.
     float canopy = clamp(-D.a, 0.0, 1.0);

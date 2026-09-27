@@ -151,7 +151,10 @@ void main() {
   vec3 V = normalize(cameraPosition - P);
   N *= dot(N, V) < 0.0 ? -1.0 : 1.0;
   vec3 alb = c.rgb * c.rgb;
-  alb *= mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), vTint * 0.5 + 0.5);
+  // (v10) Dry-season plants: the tint's range past 1 (scatter.js) turns a crown olive to straw.
+  float dryT = clamp((vTint - 1.2) / 1.8, 0.0, 1.0);
+  alb *= mix(vec3(0.82, 0.96, 0.8), vec3(1.16, 1.08, 0.86), min(vTint, 1.0) * 0.5 + 0.5);
+  alb = mix(alb, vec3(dot(alb, vec3(0.3, 0.55, 0.15))) * vec3(2.3, 1.85, 0.8), dryT * 0.8);
   if (vGust > 0.01) alb = gustSheen(alb, vGust, 0.5 + 0.5 * sin(uWindTime * 7.0 + pHash(floor(vUv * 700.0)) * 6.2832));
   // Light through the crown to this point (as plant-material.js does per vertex).
   vec3 pl = rotY(P - vFoot, -vYaw) / vScale;
