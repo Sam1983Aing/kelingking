@@ -80,17 +80,17 @@ void main() {
     if (kind < 0.5) {         // flung off the lip
       // The lip is thrown forward faster than the crest travels.
       vel = fwd * speed * mix(1.0, 1.35, aSeed.w) + vec3(0.0, mix(0.6, 3.2, aSeed.z), 0.0) + side * (aSeed.x - 0.5) * 1.2;
-      size = mix(0.25, 0.7, aSeed.w);        // a puff of droplets
-      alpha = 0.95; mist = 0.15;
+      size = mix(0.3, 0.8, aSeed.w);         // a puff of droplets
+      alpha = 0.8; mist = 0.2;
     } else if (kind < 1.5) {  // feathering off the crest: rises with it, the offshore wind holds it back
       vel = fwd * speed * mix(0.45, 0.85, aSeed.w) + vec3(0.0, mix(1.2, 3.5, aSeed.z), 0.0) + side * (aSeed.x - 0.5) * 1.5;
       g = 5.0;               // fine spray: the air holds it up a little
-      size = mix(0.1, 0.3, aSeed.w);
-      alpha = 0.45; mist = 0.3;
+      size = mix(0.15, 0.4, aSeed.w);
+      alpha = 0.7; mist = 0.35;
     } else {                  // thrown up where the lip lands
       vel = fwd * speed * mix(0.7, 1.2, aSeed.w) + vec3(0.0, mix(2.0, 5.5, aSeed.z) * clamp(bc.H / 1.5, 0.5, 1.4), 0.0) + side * (aSeed.x - 0.5) * 2.0;
-      size = mix(0.4, 1.1, aSeed.w);
-      alpha = 0.9; mist = 0.35;
+      size = mix(0.5, 1.3, aSeed.w);
+      alpha = 0.8; mist = 0.4;
     }
     vec2 wind = uWindDrift * mix(0.3, 1.0, mist);
     pos = p0 + vel * age + vec3(wind.x, 0.0, -wind.y) * age - vec3(0.0, 0.5 * g * age * age, 0.0);
@@ -173,24 +173,22 @@ void main() {
   float r = dot(q, q);
   if (r > 1.0) discard;
   float mist = max(vColor.z, smoothstep(30.0, 10.0, vPx));
-  // A puff: droplets scattered in it (denser in the middle, thinning as it ages), in a haze
-  // of fine mist.
+  // (v9) A puff of spray is a ragged cloud, not a disc: its falloff torn by noise, thinning
+  // as it ages. The droplets in it are specks about a pixel and a half across, scattered
+  // through its denser part (they were discs a few pixels wide, which read as white dots).
   float seed = vColor.x;
-  vec2 g = gl_PointCoord * 7.0;
-  vec2 cell = floor(g), f = fract(g);
+  vec2 pc = gl_PointCoord;
+  float torn = vnoise(pc * 3.1 + seed) * 0.6 + vnoise(pc * 7.3 - seed * 0.37) * 0.4;
+  float body = exp(-r * 2.6) * smoothstep(1.0, 0.55, r) * smoothstep(0.25, 0.75, torn + 0.35 - 0.3 * vColor.w);
   float drops = 0.0;
-  if (mist < 0.95) for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 c = cell + vec2(float(i), float(j));
-    vec2 h = vec2(fract(sin(dot(c + seed, vec2(12.9898, 78.233))) * 43758.5453), fract(sin(dot(c + seed, vec2(39.3468, 11.135))) * 24634.6345));
-    float rad = mix(0.15, 0.45, h.x * h.x) * (1.2 - 0.6 * r);
-    float keep = step(h.y, 0.95 - 0.5 * vColor.w);
-    drops = max(drops, keep * smoothstep(rad, rad * 0.4, length(vec2(float(i), float(j)) + h - f)));
+  if (mist < 0.95 && vPx > 12.0) {
+    float n = clamp(vPx / 3.0, 6.0, 48.0);
+    vec2 g = pc * n, cell = floor(g), f = fract(g);
+    vec2 h = vec2(fract(sin(dot(cell + seed, vec2(12.9898, 78.233))) * 43758.5453), fract(sin(dot(cell + seed, vec2(39.3468, 11.135))) * 24634.6345));
+    float keep = step(h.y, (0.35 - 0.25 * vColor.w) * smoothstep(0.9, 0.2, r));
+    drops = keep * smoothstep(0.34, 0.12, length(f - 0.25 - 0.5 * h));
   }
-  float body = exp(-r * 3.0);
-  float a = vColor.y * mix(drops * smoothstep(1.0, 0.2, r), body * mix(1.0, 0.45, smoothstep(30.0, 10.0, vPx)), mist);
-  // A faint haze round the droplets. (It was 0.45: up close dozens of puffs overlap, and
-  // their haze added up to a milky sheet over the rising wave.)
-  a = max(a, vColor.y * body * 0.1 * (1.0 - mist));
+  float a = vColor.y * (body * mix(0.45, 0.3, mist) + drops * (1.0 - mist) * 0.85);
   if (a < 0.003) discard;
   vec3 V = normalize(cameraPosition - vWorld);
   float shadow = bakedShadow(vWorld, 0.05);

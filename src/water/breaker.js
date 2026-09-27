@@ -258,6 +258,18 @@ varying vec4 vInfo;
 varying float vAlong;
 varying float vTear;
 
+// Whitewater on the breaking wave itself (v9): the lip tearing into white water, and foam
+// running down the face in streaks. rp: metres along the beach and down the cross-section.
+// Long, narrow streaks down the face, torn into shreds, with soft edges (it was the sea's
+// lace laid on the face, which read as stained glass and white flames).
+float faceFoam(vec2 rp, float tau, float amount) {
+  float streak = fbm3(vec2(rp.x * 1.6, rp.y * 0.22 - tau * 1.5)) * 0.55 + vnoise(vec2(rp.x * 4.8 + 3.0, rp.y * 0.5 - tau)) * 0.2;
+  float shred = fbm3(rp * vec2(0.9, 0.7) + vec2(4.0, -tau * 2.5)) * 0.25;
+  float p = streak + shred;
+  // (Soft, and thin where there is little: a streak is a film of bubbles, not paint.)
+  return smoothstep(1.0 - amount - 0.2, 1.0 - amount + 0.2, p) * mix(0.55, 1.0, smoothstep(0.2, 0.7, amount));
+}
+
 void main() {
   if (vTear > 0.001) discard;
   // The floor in front of the tube lies on the sea's own trough (tucked under it): let the
@@ -305,11 +317,28 @@ void main() {
   vec3 Tl = exp(-uw.K * max(vInfo.z, 0.05) * 2.0);
   vec3 sunThrough = uSunIrr * shadow * pow(max(dot(-V, L) * 0.5 + 0.5, 0.0), 6.0) * uGordonF * uw.bb / uw.K / PI * 3.0;
   vec3 under = mix(uw.light, uw.light * Tl + (uGordonF * uw.bb / uw.K * (uSunIrr * max(L.y, 0.0) + uSkyIrr) / PI) * (1.0 - Tl) + sunThrough, lip);
+  // (v9) The thrown lip and the inside of the tube: a sheet of water with daylight all round
+  // it, and the tube's face lit through the lip above it. Both glow teal from the light
+  // scattered in the water, where they went navy (the light model looked for a sea bed or the
+  // back of the wave, and found neither in the dark).
+  float tube = smoothstep(0.46, 0.52, v) * smoothstep(0.1, 0.35, tau) * (1.0 - smoothstep(0.78, 0.92, tau));
+  float lit = max(tube, lip * smoothstep(0.26, 0.36, v));
+  if (lit > 0.0) {
+    // (Clear water there would still be navy: what lights it is the bubbles and sand the
+    // break has mixed in, which scatter the light back, a white 0.025 per metre.)
+    vec3 bbL = uw.bb + 0.025, KL = uw.K + 0.025;
+    vec3 glow = uGordonF * bbL / KL * (uSunIrr * max(L.y, 0.0) * shadow * 0.8 + uSkyIrr) / PI;
+    under = mix(under, max(under, glow * 0.9 + sunThrough * 0.4), lit);
+  }
 
   float NoV = max(dot(N, V), 1e-3);
   float F;
   vec3 refl;
   roughReflect(N, V, sqrt(oc.z), F, refl);
+  // (v9) Under the curling lip the reflection points down, at the water and the white water
+  // in front, not at the dark horizon the sea's model assumes for other waves.
+  float downR = smoothstep(0.0, -0.25, reflect(-V, N).y);
+  refl = mix(refl, under * 1.6 + uSkyIrr / PI * 0.15, downR);
   float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, 0.05, 0.6);
   float a2 = rough * rough;
   vec3 Hh = normalize(V + L);
@@ -337,14 +366,12 @@ void main() {
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
   float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
-  float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.5;
+  // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
+  float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.35 * smoothstep(0.05, 0.3, tau);
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
-  if (amount > 0.002) {
-    vec2 lp = lacePattern(rp * 1.3 + vec2(0.0, -tau * 3.0), 0.02);
-    foam = max(smoothstep(1.0 - amount - 0.08, 1.0 - amount + 0.08, lp.x), smoothstep(0.9, 1.0, amount));
-  }
+  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount), smoothstep(0.92, 1.0, amount));
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
   // Only on the back and the floor: the lip and the face are the breaker's own.
@@ -356,13 +383,18 @@ void main() {
   // White water is a heap of bubbles: its lumps shade each other and face the sun or not
   // (in the noon sun it would otherwise just be clipped white).
   float relW = smoothstep(0.25, 0.04, fp) * step(0.01, foam);
-  vec3 rel = relW > 0.01 ? foamRelief(rp * 2.2 + vec2(0.0, tau * 2.0), fp, uTime) : vec3(1.0, 0.0, 0.0);
+  // (Lumps of a decimetre and up: at 2.2 times the scale the finest octaves were centimetre
+  // grain, which read as polystyrene. v9.)
+  vec3 rel = relW > 0.01 ? foamRelief(rp * 1.1 + vec2(0.0, tau * 2.0), fp * 3.0, uTime) : vec3(1.0, 0.0, 0.0);
   vec3 Nf = normalize(N + (tA * rel.y + tB * rel.z) * relW);
-  vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
+  // (v9) Light goes a long way through white water before it comes back out, so a side turned
+  // from the sun is still lit (wrapped): it was grey-lavender, lit by the sky alone.
+  vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max((dot(Nf, L) + 0.7) / 1.7, 0.15) * shadow + uSkyIrr);
   // In the crevices: no sun, only sky and light scattered through the foam (as the sea's).
   vec3 crevice = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
   foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
-  col = mix(col, foamRad, foam);
+  // Thin white water shows the water through it.
+  col = mix(col, foamRad, foam * mix(0.7, 1.0, smoothstep(0.3, 0.9, amount)));
 
   gl_FragColor = vec4(col * vApT + vApIns, 1.0);
   // Debug views skip the exposure and tone curve so their values read straight.
