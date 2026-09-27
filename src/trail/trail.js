@@ -140,6 +140,7 @@ TS tsBark(int L, float off) {
   return s;
 }
 float trShadow = 1.0;
+float trSelf = 1.0;     // (v10) the step above's own shadow, at the back of a tread
 vec3 trNormal = vec3(0.0, 1.0, 0.0);
 float trRough = 0.9;
 float trAO = 1.0;
@@ -190,6 +191,24 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   }
   col *= mix(1.0, 1.1, worn * 0.7);
   col *= mix(vec3(1.0), vec3(0.78, 0.76, 0.72), edge * 0.8);
+  // (v10) Grit and soil collect at the back of each tread, against the riser above: from
+  // above, the flight reads as steps (it was a smooth pale ramp).
+  // Plus a darker line in the corner itself. And the concrete greyer than the scan came out in
+  // the noon sun (it read as white; the photo's steps are a light grey).
+  if (kind < 0.5) {
+    float bw = vTrail.w + 0.04 * (n2 - 0.5);
+    col *= mix(vec3(0.5, 0.47, 0.42), vec3(1.0), smoothstep(0.015, 0.13, bw)) * mix(0.7, 1.0, smoothstep(0.0, 0.02, bw));
+    // The noon sun stands a little north of overhead here in April: each riser throws a strip
+    // of shadow about 5 cm deep over the back of the tread below it.
+    trSelf = smoothstep(0.045, 0.06, bw + 0.01 * (n2 - 0.5));
+    // Looking down a flight the nosings hide the backs of the treads, so what shows each step
+    // is its front edge: chipped and grimy, rounded off, and so darker (the photo's lines).
+    float fw = kind + 0.015 * (n2 - 0.5);
+    float nose = 1.0 - smoothstep(0.012, 0.045, fw);
+    col *= mix(1.0, 0.5, nose);
+    trSelf = min(trSelf, mix(1.0, 0.45, 1.0 - smoothstep(0.0, 0.02, fw)));
+  }
+  col *= 0.8;
   trRough -= 0.1 * worn;
   if (kind > 2.5) col *= mix(vec3(1.0), vec3(0.7, 0.62, 0.52), 0.5 * n2);   // risers: soil splashed up
   if (kind > 0.5 && kind < 1.5) col *= vec3(0.74, 0.7, 0.64);               // the sides, down in the soil
@@ -223,12 +242,20 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   // Skirts and the sides of the steps: the ground at the edge, darker and greener.
   if (vTrail.z > 1.5 && vTrail.z < 2.5) col = mix(col, uGroundAlb * (0.8 + 0.4 * n1), smoothstep(1.0, 1.4, a) * 0.75);
   if (vTrail.z > 2.5) col *= 0.72;   // the riser: packed earth, in its own shadow, damp
+  // (v10) Loose soil at the back of each tread, darker and browner.
+  if (vTrail.z < 0.5) {
+    col *= mix(vec3(0.7, 0.62, 0.52), vec3(1.0), smoothstep(0.03, 0.16, vTrail.w + 0.05 * (n1 - 0.5)));
+    trSelf = smoothstep(0.05, 0.08, vTrail.w + 0.03 * (n1 - 0.5));
+  }
 #elif defined(TR_WOOD)
 #ifdef LOG
   // Logs across the dirt steps (bark_brown_02), the moss mostly gone, muddy underneath.
   if (uTrScans > 0.5) {
     TS t = tsBark(T_BARK, vRand * 5.3);
-    col = mix(t.color, vec3(dot(t.color, vec3(0.3, 0.55, 0.15))), 0.35);
+    // (v10) Each log weathered its own way: fresh bark, sun-greyed, or dark and rotting.
+    float age = fract(vRand * 3.17);
+    col = mix(t.color, vec3(dot(t.color, vec3(0.3, 0.55, 0.15))) * vec3(1.05, 1.0, 0.92), 0.2 + 0.55 * age);
+    col *= mix(1.0, 0.55, smoothstep(0.8, 1.0, fract(vRand * 7.31)));
     trNormal = normalize(N + t.dn); trRough = t.rough; trAO = t.ao;
   } else col = lin(vec3(0.33, 0.27, 0.21));
   col *= mix(0.6, 1.0, smoothstep(-0.6, 0.4, N.y));
@@ -255,6 +282,17 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   col *= mix(vec3(1.0), vec3(0.7, 0.68, 0.62), smoothstep(0.55, 0.8, tn(vec2(along * 1.7, vRand * 30.0))) * 0.6);   // grime
   col *= 1.0 - 0.35 * node;
   trRough = mix(0.45, 0.8, vRand);
+#elif defined(TR_STONE)
+  // (v10) Loose limestone: pale and dusty grey, pitted, each stone its own shade, stained with
+  // soil where it sits in the ground.
+  if (uTrScans > 0.5) {
+    TS t = tsTri(T_CONCRETE, P * 1.6 + vRand * 5.0, N, vec2(vRand, fract(vRand * 3.7)));
+    col = t.color; trNormal = normalize(N + t.dn * 1.2); trRough = t.rough; trAO = t.ao;
+  } else col = lin(vec3(0.62, 0.6, 0.56));
+  col = mix(col, vec3(dot(col, vec3(0.33))), 0.35) * mix(0.72, 1.12, vRand) * vec3(1.02, 1.0, 0.96);
+  float soil = 1.0 - smoothstep(-0.55, 0.05, vLocal.y / max(vScale.y, 1e-3));
+  col = mix(col, col * vec3(0.66, 0.56, 0.44), soil * 0.8);
+  trRough = 0.85;
 #elif defined(TR_ROPE)
   // Blue rope, the nylon kind, faded by the sun, wound round in strands.
   float tw = sin((vLocal.y * 60.0 + atan(vLocal.x, vLocal.z) * 2.0) * 1.0);
@@ -273,7 +311,7 @@ const FRAG_COLOR = /* glsl */ `
   if (!gl_FrontFacing) trNw = -trNw;
   float trFp = max(length(fwidth(vWorldPos)), 0.001);
   diffuseColor.rgb = trailSurface(vWorldPos, trNw, trFp);
-  trShadow = bakedShadow(vWorldPos + trNw * 0.3, 0.2) * cloudShadow(vWorldPos, uSunDirW);
+  trShadow = bakedShadow(vWorldPos + trNw * 0.3, 0.2) * cloudShadow(vWorldPos, uSunDirW) * trSelf;
 `;
 
 export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {}) {
@@ -327,7 +365,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
 
   const mats = {
     concrete: material('concrete'), dirt: material('dirt'), timber: material('wood'), log: material('wood', { LOG: 1 }),
-    bamboo: material('bamboo'), rope: material('rope'),
+    bamboo: material('bamboo'), rope: material('rope'), stone: material('stone'),
   };
   const group = new THREE.Group();
   group.name = 'trail';
@@ -335,6 +373,19 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
   const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 1, false);
   const unitRope = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+  // (v10) A stone: a faceted, lumpy ball, flat underneath, about 1 across. Limestone breaks
+  // into angular pieces, so its facets stay (no smoothing across them).
+  const unitStone = (() => {
+    const g = new THREE.IcosahedronGeometry(0.5, 1);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const k = 1 + 0.16 * Math.sin(x * 7.1 + y * 3.3) + 0.12 * Math.sin(z * 9.7 - x * 4.1) + 0.08 * Math.sin(y * 13.0 + z * 5.0);
+      p.setXYZ(i, x * k, Math.max(y * k, -0.28), z * k);
+    }
+    g.computeVertexNormals();
+    return g;
+  })();
   // Depth first, with the ground's own depth pass (terrain-mesh.js), so the ground's shader,
   // the most expensive on screen, does not run under the treads only to be painted over.
   const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
@@ -349,7 +400,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   };
 
   function update(data) {
-    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitRope && c.geometry.dispose(); }
+    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitRope && c.geometry !== unitStone && c.geometry.dispose(); }
     if (!data) return;
     for (const k of ['concrete', 'dirt']) {
       const d = data.meshes[k];
@@ -377,6 +428,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       withPrepass(m);
     };
     inst('logs', unitCyl, mats.log);
+    if (data.inst.stones) inst('stones', unitStone, mats.stone);
     inst('timberPosts', unitBox, mats.timber);
     inst('timberRails', unitBox, mats.timber);
     inst('bambooPosts', unitCylFine, mats.bamboo);
