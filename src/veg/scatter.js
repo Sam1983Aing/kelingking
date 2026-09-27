@@ -26,8 +26,9 @@ export const SPECIES = [
   { id: 'palm', heights: [10, 12.5], impostor: true, crown: [0.36, 0.3] },
   { id: 'pandanus', heights: [3.2, 4.2], impostor: true, crown: [0.5, 0.6] },
   { id: 'creeper', heights: [2.6, 3.8], impostor: true, crown: [0.3, 0.6] },
+  { id: 'faceScrub', heights: [0.9, 1.3], impostor: true, crown: [0.4, 0.4] },
 ];
-export const SP = { SCAEVOLA: 0, GRASS: 1, TREE: 2, PALM: 3, PANDANUS: 4, CREEPER: 5 };
+export const SP = { SCAEVOLA: 0, GRASS: 1, TREE: 2, PALM: 3, PANDANUS: 4, CREEPER: 5, FACE: 6 };
 
 export function scatterPlants(hf, layout, surfaceShift = null) {
   const t0 = performance.now();
@@ -68,6 +69,15 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
   const ledgeAt = (x, y, h) => {
     const bc = h + strataWarp(x, y);
     return Math.max(0, coarseAt(strata, bc - 0.6) - coarseAt(strata, bc + 0.6));
+  };
+  // (v9) Plants on the faces and ledges hang out and down from where they are rooted, so on a
+  // cut bank beside the path they hung over the tread (v8 found six hanging scrubs up to 5 m
+  // tall at the first hairpin below the ridge). Keep them back by as much as they hang.
+  const clearOfPath = (x, y, sp, scale) => {
+    if (!route) return true;
+    const reach = SPECIES[sp].heights.at(-1) * scale * (sp === SP.CREEPER ? 1.1 : 0.8);
+    const q = route.nearest(x, y, reach + 4);
+    return !q || q.d > route.lerpAt(route.w, q) / 2 + 0.5 + reach;
   };
   // Coconut palms stand in groves on the plateau, away from the cliff edge.
   const groveAt = (px, py) => smooth(0.6, 0.72, fbm(noise, px * 0.012 - 7, py * 0.012 + 21, 3) + 0.5);
@@ -120,9 +130,19 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           const d = ((k + rand()) / n - 0.5) * spacing;
           const x2 = px + gx * d, y2 = py + gy * d, h2 = heightAt(x2, y2);
           if (h2 < 12) continue;
-          // Patches longer down the face than across it, their edges ragged at a few metres.
-          const fp = smooth(0.5, 0.66, fbm(noise, x2 * 0.035 + h2 * 0.008, y2 * 0.035 - h2 * 0.007 + 31, 3) + 0.5
+          // (v9) Streaks along the beds, where a softer layer holds soil and a crack holds
+          // roots: the noise changes fast with height and slowly along the face, and the
+          // ledges carry more. And some streaks down the gullies (the old patches, longer down
+          // than across). Sparse inside a streak, so the rock shows through: it was round
+          // blobs of dense scrub.
+          const bed = smooth(0.55, 0.72, fbm(noise, x2 * 0.04 + 3, y2 * 0.04 - 7 + h2 * 0.16, 3) + 0.5)
+            * smooth(0.35, 0.6, fbm(noise, x2 * 0.012 - 5, y2 * 0.012 + 2, 2) + 0.5);
+          const gully = smooth(0.5, 0.66, fbm(noise, x2 * 0.035 + h2 * 0.008, y2 * 0.035 - h2 * 0.007 + 31, 3) + 0.5
             + 0.12 * (fbm(noise, x2 * 0.2 + h2 * 0.15, y2 * 0.2 - h2 * 0.1 - 9, 2)));
+          const shelf = smooth(0.05, 0.3, ledgeAt(x2, y2, h2));
+          // More toward the top of the faces, where the rim's soil and seep water reach.
+          const high = 0.45 + 0.7 * smooth(35, 100, h2);
+          const fp = Math.max(bed * (0.45 + 0.55 * shelf), gully * 0.85, shelf * 0.3) * high;
           if (rand() > fp * cfg.face.density * smooth(12, 22, h2)) continue;
           let qx2 = x2, qy2 = y2;
           if (surfaceShift) {
@@ -131,9 +151,11 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           }
           // A little out from the rock, where the roots hold.
           qx2 += Math.cos(outA) * 0.3; qy2 += Math.sin(outA) * 0.3;
-          const sp2 = rand() < 0.75 ? SP.CREEPER : SP.SCAEVOLA;
-          const sc2 = sp2 === SP.CREEPER ? 0.7 + 0.7 * rand() : 0.5 + 0.4 * rand();
-          out.push(qx2, h2 - 0.1 * sc2, -qy2, sc2, sp2 === SP.CREEPER ? outA + (rand() - 0.5) * 0.6 : rand() * Math.PI * 2, sp2,
+          const r2 = rand();
+          const sp2 = r2 < 0.12 * (0.3 + shelf) ? SP.CREEPER : r2 < 0.2 ? SP.SCAEVOLA : SP.FACE;
+          const sc2 = sp2 === SP.CREEPER ? 0.5 + 0.5 * rand() : sp2 === SP.FACE ? 0.6 + 0.8 * rand() : 0.4 + 0.35 * rand();
+          if (!clearOfPath(qx2, qy2, sp2, sc2)) continue;
+          out.push(qx2, h2 - 0.1 * sc2, -qy2, sc2, sp2 !== SP.SCAEVOLA ? outA + (rand() - 0.5) * 0.6 : rand() * Math.PI * 2, sp2,
             Math.floor(rand() * SPECIES[sp2].heights.length), rand());
         }
       }
@@ -166,7 +188,8 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           px = bx; py = by; h = bh; up = slopeAt(px, py);
           // A run along the ledge: more hanging scrub either side, along the face's contour,
           // longer where the ledge is broad and in stretches the clump noise favours.
-          const run = Math.floor(smooth(0.35, 0.7, fbm(noise, px * 0.05 + 5, py * 0.05 - 3, 2) + 0.5) * 3.5 * smooth(0.08, 0.35, best) * patch);
+          // (v9: shorter, 2 either side at most, where 3.5 drew ruled lines along the beds.)
+          const run = Math.floor(smooth(0.35, 0.7, fbm(noise, px * 0.05 + 5, py * 0.05 - 3, 2) + 0.5) * 2.2 * smooth(0.08, 0.35, best) * patch);
           for (let k = 1; k <= run; k++) {
             for (const sgn of [-1, 1]) {
               if (rand() < 0.35) continue;
@@ -185,10 +208,12 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
                 const s3 = surfaceShift(bx3, by3, bh3);
                 if (s3) { if (s3.c > 2.5) continue; qx3 += s3.c * s3.gx; qy3 += s3.c * s3.gy; }
               }
-              const sp3 = rand() < 0.8 ? SP.CREEPER : SP.SCAEVOLA;
+              const r3 = rand();
+              const sp3 = r3 < 0.4 ? SP.CREEPER : r3 < 0.55 ? SP.SCAEVOLA : SP.FACE;
               // Out to the lip of the ledge: the hard bed under it stands out further.
               qx3 -= gx * 0.9; qy3 -= gy * 0.9;
-              const sc3 = sp3 === SP.CREEPER ? 0.8 + 0.7 * rand() : 0.6 + 0.4 * rand();
+              const sc3 = sp3 === SP.CREEPER ? 0.7 + 0.6 * rand() : sp3 === SP.FACE ? 0.8 + 0.7 * rand() : 0.6 + 0.4 * rand();
+              if (!clearOfPath(qx3, qy3, sp3, sc3)) continue;
               out.push(qx3, bh3 - 0.1 * sc3, -qy3, sc3, outYaw + (rand() - 0.5) * 0.6, sp3, Math.floor(rand() * SPECIES[sp3].heights.length), rand());
             }
           }
@@ -210,7 +235,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       // ledges, trees further out and in the hollows, coconut palms in groves on the plateau.
       const r = rand();
       let sp;
-      if (onLedge) sp = r < 0.7 ? SP.CREEPER : r < 0.8 ? SP.PANDANUS : SP.SCAEVOLA;
+      if (onLedge) sp = r < 0.45 ? SP.CREEPER : r < 0.55 ? SP.PANDANUS : r < 0.7 ? SP.SCAEVOLA : SP.FACE;
       else if (far < 0.2) sp = r < 0.035 ? SP.PANDANUS : r < 0.06 && up > 0.7 ? SP.TREE : SP.SCAEVOLA;
       else {
         // Palms about 8 m apart in a grove (one in five of the 3.6 m slots), scrub and the odd
@@ -224,7 +249,8 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       const base = tree ? lerp(0.6, 1.0, far) * (0.7 + 0.6 * rand())
         : sp === SP.PALM ? 0.8 + 0.4 * rand()
         : sp === SP.PANDANUS ? 0.7 + 0.5 * rand()
-        : sp === SP.CREEPER ? 0.9 + 0.7 * rand()
+        : sp === SP.CREEPER ? 0.8 + 0.6 * rand()
+        : sp === SP.FACE ? 0.9 + 0.7 * rand()
         : (0.5 + 0.5 * rand() * rand() + 0.2 * scrub) * (onLedge ? 0.8 : 1);
       let scale = base * (onLedge ? 1 : 0.85 + 0.3 * up);
       // Views from the path stay open (v6): a plant's top stays under the eye line of someone on
@@ -250,8 +276,9 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
           qx += s.c * s.gx; qy += s.c * s.gy;
         }
       }
-      const yaw = sp === SP.CREEPER ? outYaw + (rand() - 0.5) * 0.5 : rand() * Math.PI * 2;
+      const yaw = sp === SP.CREEPER || sp === SP.FACE ? outYaw + (rand() - 0.5) * 0.5 : rand() * Math.PI * 2;
       if (onLedge) { qx += Math.cos(outYaw) * 0.9; qy += Math.sin(outYaw) * 0.9; }
+      if ((sp === SP.CREEPER || sp === SP.FACE) && !clearOfPath(qx, qy, sp, scale)) continue;
       out.push(qx, h - 0.1 * scale, -qy, scale, yaw, sp, variant, rand());
     }
     y += rowStep;

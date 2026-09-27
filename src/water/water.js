@@ -19,7 +19,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     swellHeading: 40,   // direction the swell travels, compass degrees
     foam: 1.0,
     whitecaps: 1.0,
-    turbidity: 0.6,
+    turbidity: 1.0,
     murk: 1.0,
     // Water optics per metre, roughly pure sea water at 610, 550 and 465 nm plus a little
     // plankton: red is gone within a few metres, blue carries.

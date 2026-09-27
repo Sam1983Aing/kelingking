@@ -13,10 +13,13 @@
 // sight, so it arrives on the platform looking along it. From 1 on it walks the path at eye
 // height (the walk line, src/trail/route.js), then crosses the sand.
 //
-// Where it looks while walking: toward the head, whichever way the path turns. The path
-// swings through every compass direction on the switchbacks, but the head stays within about
-// 20 degrees of south-west from all of it, so the view barely turns. Pitch and lens are
-// keyframed by distance walked, and all three are smoothed over a few metres.
+// Where it looks while walking (v9): where it walks. The heading of the path, smoothed across
+// each bend so the turn starts before the bend and ends after it, and pulled toward the view
+// (the head, the beach) by up to `bias` degrees where that is natural, as a walker looks out
+// over the drop on a straight. Where the view turns fast the scroll slows (`TURN_PACE`), so a
+// hairpin takes its time. Pitch follows the path's grade ahead on top of keyframed values, and
+// the lens is keyframed; all of it by distance walked. (v8 looked at the head all the way
+// down, which walked the switchbacks' northward legs backwards.)
 //
 // Poses are in the shots' terms (src/shots.js): pos [east, north, height], yaw a compass
 // heading, pitch up from level, fov vertical, all in degrees. Roll is always 0: the horizon
@@ -35,40 +38,52 @@ export const PACE = [
   [5.4, 1.012],    // a pause at the viewpoint
   [8.0, 1.97],     // steps and ridge
   [8.5, 2.02],     // the head ahead
-  [11.0, 2.97],    // the switchbacks
-  [11.4, 3.02],
-  [13.4, 3.975],   // down to the sand
-  [14.1, 4.03],    // on the sand
-  [15.6, 4.992],   // to the water
-  [16.7, 5],       // the end
+  [11.8, 2.97],    // the switchbacks (v9: more scroll, as the view now turns with the path)
+  [12.2, 3.02],
+  [15.5, 3.975],   // down to the sand
+  [16.2, 4.03],    // on the sand
+  [17.7, 4.992],   // to the water
+  [18.8, 5],       // the end
 ];
 
-// Look keyframes by metres walked (W, from the viewpoint): where the view is aimed (east,
-// north), pitch, lens. Filled in by buildDescent once it knows where the stops are.
+// Look keyframes by metres walked (W, from the viewpoint): the view (east, north), how far the
+// look may turn off the path toward it (`bias`, degrees on a landscape screen; 180 looks at the
+// view whatever the path does), pitch on level ground, lens. Filled in by buildDescent once it
+// knows where the stops are.
 function lookKeys(W) {
   return [
-    // The viewpoint's own line of sight, then the head's summit (the origin).
-    // Leaving the viewpoint it looks up a little: at the viewpoint's -25.6 the edge of the
-    // platform's concrete pad (v6) passes through the bottom of the frame a metre away.
-    { W: 0, at: [32.4, 8.5], pitch: -25.6, fov: 57 },
-    { W: 3, at: [16, 4], pitch: -18, fov: 56 },
-    { W: W.stairs, at: [0, 0], pitch: -20, fov: 55 },
-    { W: W.stairs + 30, at: [0, 0], pitch: -22, fov: 56 },
-    { W: W.top - 35, at: [0, 0], pitch: -17, fov: 58 },
-    { W: W.top, at: [0, 0], pitch: -20.3, fov: 60 },
-    // Past the hairpin the path runs north along the slope that faces the beach, and looking
-    // at the head would mean looking along the slope: the view turns to the south end of the
-    // beach and the overhang instead. The slope below fills the frame if the camera looks down
-    // much (the trailLow photo was taken from over the beach, v6), so it looks out.
-    { W: W.top + 8, at: [0, 0], pitch: -21, fov: 60 },
-    { W: W.top + 60, at: [100, 105], pitch: -24, fov: 60 },
-    { W: W.low, at: [100, 105], pitch: -25, fov: 57 },
-    { W: W.low + 30, at: [80, 120], pitch: -18, fov: 56 },
+    // The viewpoint's own line of sight, then the steps: the path, turned toward the head's
+    // summit (the origin). Leaving the viewpoint it looks up a little: at the viewpoint's -25.6
+    // the edge of the platform's concrete pad (v6) passes through the bottom of the frame.
+    { W: 0, at: [32.4, 8.5], bias: 180, pitch: -25.6, fov: 57 },
+    { W: 3, at: [16, 4], bias: 180, pitch: -18, fov: 56 },
+    { W: W.stairs, at: [0, 0], bias: 30, pitch: -12, fov: 56 },
+    { W: W.top - 35, at: [0, 0], bias: 30, pitch: -14, fov: 58 },
+    { W: W.top, at: [0, 0], bias: 30, pitch: -17, fov: 60 },
+    // Past the first hairpin the path runs north along the face above the beach: the beach and
+    // the bay are down to the left.
+    { W: W.top + 20, at: [0, 0], bias: 30, pitch: -17, fov: 60 },
+    { W: W.top + 45, at: [115, 185], bias: 35, pitch: -16, fov: 60 },
+    { W: W.low, at: [100, 150], bias: 35, pitch: -16, fov: 58 },
+    { W: W.low + 30, at: [80, 130], bias: 35, pitch: -14, fov: 56 },
     // The break by the rock at the south end of the beach.
-    { W: W.foot, at: [58.5, 119.8], pitch: -9, fov: 54 },
-    { W: W.end, at: [58.5, 119.8], pitch: -3.6, fov: 47 },
+    { W: W.foot, at: [58.5, 119.8], bias: 40, pitch: -9, fov: 54 },
+    { W: W.end - 8, at: [58.5, 119.8], bias: 180, pitch: -5, fov: 49 },
+    { W: W.end, at: [58.5, 119.8], bias: 180, pitch: -3.6, fov: 47 },
   ];
 }
+
+// How the look follows the path: the heading is smoothed across this many metres (a Gaussian's
+// sigma) and taken this far ahead, so a hairpin's turn starts before the bend. Where the path
+// turns one way and straight back (within 10 m either side, the degrees turned beyond the net
+// turn passing ZIGZAG), the heading is smoothed across ZIGZAG_TURN metres instead, so the view
+// swings only part of the way with each short leg.
+const TURN = 2.5, LEAD = 1.5, ZIGZAG = 60, ZIGZAG_TURN = 6;
+// How much of the path's grade (the slope over the next few metres) goes into the pitch.
+const GRADE = 0.3;
+// The scroll slows where the view turns: TURN_PACE degrees of turn take as much scroll as a
+// metre walked (about 60 m or 110 degrees a screen on the switchbacks).
+const TURN_PACE = 1.8;
 
 // The heading straight down over the bay at the start (the overview frame has 9.1, north up).
 const START_YAW = 140;
@@ -78,7 +93,7 @@ const START_YAW = 140;
 const HAIRPIN = 2;
 
 // How much higher the eye is held on the switchbacks, and down the concrete steps (metres).
-const LIFT = 1.0, STEPS_LIFT = 0.9;
+const LIFT = 0.4, STEPS_LIFT = 0.4;
 
 // The walk across the sand: from the foot of the path to where the swash frame stands.
 const SAND = [[124.5, 190.6], [114, 182], [104.5, 170], [99, 164]];
@@ -144,28 +159,60 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
 
   // ---------------------------------------------------------------- where it looks
   const keys = lookKeys(W);
+  // The heading walked, unwrapped (so smoothing never averages across north), then smoothed
+  // across the bends and read a little ahead.
+  const head = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(i - 2, 0), b = Math.min(i + 2, n - 1);
+    const h = Math.atan2(Xs[b] - Xs[a], Ys[b] - Ys[a]) / R;
+    head[i] = i ? head[i - 1] + wrap(h - head[i - 1]) : h;
+  }
+  const turned = new Float64Array(n);
+  for (let i = 1; i < n; i++) turned[i] = turned[i - 1] + Math.abs(head[i] - head[i - 1]);
+  const win = Math.round(10 / DW);
+  const zig = gauss(turned.map((_, i) => {
+    const a = Math.max(i - win, 0), b = Math.min(i + win, n - 1);
+    return smooth01((turned[b] - turned[a] - Math.abs(head[b] - head[a]) - ZIGZAG) / 80);
+  }), 3 / DW);
+  const narrow = gauss(head, TURN / DW), wide = gauss(head, ZIGZAG_TURN / DW);
+  const lead = Math.round(LEAD / DW);
+  const fwd = narrow.map((_, i) => { const j = Math.min(i + lead, n - 1); return narrow[j] + (wide[j] - narrow[j]) * zig[j]; });
+  // The grade ahead: the slope of the eye's line over the next 4 m, in degrees.
+  const ahead = Math.round(4 / DW);
+  const grade = gauss(Z.map((z, i) => Math.atan2(Z[Math.min(i + ahead, n - 1)] - z, ahead * DW) / R), 1.5 / DW);
+  // How far the look may lean toward the view, for this screen: the path ahead has to stay in
+  // the frame, so on a tall screen (a narrow view across) it leans less.
+  const halfAcross = Math.atan(Math.tan((view.fov * R) / 2) * view.aspect) / R;
+  const lean = Math.min(1, Math.max(0.35, halfAcross / 45));
   const yawRaw = new Float64Array(n), pitchRaw = new Float64Array(n), fovRaw = new Float64Array(n);
-  // (Unwrapped from the viewpoint's heading, so smoothing never averages across north.)
-  let k = 0, prevYaw = shots.viewpoint.yaw;
+  let k = 0;
   for (let i = 0; i < n; i++) {
     const w = i * DW;
     while (k < keys.length - 2 && keys[k + 1].W < w) k++;
     const A = keys[k], B = keys[k + 1];
     const u = smooth01((w - A.W) / (B.W - A.W));
     const tx = A.at[0] + (B.at[0] - A.at[0]) * u, ty = A.at[1] + (B.at[1] - A.at[1]) * u;
-    let yaw = Math.atan2(tx - Xs[i], ty - Ys[i]) / R;
-    yaw = prevYaw + (((yaw - prevYaw) % 360) + 540) % 360 - 180;
-    prevYaw = yaw;
-    yawRaw[i] = yaw;
-    pitchRaw[i] = A.pitch + (B.pitch - A.pitch) * u;
+    const toView = Math.atan2(tx - Xs[i], ty - Ys[i]) / R;
+    // The view's pull: up to the bias either side, and none when the view is straight behind
+    // (so the look cannot flip from one side to the other).
+    const d = wrap(toView - fwd[i]);
+    const bias = A.bias + (B.bias - A.bias) * u;
+    const most = bias >= 180 ? 180 : bias * lean + (180 - bias * lean) * Math.max(0, (bias - 90) / 90);
+    const pull = Math.sign(d) * Math.min(Math.abs(d), most) * (most >= 180 ? 1 : 1 - smooth01((Math.abs(d) - 120) / 60));
+    yawRaw[i] = fwd[i] + pull;
+    const full = Math.max(0, (bias - 90) / 90);   // looking at the view only: no grade in the pitch
+    pitchRaw[i] = A.pitch + (B.pitch - A.pitch) * u + GRADE * grade[i] * (1 - full);
     fovRaw[i] = A.fov + (B.fov - A.fov) * u;
   }
-  const yawS = gauss(yawRaw, 3 / DW), pitchS = gauss(pitchRaw, 3 / DW), fovS = gauss(fovRaw, 3 / DW);
+  // (The yaw unwrapped again: fwd + pull can cross north between samples.)
+  for (let i = 1; i < n; i++) yawRaw[i] = yawRaw[i - 1] + wrap(yawRaw[i] - yawRaw[i - 1]);
+  const yawS = gauss(yawRaw, 2 / DW), pitchS = gauss(pitchRaw, 3 / DW), fovS = gauss(fovRaw, 3 / DW);
   // The viewpoint's frame exactly at the start (smoothing pulls it toward what comes next).
   const vp = shots.viewpoint;
+  const vpYaw = yawS[0] + wrap(vp.yaw - yawS[0]);
   for (let i = 0; i < hold * 1.5; i++) {
     const t = smooth01(i / (hold * 1.5));
-    yawS[i] = vp.yaw + (yawS[i] - vp.yaw) * t;
+    yawS[i] = vpYaw + (yawS[i] - vpYaw) * t;
     pitchS[i] = vp.pitch + (pitchS[i] - vp.pitch) * t;
     fovS[i] = vp.fov + (fovS[i] - vp.fov) * t;
   }
@@ -207,10 +254,24 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   }
 
   // ---------------------------------------------------------------- tau
+  // Between two stops tau runs evenly not in metres but in "cost": a metre plus the degrees
+  // the view turns over it, so the camera slows through the bends and walks the straights.
+  const cost = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const turn = Math.abs(yawS[i] - yawS[i - 1]) + 0.5 * Math.abs(pitchS[i] - pitchS[i - 1]);
+    cost[i] = cost[i - 1] + DW + turn / TURN_PACE;
+  }
+  const costAt = (w) => { const f = Math.min(Math.max(w / DW, 0), n - 1.0001), i = Math.floor(f); return cost[i] + (cost[i + 1] - cost[i]) * (f - i); };
+  const wAtCost = (c) => {
+    let a = 0, b = n - 1;
+    while (b - a > 1) { const m = (a + b) >> 1; if (cost[m] < c) a = m; else b = m; }
+    return (a + Math.min(Math.max((c - cost[a]) / Math.max(cost[b] - cost[a], 1e-9), 0), 1)) * DW;
+  };
   const bounds = [0, W.top, W.low, W.foot, W.end];   // metres walked at tau 1, 2, 3, 4, 5
+  const cBounds = bounds.map(costAt);
   function wAt(tau) {
     const k = Math.min(Math.max(Math.floor(tau) - 1, 0), 3), u = Math.min(Math.max(tau - 1 - k, 0), 1);
-    return bounds[k] + (bounds[k + 1] - bounds[k]) * u;
+    return wAtCost(cBounds[k] + (cBounds[k + 1] - cBounds[k]) * u);
   }
   function poseAt(tau) {
     if (tau <= 1) return airPose(Math.max(tau, 0));
@@ -218,7 +279,7 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   }
   // tau for a distance walked (the inverse of wAt).
   function tauAtW(w) {
-    for (let k = 0; k < 4; k++) if (w <= bounds[k + 1]) return 1 + k + (w - bounds[k]) / (bounds[k + 1] - bounds[k]);
+    for (let k = 0; k < 4; k++) if (w <= bounds[k + 1]) return 1 + k + (costAt(w) - cBounds[k]) / (cBounds[k + 1] - cBounds[k]);
     return 5;
   }
   return { poseAt, wAt, tauAtW, W, total: W.end, stairsTau: tauAtW(W.stairs), startHeight: D0 };
@@ -278,6 +339,7 @@ export function makePace(knots = PACE) {
 const smooth01 = (t) => { t = Math.min(Math.max(t, 0), 1); return t * t * (3 - 2 * t); };
 const smoother01 = (t) => { t = Math.min(Math.max(t, 0), 1); return t * t * t * (t * (6 * t - 15) + 10); };
 const extend = (a, b) => [2 * b[0] - a[0], 2 * b[1] - a[1]];
+const wrap = (a) => (((a % 360) + 540) % 360) - 180;
 
 // Gaussian smoothing of an array, sigma in samples, edges held.
 function gauss(A, sigma) {

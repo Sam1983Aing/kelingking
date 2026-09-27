@@ -22,6 +22,9 @@
 //                      haze layer over the water, per km (more switches in src/sky/atmosphere.js)
 //   ev=0               exposure compensation in stops
 //   clouds=0           no clouds; bounce=0 no light bounced up from the ground (A/B checks)
+//   clouds.name=value  (v9) coverage, density, base, top, clearRadius, bank, high, seed
+//                      (src/sky/clouds.js); cloudDefines=LIGHT_STEPS:3,FINE_DIV:4.0 its shader's
+//                      step counts and shape constants, for timing (tools/cloud-bench.mjs)
 //   trail=0            no path (v6): the ground uncarved, no steps, rails or plants cleared for it
 //   faceStep=0.55      spacing of the face strips' vertices near the headland (metres)
 //   vegDetail=1        (v7) how far the full plants reach before their lighter level (0: none)
@@ -105,7 +108,8 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   // Fair-weather cumulus, marched at half resolution and blended in by the sky, and their
   // shadows on everything else (src/sky/clouds.js).
   const cloudOpts = {};
-  for (const k of ['coverage', 'density', 'clearRadius', 'seed']) if (params.has('clouds.' + k)) cloudOpts[k] = +params.get('clouds.' + k);
+  for (const k of ['coverage', 'density', 'base', 'top', 'clearRadius', 'bank', 'high', 'seed']) if (params.has('clouds.' + k)) cloudOpts[k] = +params.get('clouds.' + k);
+  if (params.has('cloudDefines')) cloudOpts.defines = Object.fromEntries(params.get('cloudDefines').split(',').map((kv) => kv.split(':')));
   const clouds = createClouds(renderer, atmosphere, cloudOpts);
   if (params.get('clouds') === '0') clouds.uniforms.uCloudShadow.value = 0;
   // What every lit material shares: sun, sky light, haze, cloud shadows.
@@ -124,7 +128,8 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   const skyDome = createSkyDome(atmosphere, grade.uniforms);
   const sky = skyDome.mesh;
   scene.add(sky);
-  skyDome.material.uniforms.uClouds.value = clouds.texture;
+  // (The clouds swap between two targets: the sky reads whichever is current.)
+  skyDome.material.uniforms.uClouds = clouds.output;
   skyDome.material.uniforms.uHasClouds.value = params.get('clouds') === '0' ? 0 : 1;
 
   // The sky's light on the ground, as spherical harmonics from the atmosphere.
@@ -173,9 +178,11 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   scene.add(terrain.mesh);
   if (params.get('bounce') === '0') terrain.uniforms.uBounceAlb.value.forEach((v) => v.set(0, 0, 0));
   // Cloud shadows on the island only when clouds can get over it (the ground shader leaves
-  // them out otherwise; it is the most expensive shader on screen).
+  // them out otherwise; it is the most expensive shader on screen). Clouds start at the clear
+  // radius, and with the sun near overhead their shadows fall within a few hundred metres of
+  // them, beyond the 1.6 km of modelled ground from 1.2 km out.
   function terrainCloudShadows() {
-    const onIsland = clouds.params.clearRadius < 2.5 && clouds.uniforms.uCloudShadow.value > 0;
+    const onIsland = clouds.params.clearRadius < 1.2 && clouds.uniforms.uCloudShadow.value > 0;
     const m = terrain.mesh.material;
     if (!!m.defines?.TERRAIN_CLOUDS !== onIsland) {
       m.defines = { ...m.defines };

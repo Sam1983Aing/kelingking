@@ -217,3 +217,24 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   at 21:9 (`startHeight()` in `path.js`), not the overview's 1.1 km. A coarse ring of far
   terrain around the model (the rest of the island) would let it start higher, and would also
   give the far coast the drone photos have.
+
+**From v9 (the final pass).**
+
+- **The budget is spent.** Side by side with v8 (`ab.mjs --hero`, 20 to 24 rounds) every hero
+  frame is within 10%, but `stairs` sits right on the line: +9 to +12% over five runs, +10% in
+  the last. Bisecting it over v9's commits (`ab.mjs stairs --a=v8 --b=<commit>`, new in v9)
+  puts it in three small pieces, none of them one thing to take out: the foam seen from above
+  (+4%), the white water at eye level (+2%), the plants on the faces (+3%). Anything v10 adds
+  should come with a saving.
+- **The clouds are amortised.** They are marched one pixel in sixteen per frame and carried over
+  with reprojection (`clouds.js`); a whole march is 0.5 to 4 ms, the per-frame one 0.4 to 1.3
+  ms, on par with v8's march of simpler clouds (`tools/cloud-bench.mjs`). A jump or a still
+  frame pays for a whole one. The weather map is 1024 square with a third channel now, and
+  the noise textures (64^3 and 32^3) are made on the CPU at load: both could ship as files.
+- **More plants to grow at load.** A seventh species (the face scrub) adds two variants to grow
+  and bake. The count went down (205,000 against 215,000), so drawing them costs about the
+  same.
+- **The scroll is longer**: 18.8 screens, from 16.7. The switchbacks got 2.1 more so the view
+  can turn with the path without spinning.
+- **Drag to look around** adds pointer handlers and `touch-action: pan-y` on the stage; nothing
+  per frame when nobody drags.

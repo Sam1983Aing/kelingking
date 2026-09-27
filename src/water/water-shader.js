@@ -190,8 +190,13 @@ Surf surfAt(vec2 p, vec4 d) {
   // Where the breaker draws the lip, this only laid a milky veil over the rising crest just
   // before the breaker took over, so it is nearly off then.)
   float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v) * (1.0 - 0.9 * uBreakerOn);
-  // The bore: a white front a metre or two deep, then foam that thins into lace.
-  float front = broken * smoothstep(-0.03, 0.0, v) * (1.0 - smoothstep(0.04, 0.12, v));
+  // The bore: a white front, the turbulent roller behind it churning for several metres
+  // (v9: a band a fifth of a wavelength deep, where it was a metre or two), then foam that
+  // thins into lace.
+  // (Its leading edge ragged: lobes a metre or two across.)
+  // (Only inside the break: this runs for every point near a beach, three times per vertex.)
+  float vr = broken > 0.0 && abs(v) < 0.1 ? v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02 : v;
+  float front = broken * smoothstep(-0.03, 0.0, vr) * (1.0 - smoothstep(0.05, 0.22, v)) * mix(0.7, 1.0, smoothstep(0.15, 0.0, v));
   float trail = broken * 0.8 * exp(-max(v, 0.0) / 0.3) * step(0.0, v);
   float resid = smoothstep(br + 14.0, 0.0, s) * 0.2;
 
@@ -278,6 +283,22 @@ float cells(vec2 p, float t) {
   }
   return f2 - f1;
 }
+// The same cell edges, searched over the four nearest cells instead of nine (v9, for the lace,
+// which runs on every pixel of foam): the points stay within the middle of their cells, so
+// the nearest two are almost always among those four.
+float cells4(vec2 p, float t) {
+  vec2 ip = floor(p), fp = fract(p);
+  vec2 o0 = step(0.5, fp) - 1.0;
+  float f1 = 9.0, f2 = 9.0;
+  for (int j = 0; j <= 1; j++) for (int i = 0; i <= 1; i++) {
+    vec2 g = o0 + vec2(float(i), float(j));
+    vec2 h = vec2(hash12(ip + g), hash12(ip + g + 19.19));
+    vec2 o = 0.5 + 0.3 * sin(t + 6.2831 * h);
+    float dd = length(g + o - fp);
+    if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) { f2 = dd; }
+  }
+  return f2 - f1;
+}
 float caustics(vec2 p, float t) {
   float a = 1.0 - smoothstep(0.0, 0.14, cells(p * 0.9, t * 0.9));
   float b = 1.0 - smoothstep(0.0, 0.16, cells(p * 1.3 + 7.3, -t * 0.7));
@@ -309,34 +330,44 @@ vec3 foamRelief(vec2 q, float fp, float t) {
   return vec3(mix(0.3, 1.0, smoothstep(0.34, 0.62, h0)), g * mix(0.6, 0.25, fine2));
 }
 
-// Foam lace at a map position: two levels of warping (big swirls, then filaments bent along
-// them), ridges of noise for the filaments, small cells for bubbles up close, and a slow
-// variation in how dense it is. Returns the pattern (x) and the big ridges (y).
+// Foam lace at a map position (v9): a web. Foam gathers on the walls between cells of clear
+// water (the bubbles' own cells, blown up to a metre or two by the flow), so thin foam is a net
+// of lines with holes and denser foam is the same net with its walls thickened until the holes
+// close. Two sizes of cells, warped so no two match and bent along slow swirls, in patches
+// that come and go. (v4 to v8 drew ridges of warped noise here, which read as marbled paint
+// from above.) Returns the pattern (x: foam appears where it is above 1 - amount) and the
+// walls alone (y).
 vec2 lacePattern(vec2 pf, float fp) {
-    vec2 q = pf * 0.9;
-#ifdef LACE_FULL
-    vec2 w1 = vec2(fbm3(q * 0.18 + vec2(0.0, uTime * 0.03)), fbm3(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
-#else
-    vec2 w1 = vec2(vnoise(q * 0.18 + vec2(0.0, uTime * 0.03)), vnoise(q * 0.18 + vec2(5.2, 1.3) - uTime * 0.025));
-#endif
-    vec2 qw = q + (w1 - 0.5) * 6.0;
-#ifdef LACE_FULL
-    vec2 w2 = vec2(fbm3(qw * 0.5 + 2.7), fbm3(qw * 0.5 + 9.1));
-#else
-    vec2 w2 = vec2(vnoise(qw * 0.5 + 2.7), vnoise(qw * 0.5 + 9.1));
-#endif
-    vec2 qq = qw + (w2 - 0.5) * 2.2;
-    float ridge = 1.0 - abs(2.0 * fbm3(qq * 0.45) - 1.0);
-    float ridge2 = 1.0 - abs(2.0 * fbm3(qq * 1.1 + 4.4) - 1.0);
-    float near = smoothstep(0.12, 0.03, fp);
-    float ridge3 = near > 0.0 ? 1.0 - abs(2.0 * fbm3(qq * 3.2 + 7.7 + w2 * 3.0) - 1.0) : 0.6;
-    float walls = fp < 0.05 ? 1.0 - smoothstep(0.0, 0.25, cells(qq * 3.0, uTime * 0.35)) : 0.4;
-    float body = fbm3(qw * 0.12 + 11.0);
-    // Up close the fine threads and bubbles carry it; the big strokes would read as paint.
-    float pattern = clamp(pow(ridge, 3.0) * mix(0.45, 0.22, near) + pow(ridge2, 5.0) * 0.3
-                    + mix(0.12, pow(ridge3, 6.0) * 0.5 + walls * 0.2, near)
-                    + (body - 0.5) * mix(0.9, 0.6, near) + 0.08, 0.0, 1.0);
-    return vec2(pattern, ridge);
+    vec2 q = pf;
+    vec2 w1 = vec2(vnoise(q * 0.12 + vec2(0.0, uTime * 0.02)), vnoise(q * 0.12 + vec2(5.2, 1.3) - uTime * 0.017)) - 0.5;
+    vec2 qw = q + w1 * 4.5;
+    // A finer warp bends the walls, so they wander instead of running straight cell to cell.
+    // A middle warp bends each wall into a curve (at the scale of a cell, so it bends rather
+    // than shears).
+    vec2 w2 = vec2(vnoise(qw * 0.3 + 2.7), vnoise(qw * 0.3 + 9.1)) - 0.5;
+    vec2 qq = qw + w2 * 1.6;
+    // Cell walls: 1 on a wall, falling to 0 inside a cell. Cells about 2.2 m and 1.2 m
+    // across, one or the other in patches (so the lace is coarse in places, fine in others),
+    // and a finer net of 0.5 m cells through both.
+    float coarse = smoothstep(0.42, 0.58, vnoise(qw * 0.07 + 8.8));
+    // (Thin walls: a thread of foam, not a band. The pattern's threshold widens them as the
+    // foam gets thicker. Each size only where it shows.)
+    float c1 = fp < 0.6 && coarse > 0.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.45, uTime * 0.1)) : 0.3;
+    float c2 = fp < 0.4 && coarse < 1.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.85 + 5.3, uTime * 0.12)) : 0.3;
+    float big = mix(c2, c1, coarse);
+    float small = fp < 0.22 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 2.0 + 3.1, uTime * 0.16)) : 0.28;
+    // Finer threads and bubbles up close.
+    float near = smoothstep(0.06, 0.02, fp);
+    float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells4(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
+    float walls = max(big, small * 0.8);
+    walls = mix(walls, max(walls, tiny * 0.7), near);
+    // The threads break up into strings of bubble clumps.
+    float clumps = fp < 0.3 ? vnoise(qq * 3.3 + 1.9) * 0.6 + vnoise(qq * 8.1 + 6.2) * 0.4 : 0.5;
+    walls *= mix(0.62, 1.12, clumps);
+    // Where it is thick and where it is thin: patches a few metres across.
+    float body = fbm3(qw * 0.1 + 11.0) * 0.7 + vnoise(qq * 0.33 + 4.4) * 0.3;
+    float pattern = clamp(walls * 0.7 + (body - 0.5) * 0.85 + 0.1, 0.0, 1.0);
+    return vec2(pattern, walls);
 }
 
 // Foam on the swash (v5), as cover for a given amount of foam. From above in the photos
@@ -611,6 +642,18 @@ void main() {
   // Beyond the sheet's edge the surface dives under the sand, but only after a few millimetres
   // above it, so the geometry always covers where the fragment shader finds water (it works
   // out the edge per pixel).
+  // (v9) The bore is a churning heap, not a flat sheet with white on it: its white water
+  // stands up in lumps a metre or so across, up to a couple of decimetres, drifting shoreward
+  // with it. Only near the camera, where there are vertices enough to draw it.
+  float heapA = (1.0 - sf.sheet) * (sf.fresh * 0.22 + sf.push * 0.08) * (1.0 - smoothstep(20.0, 60.0, spacing * 400.0));
+  if (heapA > 0.002) {
+    vec2 hq = p - offshoreAt(p) * uTime * 1.2;
+    float h0 = vnoise(hq * 0.8) * 0.65 + vnoise(hq * 2.1 + 5.0) * 0.35;
+    float hx = vnoise((hq + vec2(0.15, 0.0)) * 0.8) * 0.65 + vnoise((hq + vec2(0.15, 0.0)) * 2.1 + 5.0) * 0.35;
+    float hy = vnoise((hq + vec2(0.0, 0.15)) * 0.8) * 0.65 + vnoise((hq + vec2(0.0, 0.15)) * 2.1 + 5.0) * 0.35;
+    sf.h += heapA * (h0 - 0.35);
+    vSurfSlope += heapA * vec2(hx - h0, hy - h0) / 0.15;
+  }
   float fv = sf.h - d.r;
   w.y = mix(sf.h + D.y, d.r + max(fv, 0.0) + 0.004 - 0.1 * smoothstep(-0.04, -0.12, fv), sf.sheet);
   w.x += D.x;
@@ -758,6 +801,20 @@ void main() {
   float G = (NoL / (NoL * (1.0 - k) + k)) * (NoV / (NoV * (1.0 - k) + k));
   vec3 spec = uSunIrr * shadow * D * Fs * G / (4.0 * NoV + 1e-4);
 
+  // (v9) Under foam the water is milky: bubbles carried down by the break hang in the top
+  // metre and scatter light back up, white, so the water round the lace is pale and hazy, and
+  // stays so for a while after the foam on top has thinned (the simulation's foam, softened).
+  float bubbles = 0.0;
+#ifdef SKIP_MILK
+  if (false) {
+#else
+  if ((simW > 0.0 && sim.r > 0.02) || sf.fresh > 0.0) {
+#endif
+    float fa = max(sim.r * simW, sf.fresh);
+    bubbles = smoothstep(0.02, 0.6, fa) * (0.55 + 0.45 * vnoise((p - sim.ba * simW) * 0.25 + 3.7)) * (1.0 - sf.sheet);
+    vec3 milk = uGordonF * 0.5 * (uSunIrr * sunY * mix(0.4, 1.0, shadow) + uSkyIrr) / PI * vec3(0.9, 0.97, 1.0);
+    under = mix(under, milk, bubbles * 0.55);
+  }
   vec3 col = under * (1.0 - F) + refl * F + spec;
 
   // Sunlight through the thin top of a steep wave.
@@ -769,7 +826,7 @@ void main() {
   float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
   // The front of an uprush is a band of foam and bubbles.
   float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
-  float fresh = max(sf.fresh, smoothstep(0.25, 0.9, sim.r) * simW);
+  float fresh = max(sf.fresh, smoothstep(0.45, 0.95, sim.r) * simW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
@@ -778,12 +835,13 @@ void main() {
   vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
   float swFoam = smoothstep(1.0, 0.3, vWorld.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
-  if (amount > 0.002 || caps > 0.002) {
+  // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
+  if (amount > 0.002 || (caps > 0.002 && fp < 0.6)) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * vWorld.y, fp) : vec2(0.0);
     pattern = lp.x; ridge = lp.y;
   }
-  float soft = clamp(fwidth(pattern) * 1.5, 0.02, 0.15);
+  float soft = clamp(fwidth(pattern) * 1.5, 0.045, 0.15);
   float lace = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, pattern);
 #ifdef SKIP_SWFOAM
   swFoam = 0.0;
@@ -795,14 +853,31 @@ void main() {
     lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.84, onSheet), fp), swFoam);
   fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
-  float lumps = 0.5;
+  float lumps = 0.5, lumpsMid = 0.5;
   if (fresh > 0.01) {
     vec2 pl = p - travel;
-    lumps = fbm3(pl * 1.6 + vec2(uTime * 0.4, 0.0)) * 0.6 + vnoise(pl * 5.0 - uTime * 0.6) * 0.4;
-    lace = max(lace, fresh * smoothstep(0.18, 0.42, lumps + fresh * 0.25 + pattern * 0.2));
+    // (Each scale only where it shows.)
+    if (fp < 0.22) lumps = fbm3(pl * 1.6 + vec2(uTime * 0.4, 0.0)) * 0.6 + vnoise(pl * 5.0 - uTime * 0.6) * 0.4;
+    // (v9) Lumps and streaks of a metre to several, for where the small ones are below a pixel.
+    if (fp > 0.05) lumpsMid = fbm3(pl * vec2(0.28, 0.5) + vec2(uTime * 0.12, 3.0)) * 0.65 + vnoise(pl * 0.9 - uTime * 0.25) * 0.35;
+    float lz = mix(lumpsMid, lumps, smoothstep(0.2, 0.06, fp));
+    // (Even the thickest leaves holes: churned water shows between the heaps.)
+    lace = max(lace, fresh * smoothstep(0.3, 0.52, lz + fresh * 0.12 + pattern * 0.2));
   }
-  float foam = mix(lace, amount * 0.8, smoothstep(0.25, 1.5, fp)) * smoothstep(0.0, 0.06, amount);
-  foam = max(foam, smoothstep(0.9, 1.05, amount) * (1.0 - onSheet));
+  // Far off, where the lace is smaller than a pixel, what it covers on average: thin lace is
+  // mostly holes (v9: it was taken as 80% of the amount, a white carpet from the clifftop).
+  // And even thick white water from the clifftop is streaks and clumps, not a sheet: broken
+  // up a few metres across, the more so the thinner it is.
+  float farCover = amount * amount * (3.0 - 2.0 * amount) * 0.85;
+  float farW = smoothstep(0.3, 1.5, fp);
+  float brk = 0.5;
+  if (farW > 0.0 && amount > 0.002) {
+    vec2 pb = p - travel;
+    brk = fbm3(pb * 0.16 + vec2(2.0, 7.0)) * 0.65 + vnoise(pb * 0.45 + 5.0) * 0.35;
+    farCover *= clamp(mix(0.25, 0.75, amount) + (brk - 0.5) * mix(2.2, 1.3, amount) + 0.3, 0.0, 1.0);
+  }
+  float foam = mix(lace, farCover, farW) * smoothstep(0.0, 0.06, amount);
+  foam = max(foam, smoothstep(0.9, 1.05, amount) * (1.0 - onSheet) * (1.0 - 0.6 * farW) * mix(0.5, 1.0, farW));
   // Whitecaps: bright where the crest is breaking now, thinning into streaks as the foam ages.
   float capLace = smoothstep(1.0 - caps - 0.1, 1.0 - caps + 0.25, mix(pattern, 0.6, smoothstep(0.1, 0.6, fp)));
   foam = max(foam, capLace * smoothstep(0.02, 0.3, caps) * 0.9);
@@ -814,14 +889,24 @@ void main() {
   float relW = fresh * smoothstep(0.25, 0.04, fp) * (1.0 - 0.75 * onSheet);
   vec3 rel = relW > 0.01 ? foamRelief(p - travel, fp, uTime) : vec3(1.0, 0.0, 0.0);
   vec3 Nf = normalize(N + vec3(-rel.y, 0.0, rel.z) * relW);
-  float heap = mix(1.0, 0.8 + 0.25 * pattern, 1.0 - fresh);
-  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max(dot(Nf, L), 0.15) * shadow + uSkyIrr);
+  // (Old lace is a thin film of bubbles, greyer than the heaped white water, v9.)
+  float heap = mix(1.0, 0.68 + 0.25 * pattern, 1.0 - fresh);
+  // (Wrapped: light travels through white water before it comes back out, v9.)
+  vec3 foamRad = foamAlb * heap / PI * (uSunIrr * max((dot(Nf, L) + 0.5) / 1.5, 0.15) * shadow + uSkyIrr);
   // In the crevices between lumps the sun does not reach: only the sky above them and the
   // light scattered through the foam around (a fifth of the sun's), with the water showing
   // through. About a tenth of the lit tops, so the heap keeps its shape at noon instead of
   // clipping to a flat white.
   vec3 crevice = foamAlb / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
   foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
+  // Further off, the same lumps a metre to a few across: their shaded sides and the gaps
+  // between them. (Dimming the lit foam does nothing at this exposure, it is well above
+  // white in the noon sun: the texture has to be shade, a tenth of the light, and water.)
+  float midW = smoothstep(0.05, 0.2, fp);
+  float gaps = midW * max(fresh, 0.35) * (1.0 - smoothstep(0.28, 0.62, mix(lumpsMid, brk, farW)));
+  // Up close, the troughs between the heaps of the bore, in their own shade.
+  gaps = max(gaps, (1.0 - midW) * fresh * (1.0 - smoothstep(0.3, 0.6, lumpsMid)) * 0.7);
+  foamRad = mix(foamRad, mix(col, crevice, 0.55), gaps * 0.85);
   // Up close on the sheet, the bubbles themselves: bright rims and darker middles, a few
   // millimetres to a couple of centimetres across.
   if (onSheet > 0.01 && fp < 0.012) {
@@ -829,9 +914,13 @@ void main() {
     float bub = smoothstep(0.0, 0.35, cells(qb, uTime * 1.3)) * 0.6 + smoothstep(0.0, 0.3, cells(qb * 2.7 + 5.0, -uTime)) * 0.4;
     foamRad *= mix(1.0, 0.72 + 0.45 * (1.0 - bub), onSheet * smoothstep(0.012, 0.005, fp));
   }
-  // Old foam is a thin film of bubbles: up close the water shows through it.
-  float thinFilm = mix(mix(0.55, 0.75, smoothstep(0.01, 0.08, fp)), 1.0, max(fresh, smoothstep(0.3, 0.8, amount)));
+  // Old foam is a thin film of bubbles: the water shows through its threads (v9: more, so
+  // lace reads as a web on the water rather than paint on it).
+  float thinFilm = mix(mix(0.38, 0.6, smoothstep(0.01, 0.08, fp)), 1.0, max(fresh, smoothstep(0.35, 0.85, amount)));
   float fo = foam * thinFilm;
+  // (v9) The border of a patch of white water is thinner than its middle: the outer part lets
+  // the water through (a hard white edge read as a decal on the water).
+  if (fresh > 0.01) fo *= mix(1.0, mix(0.55, 1.0, smoothstep(0.45, 0.75, lumps * 0.7 + lumpsMid * 0.3 + fresh * 0.2)), smoothstep(0.1, 0.02, fp) * (1.0 - onSheet));
 
   // Shallow water, the swash sheet above all, is mostly the sand seen through it: the ground
   // draws that sand (wet), and this adds what the water does to it. With the blend

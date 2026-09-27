@@ -21,6 +21,7 @@ const LOD = {
   palm: { near: 30, far: 44 },
   pandanus: { near: 15, far: 22 },
   creeper: { near: 14, far: 20 },
+  faceScrub: { near: 10, far: 15 },
 };
 
 // detailScale scales the full plants' reach (0: the lighter level everywhere, for looking at

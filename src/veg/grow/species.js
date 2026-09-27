@@ -229,7 +229,19 @@ export function tree(seed, o = {}) {
   const crownC = [rand.range(-0.1, 0.1) * H, H * 0.62, rand.range(-0.1, 0.1) * H];
   const crownR = [H * rand.range(0.5, 0.62), H * 0.38, H * rand.range(0.48, 0.58)];
   const nTargets = Math.round(rand.range(300, 380));
-  const targets = crownPoints(nTargets, crownC, crownR, rand, { bias: 4.5, floorY: trunkH + H * 0.1 });
+  // (v9) The crown in lobes: two to four smaller clouds of twigs round the main one, so it is
+  // an irregular, broken canopy rather than one dark ball (it read as a lollipop from afar).
+  const lobes = [[crownC, crownR, 0.45]];
+  const nl = 2 + Math.floor(rand() * 3);
+  for (let k = 0; k < nl; k++) {
+    // (Inside the crown's own outline, give or take: a bigger footprint is more pixels of
+    // impostor for every tree on the plateau.)
+    const a = rand() * Math.PI * 2, out = rand.range(0.35, 0.55);
+    const c = [crownC[0] + Math.cos(a) * crownR[0] * out, crownC[1] + rand.range(-0.25, 0.3) * crownR[1], crownC[2] + Math.sin(a) * crownR[2] * out];
+    const r = rand.range(0.4, 0.6);
+    lobes.push([c, [crownR[0] * r, crownR[1] * r * 1.1, crownR[2] * r], (1 - 0.45) / nl]);
+  }
+  const targets = lobes.flatMap(([c, R, share]) => crownPoints(Math.round(nTargets * share), c, R, rand, { bias: 4.5, floorY: trunkH + H * 0.1 }));
   const { branches, tips } = growToTargets(targets, {
     root: [0, 0, 0], rootDir: norm([rand.gauss() * 0.08, 1, rand.gauss() * 0.08]), trunk: trunkH, reach: 0.45, twigAt: 1, maxLevel: 10,
     radius: 0.05 * H, tipRadius: 0.006, pipe: 2.3, bendUp: 0.3, sag: 0.2, crownC, crownR, lengthScale: H,
@@ -245,10 +257,13 @@ export function tree(seed, o = {}) {
       shade: br.pts.map((p) => shadeAt(p, crownC, crownR) * 0.8),
     });
   }
-  const green = lin(60, 86, 46), deep = lin(44, 68, 38), light = lin(76, 100, 52);
+  // (v9: lighter and yellower, as the sunlit canopies on the rims are in the photos.)
+  const green = lin(74, 98, 48), deep = lin(54, 76, 40), light = lin(98, 114, 56);
   let area = 0;
-  // Sprays of leaves (leaves.js) at every twig end, turned every way around it.
+  // Sprays of leaves (leaves.js) at every twig end, turned every way around it (and some
+  // twigs bare, so the sky shows through the crown).
   for (const t of tips) {
+    if (rand() < 0.18) continue;
     const axis = norm(add(mul(t.dir, 0.6), [0, 0.45, 0]));
     const n = Math.round(rand.range(4, 6));
     const side0 = perp(axis);
@@ -443,7 +458,7 @@ export function creeper(seed, o = {}) {
   const H = o.height ?? rand.range(2, 3.2);
   // A curtain out and down the face, and a small mound on the ledge itself.
   const crownC = [0.42 * H, -0.3 * H, 0], crownR = [0.4 * H, 0.55 * H, 0.65 * H];
-  const hang = crownPoints(Math.round(rand.range(190, 240)), crownC, crownR, rand, { bias: 3 })
+  const hang = crownPoints(Math.round(rand.range(150, 190)), crownC, crownR, rand, { bias: 2.4 })
     .filter((p) => p[0] > 0.1 + 0.25 * Math.max(0, p[1]) / H)
     .map((p) => [p[0], p[1], p[2]]);
   const mound = crownPoints(Math.round(rand.range(35, 50)), [0.15 * H, 0.12 * H, 0], [0.3 * H, 0.16 * H, 0.45 * H], rand, { bias: 2.5, floorY: 0.02 });
@@ -462,7 +477,8 @@ export function creeper(seed, o = {}) {
       shade: br.pts.map((p) => shadeAt(p, crownC, crownR) * 0.8),
     });
   }
-  const green = lin(64, 90, 46), deep = lin(48, 72, 40), light = lin(80, 102, 52);
+  // (v9: lighter and yellower, it read as dark cotton wool from the beach.)
+  const green = lin(78, 100, 48), deep = lin(60, 82, 42), light = lin(104, 116, 56);
   let area = 0;
   for (const t of tips) {
     // Sprays hang: out from the tip, turned down.
@@ -490,4 +506,60 @@ export function creeper(seed, o = {}) {
   };
 }
 
-export const GROWERS = { scaevola, grass, tree, palm, pandanus, creeper };
+// ---------------------------------------------------------------- face scrub (v9)
+// What the bare faces carry between the ledges: small, open shrubs wedged in cracks, a few
+// wiry stems fanning out from the rock and bending down under their own weight, sparse small
+// leaves, lighter and yellower than the scrub on the slopes (sun-baked, and thin soil), with
+// the twigs showing through. Seen from the sea they are a fine speckle on the rock rather than
+// the hanging scrub's dark curtains. Plant space as the creeper's: +x out from the rock.
+export function faceScrub(seed, o = {}) {
+  const rand = rng(seed * 89 + 5);
+  const H = o.height ?? rand.range(0.8, 1.5);
+  const crownC = [0.35 * H, 0.05 * H, 0], crownR = [0.36 * H, 0.42 * H, 0.62 * H];
+  const targets = crownPoints(Math.round(rand.range(70, 95)), crownC, crownR, rand, { bias: 1.6 })
+    .filter((p) => p[0] > 0.04);
+  const { branches, tips } = growToTargets(targets, {
+    root: [0, 0, 0], rootDir: [1, 0.35, 0], trunk: 0, reach: 0.5, twigAt: 1, maxLevel: 7,
+    radius: 0.018, tipRadius: 0.003, pipe: 2.3, bendUp: 0.05, sag: 0.6, crownC, crownR, lengthScale: H,
+  }, rand);
+  const b = new PlantBuilder({ lod: o.lod ?? 0 });
+  const bark = lin(136, 120, 98);
+  for (const br of branches) {
+    const n = br.pts.length;
+    b.tube(br.pts, br.r, {
+      color: [...bark, 0.2], sides: 3,
+      wind: br.pts.map((_, i) => [br.amp0 + (br.amp1 - br.amp0) * i / (n - 1), br.phase]),
+      shade: br.pts.map((p) => shadeAt(p, crownC, crownR) * 0.6),
+    });
+  }
+  // Yellow-green, and some leaves going over.
+  const green = lin(104, 116, 54), deep = lin(82, 96, 46), light = lin(134, 134, 66), dry = lin(150, 132, 80);
+  let area = 0;
+  for (const t of tips) {
+    if (rand() < 0.3) continue;             // bare twig ends: the shrub is open
+    const n = Math.round(rand.range(2, 4));
+    const side0 = perp(t.dir);
+    for (let k = 0; k < n; k++) {
+      const around = rotate(side0, t.dir, rand() * Math.PI * 2);
+      const dir = norm(add(add(mul(t.dir, 0.6), mul(around, 0.55)), [0.1, -0.2, 0]));
+      const L = rand.range(0.18, 0.3);
+      const faceUp = norm(add([0.5, 0.8, 0], mul(around, 0.35)));
+      const tint = rand.range(-1, 1);
+      let c = mixc(green, tint > 0 ? light : deep, Math.abs(tint) * 0.8);
+      if (rand() < 0.15) c = mixc(c, dry, 0.7);
+      b.leafBlade(t.p, dir, faceUp, L, L * 0.5, {
+        color: [...c, 0.35], wind: [t.amp, t.phase], leafPhase: rand(), shade: t.shade, cell: LEAF.SPRAY_SMALL,
+        gloss: 0.35, fold: 0.1, droop: L * 0.2, cup: 0.3, arch: 0.3,
+      });
+      area += L * L * 0.25;
+    }
+  }
+  const volume = (4 / 3) * Math.PI * crownR[0] * crownR[1] * crownR[2];
+  return {
+    builder: b, height: H, radius: H * 0.7, crownC, crownR,
+    density: 0.5 * area / volume * 0.5, leafArea: area, trans: 0.4, gloss: 0.35,
+    wind: { freq: 1.5, stiff: 0.0, branchAmp: 0.1, branchFreq: 2.6, leafAmp: 0.02, leafFreq: 8 },
+  };
+}
+
+export const GROWERS = { scaevola, grass, tree, palm, pandanus, creeper, faceScrub };

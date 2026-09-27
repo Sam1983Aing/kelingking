@@ -127,6 +127,8 @@ export function buildPanel(app, { top } = {}) {
   cf.add(cp, 'base', 0.3, 2, 0.05).name('base (km)').onChange(ca);
   cf.add(cp, 'top', 0.8, 5, 0.05).name('top (km)').onChange(ca);
   cf.add(cp, 'clearRadius', 0, 20, 0.5).name('clear over island (km)').onChange(() => { ca(); app.terrainCloudShadows(); });
+  cf.add(cp, 'bank', 0, 1, 0.01).name('bank on the horizon').onChange(ca);
+  cf.add(cp, 'high', 0, 1, 0.01).name('high veil').onChange(ca);
   cf.add(cp, 'seed', 1, 50, 1).onChange(ca);
   const gp = grade.params, ga = () => grade.apply();
   lf.add(gp, 'compensation', -3, 3, 0.05).name('exposure (stops)').onChange(ga);

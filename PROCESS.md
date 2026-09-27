@@ -1569,3 +1569,167 @@ hero frames miss, and whether the page plays smoothly.
   - v7's worry that the hand-over bands would shimmer when the camera sweeps them across a
     slope: I did not see it in the recordings at 1080p, but did not hunt for it frame by
     frame either.
+
+## v9: the final pass (2026-09-27)
+
+Sam watched the whole descent at v8 and named four things that still read as fake: the
+clouds, the water close to the beach, the camera walking the switchbacks backwards, and the
+green on the rock faces. One session for all four, by his choice. Each part was shown to him
+as it was done, with v8 and v9 side by side and a clip.
+
+### The camera on the path
+
+v8 looked at the head all the way down. On the switchbacks' long northward leg that meant
+walking backwards for fifty metres, 155 to 179 degrees off the way the camera moved.
+
+- **The view follows the path.** The heading walked is unwrapped (so smoothing never averages
+  across north), smoothed across 2.5 m and read 1.5 m ahead, so a hairpin's turn starts before
+  the bend and ends after it. On top of that the view leans toward the scenery (the head on
+  the ridge, the beach and the bay below the switchbacks) by up to 30 to 40 degrees, less on a
+  tall screen, where the path ahead would leave the frame. When the scenery is straight behind,
+  it does not pull at all, so the look cannot flip sides.
+- **Short zigzags.** Two hairpins 7 m apart would swing the view 150 degrees one way and 180
+  back. Where the path turns more than 60 degrees beyond its net turn within 10 m either
+  side, the heading is smoothed across 6 m instead, so the view only swings part of the way
+  with each short leg.
+- **The scroll slows where the view turns.** Between stops, tau runs evenly in a cost of a
+  metre walked plus the degrees turned over 1.8, not in metres. The switchbacks got 2.1 more
+  screens (18.8 in all). The fastest turn is now 124 to 139 degrees per screen of scroll; the
+  most the view ever turns from the way it walks is 63 degrees, on a bend (`descent.mjs`
+  reports that now as "off heading").
+- **The eye comes down** from 1 m over eye height to 0.4 on the steps and the switchbacks.
+  Looking along the path, the verge is at the sides.
+- **Drag to look around** (`scroll.js`). The scene under the pointer moves with it; on release
+  the head holds for 0.6 s and then eases back on a critically damped spring. The scroll goes
+  on underneath. A finger has `touch-action: pan-y`: a vertical swipe stays the page's, a
+  sideways one looks, and the vertical part of a sideways drag still scrolls. `?record` never
+  installs it; `scroll-clip.mjs --drag=12,-70` fakes one in a recording. Tested headless with
+  synthetic mouse and touch events: a drag turns the head, a wheel while held scrolls on, a
+  vertical swipe scrolls and does not look.
+
+### The clouds
+
+Before: small round puffs all alike, flat white, hard edges, only near the horizon.
+
+- **Shape.** Each cloud is a heap of blobs in the weather map, and each blob is a dome (its top
+  comes down to the base at its edge), so a cloud is a heap of rounded turrets on a flat base.
+  The billow noise is kept where it clears a threshold that rises to the dome's surface, with a
+  short ramp to full density, so a cumulus has an edge. The body is Perlin-Worley; finer
+  Worley eats into the edges, billows up top and wisps toward the base, churning upward at
+  2.5 m/s. Bases curve up toward a cloud's edge and vary by up to 120 m between clouds.
+- **Field.** Clusters from a slow noise field; big cumulus near the island, small trade
+  cumulus out at sea; a low bank of flat sheets 25 to 60 km out; a thin high veil. The photo
+  day's big cumulus stands about 3 km east of the viewpoint, where `eastCove` shows it. The
+  clear radius came down from 4 km to 1.5, so clouds come close, and the island stays in sun.
+- **Light.** Four steps toward the sun, each twice the last, then the dome above; three octaves
+  of multiple scattering; light diffused through the cloud; the powder term; a forward lobe
+  for the silver edge. Grey bases from the sea's light and less sky light low down.
+- **Cost.** On the page the clock always runs, so the clouds were marched every frame. Now one
+  pixel in sixteen is marched each frame (a 4 x 4 Bayer cycle) and the rest are carried over,
+  reprojected for the camera and the drift, blended with each fresh sample as the jitter moves
+  on. A still frame, a jump or new settings get a whole march. Mip levels are picked by
+  distance, since the GPU cannot pick them inside a march (it guessed per block of four and
+  drew squares along the edges). The sky reads the clouds with a Catmull-Rom filter now (the
+  B-spline blurred them by two pixels).
+
+What went wrong: the first bench said the new clouds were free, because it forced the march
+while the page's frame marched again. Then CPU timing around a burst gave negative costs.
+What worked: a burst of marches back to back, then one pixel read from the clouds' own
+texture, which waits for all of them (`tools/cloud-bench.mjs`). The reprojection first used
+three.js's `matrixWorldInverse`, which is only refreshed when the scene is drawn, after the
+clouds: last frame's view, so the clouds swam as the camera turned. And a Python edit matched
+the wrong `void main()` in the sky shader and pasted a copy of the file into itself; the page
+never became ready and `capture.mjs --console` said why.
+
+### The water close to the beach
+
+- **From above,** the foam was marbled white swirls. The lace is now foam gathered on the
+  walls between cells of clear water: two cell sizes in patches, bent by a warp at the scale
+  of a cell (a finer warp sheared them into hairs), broken into clumps, thin where there is
+  little foam and letting the water through. Far off, the foam's average cover is mostly holes
+  (it was 80% of the amount, a white carpet from the clifftop), and thick white water is broken
+  into lumps and shaded gaps a metre to a few across. Dimming lit foam did nothing: at this
+  exposure it is well over white, so the texture has to be shade and water.
+- **The breaking wave.** The torn lip showed navy teeth. Debug views said it was the breaker's
+  own face in the tube: the light model looked for a sea bed or the back of the wave and found
+  neither. The lip and tube are lit now as bubbly water with daylight all round (clear water
+  there would still be navy), and reflections pointing down under the lip see the water, not
+  the dark horizon. The foam on the face was the sea's lace laid on it, which read as stained
+  glass and white flames; it is torn streaks down the face now.
+- **White water at eye level** was polystyrene: centimetre grain lit hard. It is lit through
+  itself (wrapped), its relief in lumps of a decimetre and up, with holes and shaded troughs.
+  The bore stands up in heaps near the camera, its front is ragged, its roller band a fifth of
+  a wavelength deep. Patches have thin borders. Spray is ragged mist with specks of droplets.
+  A milky veil of bubbles hangs in the water under the foam.
+
+### The green on the rock
+
+The faces carried hanging scrub in round, dense, dark patches. Now there is a face scrub
+(`grow/species.js faceScrub`): small, open, yellow-green, twigs showing. It grows in streaks
+along the beds and down the gullies, sparse inside a streak, more toward the top of the faces.
+The hanging scrub is lighter, sparser, and in shorter runs (3.5 either side drew ruled lines
+along the beds). The broadleaf tree's crown is lobed and lighter, with bare twig ends. Plants
+on the faces keep back from the path by as much as they hang, which cleared the six that hung
+over the tread at the first hairpin (the v8 note).
+
+### Speed
+
+Side by side with v8 (`ab.mjs --hero`, 20 rounds):
+
+| Frame | Change | Middle half |
+|---|---|---|
+| overview | +7% | +6 to +10% |
+| viewpoint | +4% | +3 to +9% |
+| stairs | +11% (+10% at 24 rounds) | +8 to +24% |
+| trailTop | +1% | -3 to +10% |
+| trailLow | +2% | -1 to +31% |
+| beach | +6% | +3 to +12% |
+| swash | +6% | +1 to +8% |
+| shoreBreak | -15% | -28 to +12% |
+| sideFromSea | +6% | +2 to +13% |
+
+`hero.mjs` (the gallery's table) swung as it always does: `swash` +114% in its run, +5 to +10%
+side by side in six. `stairs` sits on the line, +9 to +12% across five side-by-side runs.
+Bisecting it over the commits (`ab.mjs stairs --a=v8 --b=<commit>`, new) splits it into three
+small pieces: the foam seen from above (+4%), the white water at eye level (+2%), the plants
+on the faces (+3%). The camera commit and the clouds commit are +0%.
+
+Along the path (`path-bench.mjs`, 21 cameras, against v8 at the same cameras): the first run
+had the still frames at a median of +11%. Bisecting its worst cameras found the same pieces,
+and a look at what runs everywhere found three things doing work on every sea pixel near the
+beach whether or not there was foam: the far foam's breakup, the bubble veil (it tested the
+simulation's square, not its foam), and the ragged front of the bore (two noise reads in the
+surf function, which runs three times per vertex). All three now only run where they draw
+something. The second run: median +5% still and +6% moving, the worst single cameras +16%
+(8 rounds, with the GPU busy: the slowest camera read 25 ms where it had read 12).
+
+The clouds: a whole march of the new clouds costs 0.5 to 4 ms, so on the page they are marched
+a sixteenth at a time (above). Per frame that is 0.4 to 1.3 ms, against v8's 0.3 to 1.2 ms for
+its simpler clouds, marched whole (`cloud-bench.mjs`, which times bursts of marches finished
+by one read of the clouds' texture: CPU timing around a single march read noise).
+
+### Tools
+
+- `scroll-clip.mjs --stills=2.3,2.5` tiles stills from the real page (the shot tools render at
+  a different terrain resolution and aspect, so their contact sheets did not match the page).
+  `--drag=12,-70` turns the head in a recording as a drag would.
+- `descent.mjs` reports "off heading": how far the view turns from the way the camera walks.
+- `cloud-bench.mjs`: what the cloud march costs, per frame and whole.
+- `ab.mjs --b=<commit>`: two commits against each other, for bisecting a slowdown.
+- `?cloudDefines=LIGHT_STEPS:3,FINE_DIV:4.0` changes the cloud march's step counts, for timing.
+
+### Still weak
+
+- **The budget is spent.** `stairs` is at +10%, the rest within it, and the next version has to
+  bring savings with anything it adds (logged in the v10 brief with the breakdown).
+- **The lace from above is a little cellular** in places, where one size of cell covers a big
+  patch. Seen moving it reads as foam; frozen, the polygons can show.
+- **Old foam at eye level** still has a few bright shreds lying on the water before a wave, and
+  old foam drawn up the rising face shows as streaks (the photo has them too).
+- **The clouds are lit by the noon sun** and cast no shadows on the island (they stay 1.5 km
+  off it). Up close, the big cumulus's base is a little too even.
+- **The face scrub is one species** in two sizes. The photos' faces have grass in the cracks
+  and bare dead twigs as well.
+- **The drag has no hint.** Nothing tells a visitor they can look around; the cursor changes to
+  a hand over the scene. Sam may want a word for it in the page (the page layer is not v9's).
+- **The phone's look-around is sideways only**: a vertical drag scrolls, as it has to.
