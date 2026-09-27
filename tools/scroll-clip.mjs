@@ -8,6 +8,8 @@
 //   node tools/scroll-clip.mjs --from=8 --to=11   only part of the scroll, in screens
 //   node tools/scroll-clip.mjs --set="notext"     any page switches (; between several)
 //   node tools/scroll-clip.mjs --out=name         captures/<name>.mp4
+//   node tools/scroll-clip.mjs --stills=2.3,2.5   stills at these values of tau instead, tiled into
+//                                                 captures/<name>.jpg (--cols=4, --width=480 each)
 //
 // The page is stepped frame by frame on the recording's clock (scroll.js ?record), so the sea,
 // the plants, the camera and the words all move exactly as they would at the frame rate,
@@ -66,6 +68,32 @@ const moved = (s) => {
 const screensAt = (t) => from + moved(t - intro);
 
 const dir = mkdtempSync(join(tmpdir(), 'kelingking-scroll-'));
+if (flag('stills')) {
+  // Each still: the page jumped to that tau, a second of frames to settle, then a screenshot.
+  const taus = String(flag('stills')).split(',').map(Number);
+  await page.eval(`__scroll.begin(true); const l = document.createElement('div'); l.id = 'still-label';
+    l.style.cssText = 'position:fixed;left:8px;top:6px;z-index:99;font:600 ${PHONE ? 13 : 20}px sans-serif;color:#fff;text-shadow:0 1px 2px #000';
+    document.body.append(l);`);
+  for (let k = 0; k < taus.length; k++) {
+    const s = await page.eval(`__scroll.pace.screensAt(${taus[k]})`);
+    await page.eval(`document.getElementById('still-label').textContent = 'tau ${taus[k]}'`);
+    for (let f = 0; f < 30; f++) await page.eval(`__scroll.frame(${1 / FPS}, ${s}, true)`);
+    writeFileSync(join(dir, `s${String(k).padStart(3, '0')}.jpg`), await page.screenshot({ format: 'jpeg', quality: 90 }));
+  }
+  b.close();
+  const cols = Math.min(+flag('cols', 4), taus.length), rows = Math.ceil(taus.length / cols), w = +flag('width', 480);
+  const labels = taus.map((t, k) => `[${k}:v]scale=${w}:-2[v${k}]`).join(';');
+  const pad = cols * rows - taus.length;
+  const inputs = taus.flatMap((_, k) => ['-i', join(dir, `s${String(k).padStart(3, '0')}.jpg`)]);
+  const tiles = taus.map((_, k) => `[v${k}]`).join('') + (pad ? `${Array.from({ length: pad }, (_, k) => `[p${k}]`).join('')}` : '');
+  const blanks = pad ? ';' + Array.from({ length: pad }, (_, k) => `color=black:s=${w}x${Math.round((w * H) / W / 2) * 2}:d=1[p${k}]`).join(';') : '';
+  const sheet = join(root, 'captures', `${flag('out', PHONE ? 'stills-phone' : 'stills')}.jpg`);
+  const enc = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', `${labels}${blanks};${tiles}xstack=inputs=${cols * rows}:grid=${cols}x${rows}`, '-frames:v', '1', '-q:v', '3', sheet]);
+  rmSync(dir, { recursive: true, force: true });
+  if (enc.status !== 0) throw new Error('ffmpeg failed: ' + enc.stderr);
+  console.log(`${sheet.replace(root + '/', '')}: ${taus.length} stills`);
+  process.exit(0);
+}
 const n = Math.round(T * FPS);
 await page.eval(`__scroll.frame(0, ${from}, true); ${from === 0 ? '__scroll.begin()' : '__scroll.begin(true)'}`);
 const tr = Date.now();

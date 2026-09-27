@@ -13,6 +13,10 @@
 //   notext             the scene alone, no words or frame
 //   record             the recorder drives the page frame by frame (tools/scroll-clip.mjs)
 //   pr=1               pixel ratio pinned (else it is picked while loading, then governed)
+//
+// Looking around (v9): drag the scene to turn the head away from the path's view; let go and it
+// eases back. The scroll carries on underneath. With a finger only sideways drags look (the page
+// keeps its vertical swipe, and the vertical part of a sideways drag still scrolls).
 
 import { gsap } from 'gsap';
 import { SplitText } from 'gsap/SplitText.js';
@@ -32,6 +36,9 @@ const REVEAL = 1.1;
 // How quickly the camera catches up with the scroll (per second): Lenis already smooths the
 // wheel, this only takes the edge off jumps (keys, the scrollbar, a touch fling).
 const FOLLOW = 9;
+// Looking around: how long the head stays turned after the drag ends (seconds), and how quickly
+// it then turns back (a critically damped spring, per second: most of the way in a second).
+const LOOK_HOLD = 0.6, LOOK_BACK = 3.2;
 
 export function startScroll({ params }) {
   const RECORD = params.has('record');
@@ -133,7 +140,62 @@ export function startScroll({ params }) {
     cam.tau = pace.tauAt(cam.screens);
     if (!descent) return;
     const p = (cam.pose = descent.poseAt(cam.tau));
-    app.setPose(p.pos, p.yaw, p.pitch, 0, fovFor(p.fov, camera.aspect));
+    easeLook(dt);
+    const pitch = Math.min(Math.max(p.pitch + look.pitch, -88), 60);
+    app.setPose(p.pos, p.yaw + look.yaw, pitch, 0, fovFor(p.fov, camera.aspect));
+  }
+
+  // ---------------------------------------------------------------- looking around
+
+  // The head's turn away from the path's view, in degrees, laid on top of it.
+  const look = { yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, id: null, touch: false, x: 0, y: 0, moved: 0, decided: false, idle: 0 };
+  function easeLook(dt) {
+    if (look.id !== null) return;
+    look.idle += dt;
+    if (look.idle < LOOK_HOLD || (!look.yaw && !look.pitch)) return;
+    // x(t) = (x0 + (v0 + w x0) t) exp(-w t), stepped exactly, so it eases out of rest.
+    const w = LOOK_BACK, e = Math.exp(-w * dt);
+    for (const [k, v] of [['yaw', 'vyaw'], ['pitch', 'vpitch']]) {
+      const a = look[k], b = look[v] + w * a;
+      look[k] = (a + b * dt) * e;
+      look[v] = (b - w * (a + b * dt)) * e;
+      if (Math.abs(look[k]) < 0.01 && Math.abs(look[v]) < 0.01) look[k] = look[v] = 0;
+    }
+  }
+  if (!RECORD) {
+    stage.classList.add('lookable');
+    stage.addEventListener('pointerdown', (e) => {
+      if (look.id !== null || !started || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      look.id = e.pointerId; look.touch = e.pointerType !== 'mouse';
+      look.x = e.clientX; look.y = e.clientY; look.moved = 0; look.decided = !look.touch;
+      look.vyaw = look.vpitch = 0;
+      if (!look.touch) { e.preventDefault(); stage.setPointerCapture(e.pointerId); html.classList.add('looking'); }
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== look.id) return;
+      const dx = e.clientX - look.x, dy = e.clientY - look.y;
+      look.x = e.clientX; look.y = e.clientY;
+      // A finger has to show it means to go sideways first; a vertical swipe is the page's (the
+      // browser takes it and cancels the pointer).
+      if (!look.decided) {
+        look.moved += Math.hypot(dx, dy);
+        if (look.moved < 6) return;
+        look.decided = true;
+      }
+      // The scene under the pointer moves with it: degrees per pixel from the lens.
+      const k = camera.fov / stage.clientHeight;
+      look.yaw = Math.min(Math.max(look.yaw - dx * k * (camera.aspect < 1 ? 1.3 : 1), -180), 180);
+      if (look.touch) {
+        // The vertical part of a sideways drag scrolls on, as the page would have.
+        if (dy) scrollTo(0, window.scrollY - dy);
+      } else look.pitch = Math.min(Math.max(look.pitch + dy * k, -75), 75);
+    });
+    const end = (e) => {
+      if (e.pointerId !== look.id) return;
+      look.id = null; look.idle = 0;
+      html.classList.remove('looking');
+    };
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) stage.addEventListener(ev, end);
   }
 
   // ---------------------------------------------------------------- words
@@ -366,7 +428,7 @@ export function startScroll({ params }) {
       lenis?.raf(time * 1000);
       tick(Math.min(deltaMs / 1000, 0.1));
     });
-    window.__scroll = { pace, get descent() { return descent; }, cam, jumpTo, get lenis() { return lenis; } };
+    window.__scroll = { pace, get descent() { return descent; }, cam, look, jumpTo, get lenis() { return lenis; } };
   }
 
   // ---------------------------------------------------------------- debug
