@@ -1,7 +1,8 @@
-# v10: speed and the shareable build
+# v11: speed and the shareable build
 
-(This was v9 until 2026-09-27, when Sam added a final pass on the look as v9. Earlier
-sections of `PROCESS.md` call it the v9 brief.)
+(This was v9 until 2026-09-27, when Sam added a final pass on the look as v9, and v10 until
+later that day, when he asked for a polish pass as v10. Earlier sections of `PROCESS.md` call
+it the v9 or the v10 brief.)
 
 **Goal.** Smooth along the whole descent on a laptop, a single file Sam can double-click, and
 the repo ready to go public.
@@ -238,3 +239,13 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
   can turn with the path without spinning.
 - **Drag to look around** adds pointer handlers and `touch-action: pan-y` on the stage; nothing
   per frame when nobody drags.
+
+**From v10 (the polish pass).**
+
+- Every hero frame within +4% of v9 side by side. New costs, all small: the close-range rock
+  layer on the ground (two more triplanar reads, only within about 20 m of a face), the loose
+  stones by the path (about 1,500 instances of 20 triangles), the tread geometry's extra
+  per-vertex data (distances to each tread's back and front edge).
+- The cloud march's sub-pixel jitter means a still page keeps marching (the clock runs), as it
+  did in v9; nothing new per frame.
+

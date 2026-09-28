@@ -17,7 +17,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
     runup: 0.85,        // how high an average wave's swash runs up the sand (m above still water)
     swashT: 2.6,        // seconds its uprush takes (the backwash takes 1.8 times as long)
     swellHeading: 40,   // direction the swell travels, compass degrees
-    foam: 1.0,
+    foam: 0.8,          // (v10: 1 until Sam found the foam too much at the beach)
     whitecaps: 1.0,
     turbidity: 1.0,
     murk: 1.0,

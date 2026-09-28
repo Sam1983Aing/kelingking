@@ -367,7 +367,7 @@ void main() {
   // ribbon switches off, so no section of it ends in a hard edge.)
   float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
-  float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.35 * smoothstep(0.05, 0.3, tau);
+  float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;

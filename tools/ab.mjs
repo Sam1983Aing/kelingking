@@ -14,7 +14,7 @@
 // other did not. Here both pages stay open side by side in one headless Chrome and are timed
 // in alternation (a burst of frames in one, then the other, many rounds), so background load
 // falls on both alike. Reported: the median of the per-round ratios, and the spread.
-// Needs the local server (python3 -m http.server 5178).
+// Needs the local server (python3 tools/serve.py).
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, readdirSync, readFileSync } from 'node:fs';

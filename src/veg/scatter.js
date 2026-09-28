@@ -79,6 +79,15 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
     const q = route.nearest(x, y, reach + 4);
     return !q || q.d > route.lerpAt(route.w, q) / 2 + 0.5 + reach;
   };
+  // (v10) Dry-season patches: on the exposed headland and the steep slopes some of the scrub
+  // has gone olive to straw, in patches tens of metres across (stairs photo, trail photos).
+  // A dry plant's tint is 1.2 to 2, past the usual 0 to 1 (the shaders read that as dryness).
+  const dryAt = (px, py, h, up) => {
+    const field = smooth(0.45, 0.68, fbm(noise, px * 0.018 + 21, py * 0.018 - 8, 3) + 0.5);
+    const exposed = smooth(0.95, 0.7, up) * 0.5 + smooth(40, 120, h) * 0.5;
+    const d = field * (0.4 + 0.6 * exposed) * rand();
+    return d > 0.12 ? d : 0;
+  };
   // Coconut palms stand in groves on the plateau, away from the cliff edge.
   const groveAt = (px, py) => smooth(0.6, 0.72, fbm(noise, px * 0.012 - 7, py * 0.012 + 21, 3) + 0.5);
 
@@ -236,7 +245,9 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       const r = rand();
       let sp;
       if (onLedge) sp = r < 0.45 ? SP.CREEPER : r < 0.55 ? SP.PANDANUS : r < 0.7 ? SP.SCAEVOLA : SP.FACE;
-      else if (far < 0.2) sp = r < 0.035 ? SP.PANDANUS : r < 0.06 && up > 0.7 ? SP.TREE : SP.SCAEVOLA;
+      // (v10: fewer trees on the headland, 1 in 70 where it was 1 in 40: the photos show the head
+      // and the neck under low scrub, a small tree here and there.)
+      else if (far < 0.2) sp = r < 0.035 ? SP.PANDANUS : r < 0.05 && up > 0.75 ? SP.TREE : SP.SCAEVOLA;
       else {
         // Palms about 8 m apart in a grove (one in five of the 3.6 m slots), scrub and the odd
         // tree under and between them.
@@ -246,7 +257,7 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       const tree = sp === SP.TREE;
       const variant = Math.floor(rand() * SPECIES[sp].heights.length);
       const nominal = SPECIES[sp].heights[variant];
-      const base = tree ? lerp(0.6, 1.0, far) * (0.7 + 0.6 * rand())
+      const base = tree ? lerp(0.45, 1.0, far) * (0.7 + 0.6 * rand())
         : sp === SP.PALM ? 0.8 + 0.4 * rand()
         : sp === SP.PANDANUS ? 0.7 + 0.5 * rand()
         : sp === SP.CREEPER ? 0.8 + 0.6 * rand()
@@ -279,7 +290,8 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
       const yaw = sp === SP.CREEPER || sp === SP.FACE ? outYaw + (rand() - 0.5) * 0.5 : rand() * Math.PI * 2;
       if (onLedge) { qx += Math.cos(outYaw) * 0.9; qy += Math.sin(outYaw) * 0.9; }
       if ((sp === SP.CREEPER || sp === SP.FACE) && !clearOfPath(qx, qy, sp, scale)) continue;
-      out.push(qx, h - 0.1 * scale, -qy, scale, yaw, sp, variant, rand());
+      const dry = dryAt(px, py, h, up);
+      out.push(qx, h - 0.1 * scale, -qy, scale, yaw, sp, variant, dry > 0 ? 1.2 + 0.8 * dry : rand());
     }
     y += rowStep;
   }

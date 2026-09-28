@@ -48,7 +48,8 @@ const t0 = Date.now();
 const page = await b.open('about:blank', { width: W, height: H });
 await b.send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: DPR, mobile: PHONE }, page.sessionId);
 if (PHONE) await b.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }, page.sessionId);
-await b.send('Page.navigate', { url: `http://localhost:5178/?${q}` }, page.sessionId);
+// (--url=http://localhost:5178/captures/ab-v9/ records another build, v10.)
+await b.send('Page.navigate', { url: `${flag('url', 'http://localhost:5178/')}?${q}` }, page.sessionId);
 await page.waitFor('window.__scroll && window.__scroll.ready === true', 180000);
 const total = await page.eval('__scroll.pace.screens');
 const from = +flag('from', 0), to = +flag('to', total);

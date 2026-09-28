@@ -1733,3 +1733,160 @@ by one read of the clouds' texture: CPU timing around a single march read noise)
 - **The drag has no hint.** Nothing tells a visitor they can look around; the cursor changes to
   a hand over the scene. Sam may want a word for it in the page (the page layer is not v9's).
 - **The phone's look-around is sideways only**: a vertical drag scrolls, as it has to.
+
+## v10: polish pass (2026-09-27)
+
+Sam approved v9 after using the page (merged, tagged, pushed) and asked for a pass over
+everything v1 to v9 built, self-checked, from seven notes with screenshots: a black line at
+the horizon; clouds that could be more real; the foot of the cliff lacking polish up close;
+too much foam; steps too perfect; the trees on the head still odd; and going down the steps,
+the camera looking at the horizon instead of the steps. Speed and the shareable build moved
+to v11.
+
+### The black line at the horizon
+
+A 1 to 4 pixel line of pure black between the sea and the sky, from anywhere high up. The
+sky behind it was fine (`hide=water`), and the sea's debug views said the sea's far edge had
+zero foam, zero light from under the surface and a blank normal. Cause: v4 lowers the sea with
+the Earth's curvature in the vertex shader, so the horizon sits where it really is. The pixel
+shader then measured the water's height over the bed after that drop, and beyond about 26 km
+the drop is more than the 45 m default depth: the far sea counted as dry sand under the swash
+sheet, went fully transparent, and drew the canvas's black. Heights are measured before the
+drop now. (Read the pixel rows across the horizon: one row of 0,0,0 before, 114,147,184
+after.)
+
+### The camera on the steps
+
+On a 50 degree flight every step ahead is more than 50 degrees below level, and with 0.3 of
+the grade in the pitch the camera looked 27 degrees down: the flight grazed the bottom of the
+frame. Now 0.6 of the grade (46 degrees at most), and on a steep flight the look leans toward
+the view less, so the steps run down the frame. Pitch is smoothed over 5 m and counts fully in
+the scroll's pacing (it nodded at the top and foot of each flight), and the grade fades out
+over the last 14 m of path, or the sand chapter opened on a frame of plain sand (found in the
+full recording, not in any still I had chosen).
+
+### The steps
+
+- Treads sit a little high or low and tilt; their front edges wander and are worn round; the
+  odd one is broken away at a corner. Logs on about half the dirt risers, some knocked askew,
+  broken, rotted to a stub or pegged. Posts lean and vary, the odd one snapped off; timber
+  rails sag, a few missing or hanging from one end. Loose limestone on the verges and the odd
+  tread.
+- The concrete flight read as a smooth white ramp from above. Darkening it did almost
+  nothing: at the photo's exposure it is well over white. A debug colour for the new
+  back-of-tread distance showed it was right, and the fix was what the photo shows: looking
+  down a flight the nosings hide the backs of the treads, so what shows each step is its dark,
+  chipped front edge. The tread geometry now passes the distance to its front edge as well.
+
+### The foot of the cliff
+
+Up close the wall had only its big scans (a 20 m cliff in a 16 m tile): blurry, marbled. Within
+about 20 m the layered scan comes in at its own size (1.8 m) with the pitted grain of the rough
+rock scan. The sand was decided by the smoothed normal, which turns over a metre or two across
+the corner triangle where a wall meets the beach, so the sand faded up the rock; now the
+triangle's own slope decides as much, the contact is ragged but sharp, and just above it sand
+sits in the rock's hollows. The same disagreement smeared the cut banks by the path (the view
+from above projected down a vertical face): the triangle's slope picks the projection where the
+two normals disagree a lot. The first look at the close grain showed nothing; a red debug
+colour for its weight showed it was on and simply too weak.
+
+### The foam
+
+20% less, the lace thinning and fading at v8's pace again, a little greyer, and up close the
+bubble walls cut holes in the white water so churned water shows between clumps.
+
+### The head
+
+Fewer and smaller trees on the headland (1 in 70 plants where it was 1 in 40). Dry-season
+patches: some scrub olive to straw, more on the exposed and steep ground; a dry plant's tint
+runs from 1.2 to 2, which both plant shaders read as dryness, so the full plants and their
+impostors still match. The first dry colour kept the leaves' own low brightness and could not be
+seen; dried leaves are lighter. The ground between the plants up there is olive and straw where
+it was a lime lawn.
+
+### The clouds
+
+- **Far:** blocky edges and specks along the horizon. At 60 to 150 km one step through a cloud
+  was all or nothing. Now the edge erosion stops where a pixel is wider than the billows, thin
+  cloud past 4 km only takes as much light as it covers, puffs under a few pixels tall fade,
+  and each re-march shoots its ray through a new point of the pixel (Halton), so edges average
+  out over the frames.
+- **Blur:** with the clock running the carried-over clouds are resampled every frame at a
+  small offset; bilinear reads, repeated, blurred them to cotton wool. They are read with a
+  Catmull-Rom filter now.
+- **Near:** finer, stronger edge erosion and a sharper surface; the light diffused through the
+  cloud falls off faster, so the shaded sides between turrets are grey, not the same white as
+  the sunlit tops.
+
+### Speed
+
+Side by side with v9 (`ab.mjs --hero --a=v9`, 20 rounds): overview +2%, viewpoint +1%, stairs
+-3%, trailTop +4%, trailLow +4%, beach +2%, swash +3%, shoreBreak +1%, sideFromSea +2%. Along
+the path (`path-bench.mjs --a=v9`): medians +4% still and +2% moving. Its worst single points
+(+31% and +32% still, at tau 2.25) are noise: the same cameras side by side in `ab.mjs` came
+out +1% and +2%.
+
+On the way there, overview was a steady +9%. Bisecting it over the branch's commits: the
+steps +4% (the stones, 80 triangles each with a depth pass, now 20 and none), the cliff foot +2%,
+the head +5% (a new noise over every ground pixel under plants, which is most of the overview;
+it reuses the shader's own noise now). After: +2%.
+
+### Tools
+
+- `ab.mjs --a=v9 --b=<commit>` bisected the overview's cost; `scroll-clip.mjs --stills` with
+  `--dpr=2` gave the pixel rows across the horizon.
+
+### Second round: the sand, the foot of the rock, the leftovers
+
+Sam looked at v10 on his Mac and sent a screenshot from the sand at the foot of the path: the
+sand too even, one colour, no depth, like a flat surface; where the cliff starts, too polygon;
+and the leftovers from the first round.
+
+- **The sand.** The photos (`beach-people-scale.jpg`, `beach-under-cliff.jpg`) show dry sand
+  trodden all over: overlapping oval pits with pushed-up rims, fresh and slumped, some in lines
+  where people walked. First worked out in the ground shader: it looked right (a red debug
+  colour for the pits confirmed they were there before the lighting could show them; at first
+  they were too shallow to see in the noon sun), but the whole ground shader got 8 to 12%
+  slower everywhere, even from a kilometre up where no print is drawn. Switching the relief off
+  in copies of the build, one feature at a time, pinned it on the relief. So the footprints are
+  now baked at load into one more layer of the ground's texture arrays (`trample.js`, a 6 m tile
+  in 170 ms), read twice with a sharp hand-over (averaged half and half, two reliefs cancelled
+  out flat) and a level sharper than the pixel asks for; the layer stores the tilt as a sine,
+  which flattens the steep walls of a print, so it is scaled back up. Metre-scale lumps stay in
+  the shader, with patches of whiter, creamier and duller sand and a mottle into the distance.
+  The viewpoint's sand still measures +0.02 stops against its photo.
+- **Where the cliff starts.** Two things. The strips of rock face had rows 1.1 m apart at the
+  page's resolution and met the sand in a jagged line of big facets: low on walls standing on
+  the sand, rows are now 35 cm apart up to 8 m over the foot (26,000 more triangles), placed
+  along the profile and zipped between columns by their place along it rather than their index.
+  And sand banks up against the foot in ragged drifts, lying at its angle of repose, covering
+  the line where the rock meets the sand. At the side of the cave mouth a white sand pyramid
+  with a sawtooth top turned out to be the mesh builder's per-vertex mask for sand under the
+  overhang, following the columns' triangles; it has a noisy edge now and only lies where sand
+  could.
+- **Leftovers.** The concrete steps a little greyer. The lace: a warp at half a cell bends
+  each wall, walls thicken, thin and break off, and in about a third of the foam they are drawn
+  out into curving filaments (the crackle glaze is gone; the first try was all scratches). From
+  50 m out the plants' stand-ins shift toward the photo's grey-green and the painted ground
+  cover stops at a steeper slope, so the head's faces show white rock and plants, not olive
+  smears.
+
+### Speed, second round
+
+Side by side with v9 (`ab.mjs --hero --a=v9`, 16 rounds): overview +6%, viewpoint +2%, stairs
+-1%, trailTop +6%, trailLow +8% (24 rounds, after the trampled layer was limited to where a
+print is a few pixels; +10% before), beach +8%, swash +8%, shoreBreak +1%, sideFromSea +5%.
+Bisecting this round's cost used temporary builds with one file put back, or one feature
+switched off, each timed against the current build in the same browser: `parts.mjs`, which
+switches defines in one page, disagreed with itself from run to run with the Mac this busy.
+
+### Still weak
+
+- The head from the viewpoint is closer in colour, but still a blanket of round crowns; the
+  photo's scrub is finer.
+- Far clouds right on the horizon (100 km and more) are soft smudges rather than a crisp band
+  of small cumulus.
+- Beyond about 20 m the footprints give way to a mottle; from the switchbacks the beach is
+  smooth pale sand with tone, as it is in the photos from up there, but the hand-over could show
+  in motion.
+- The budget is spent again: trailLow, beach and swash at +8% against v9.

@@ -25,13 +25,14 @@ moving on. The plan, the rules and a brief per version are in
 | v6 | Trail and stairs | done |
 | v7 | Plants | done |
 | v8 | The scroll descent | done |
-| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | next |
-| v10 | Speed and the shareable build | |
+| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | done |
+| v10 | Polish pass over v1 to v9 | done |
+| v11 | Speed and the shareable build | next |
 
 ## Run it
 
 ```bash
-python3 -m http.server 5178
+python3 tools/serve.py
 ```
 
 Then open http://localhost:5178: the landing page, the scroll from high over the bay down

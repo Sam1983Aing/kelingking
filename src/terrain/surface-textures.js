@@ -3,6 +3,16 @@
 
 import * as THREE from 'three';
 import { SURFACES } from './surfaces.js';
+import { trampleNormal } from './trample.js';
+
+// A layer made in code (v10): its normal from the generator, colour and mask flat.
+function generated(s, kind, size) {
+  if (kind === 'normal' && s.gen === 'trampled') return trampleNormal(size);
+  const px = new Uint8Array(size * size * 4);
+  const v = kind === 'mask' ? [235, 255, 0, 255] : [128, 128, 128, 255];
+  for (let i = 0; i < px.length; i += 4) px.set(v, i);
+  return px;
+}
 
 async function pixels(url, size) {
   const res = await fetch(url);
@@ -16,7 +26,9 @@ async function pixels(url, size) {
 }
 
 async function arrayTexture(kind, size, colorSpace, base, list) {
-  const layers = await Promise.all(list.map((s) => pixels(`${base}${s.id}_${kind}.jpg`, size)));
+  // (A layer that will not load is left flat, with a warning, rather than failing the rest.)
+  const layers = await Promise.all(list.map((s) => (s.gen ? generated(s, kind, size)
+    : pixels(`${base}${s.id}_${kind}.jpg`, size).catch((e) => { console.warn(`texture ${s.id} ${kind}: ${e.message}`); return generated({}, kind, size); }))));
   const data = new Uint8Array(size * size * 4 * layers.length);
   layers.forEach((px, i) => data.set(px, i * size * size * 4));
   const tex = new THREE.DataArrayTexture(data, size, size, layers.length);

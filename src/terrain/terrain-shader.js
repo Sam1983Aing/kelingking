@@ -47,11 +47,13 @@ varying float vFoot;      // metres out from the foot of a wall on the beach (0 
 #define L_GROUND 4
 #define L_SAND_DRY 5
 #define L_SAND_FIRM 6
+#define L_TRAMPLE 7
 
 ${SUN_SHADOW_GLSL}
 ${SWASH_GLSL}
 
 // Filled in while working out the surface, used later by the lighting.
+float tBanked = 0.0;
 float tShadow = 1.0;
 float tAO = 1.0;
 float tRough = 0.9;
@@ -103,6 +105,19 @@ float tfbm(vec2 p, float scale, float fp) {
   return 0.5 + s / 0.96875;
 }
 
+// ---------------------------------------------------------------- trampled sand (v10)
+// The scan alone read as a flat, even surface from eye height (Sam, on the sand). The footprints
+// and small lumps are a layer made at load (trample.js), read here like a scan; the lumps and
+// hollows of a metre or so are worked out here, with their slope.
+
+// Value noise and its slope.
+vec3 tnd(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+  float a = th12(i), b = th12(i + vec2(1.0, 0.0)), c = th12(i + vec2(0.0, 1.0)), d = th12(i + vec2(1.0, 1.0));
+  float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
+  return vec3(a + k1 * u.x + k2 * u.y + k4 * u.x * u.y, du * vec2(k1 + k4 * u.y, k2 + k4 * u.x));
+}
 vec4 tData(vec2 g) {
   vec2 uv = (g - uExtent.xy) / uExtent.z;
   vec4 d = texture2D(uData, clamp(uv, 0.0, 1.0));
@@ -241,6 +256,20 @@ Surf topLayer(int layer, float tile, vec2 rot, vec2 off, bool withColor) {
   return s;
 }
 
+// The trampled layer at this pixel: its tilt (world x, z) and how deep in a print (0..1), read
+// turned by rot and scaled, as topLayer reads a scan.
+vec3 trampleAt(vec2 rot, float scale, vec2 off) {
+  mat2 R = mat2(rot.x, rot.y, -rot.y, rot.x);
+  float tile = uTile[L_TRAMPLE] * scale;
+  vec2 q = R * triP.xz / tile + off;
+  // (Filtered a level sharper than the pixel asks for: averaged down, the prints go flat
+  // well before they are too small to see.)
+  vec3 n = textureGrad(uSurfNormal, vec3(q, float(L_TRAMPLE)), 0.5 * R * triDx.xz / tile, 0.5 * R * triDy.xz / tile).xyz;
+  vec2 t = n.xy * 2.0 - 1.0;
+  vec3 dn = vec3(rot.x, 0.0, -rot.y) * t.x + vec3(-rot.y, 0.0, -rot.x) * t.y;
+  return vec3(dn.x, dn.z, n.z);
+}
+
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 
@@ -258,6 +287,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 
   // Triplanar frame.
   triP = P; triDx = dFdx(P); triDy = dFdy(P);
+  vec3 Ng = normalize(cross(triDx, triDy));   // the triangle's own normal
   // Horizontal position along a face, for things that run along it.
   float wx = abs(N.x), wz = abs(N.z);
   float along = (wx * P.z - wz * P.x) / max(wx + wz, 1e-3);
@@ -277,7 +307,21 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     SB = textureGrad(uStrataB, vec2(su, 0.5), sdx, sdy);
   }
 #endif
-  vec3 w = pow(abs(N), vec3(4.0));
+  // (v10) Where the smoothed normal and the triangle's own disagree a lot (the cut banks beside
+  // the path, the corners where a wall meets the beach), the triangle's decides which way the
+  // texture is projected: from the smoothed one, a vertical bank got the view from above and
+  // its texture ran down it in streaks.
+  Ng *= sign(dot(Ng, N) + 1e-4);
+  // (Half way, and the projections blended more gently there, so neighbouring facets do not
+  // each get their own projection and show as a patchwork.)
+  float disagree = smoothstep(0.9, 0.6, dot(Ng, N));
+#ifdef SKIP_NG
+  disagree = 0.0;
+#endif
+  vec3 Nt = normalize(mix(N, Ng, 0.5 * disagree));
+  // (Squares and fourth powers by multiplying: a pow with a varying exponent is dear.)
+  vec3 a2 = Nt * Nt;
+  vec3 w = mix(a2 * a2, a2, disagree);
   w /= w.x + w.y + w.z;
   w = max(w - 0.03, 0.0);
   triW = w / (w.x + w.y + w.z);
@@ -287,12 +331,56 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // Under an overhang, dry ground out past the drip line means the rock stands on a beach,
   // whatever the zones say.
   if (carveM > 0.3) sandZone = max(sandZone, smoothstep(1.0, 2.0, D.r));
-  float sand = sandZone * smoothstep(0.55, 0.8, up) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // (v10) By the slope of the triangle itself as much as the smoothed normal: across the
+  // corner where a wall meets the beach the smoothed normal turns over a metre or two, and the
+  // sand came out as a white fade up the foot of the rock. Sand lies where the ground is flat
+  // enough to hold it, and the rock starts where it steepens, with a ragged contact.
+  // (Less of the triangle's own than at first, v10: at 0.75 the sand's edge followed the
+  // facets of the rock and drew them.)
+  float upG = abs(Ng.y);
+  float upC = mix(up, upG, 0.4) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
+  float sand = sandZone * smoothstep(0.64, 0.72, upC) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // Sand banked against the foot of the rock: up to a metre and more above the beach just in
+  // front of the wall, in drifts along it, its top edge ragged. It covers the line where the
+  // rock's strips cross the sand (which the triangles drew as a jagged line), and reads as sand
+  // piled against the cliff. The beach level is read 3 m out from the wall.
+  float banked = 0.0;
+  vec2 nhB = vec2(N.x, -N.z);
+  // (Not under an overhang, where the sand runs in on the mesh builder's own mask.) On a slope
+  // short of a sheer wall the sand runs further up, as it drifts up the foot of a hillside.
+#ifdef SKIP_BANK
+  if (false) {
+#else
+  if (sandZone > 0.05 && up < 0.72 && h < uBeachTop + 6.0 && h > -0.3 && length(nhB) > 0.3 && carveM < 0.3) {
+#endif
+    float front = tData(g + normalize(nhB) * 3.0).r;
+    float bankTop = 0.2 + 1.3 * tn(vec2(along * 0.16, 2.3))
+                  + (tn(g * 1.1 + h * 0.7) - 0.5) * 0.8 + (tn(g * 3.7 - h * 1.3) - 0.5) * 0.35
+                  + 1.4 * smoothstep(0.2, 0.55, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
+    banked = sandZone * (1.0 - smoothstep(bankTop - 0.05, bankTop + 0.1, h - front)) * smoothstep(-3.0, -1.0, h - front + 3.0);
+    sand = max(sand, banked);
+  }
+  tBanked = banked;
+  // Just steeper than that, the foot of the rock: sand blown and splashed into its hollows.
+  float footDust = sandZone * smoothstep(0.3, 0.62, upC) * (1.0 - sand) * (1.0 - smoothstep(uBeachTop, uBeachTop + 2.5, h));
   sand = max(sand, smoothstep(0.2, -0.4, h) * sandZone);
-  sand = max(sand, vRock.x);   // the floor running in under an overhang
+  // The floor running in under an overhang (the mesh builder's mask, per vertex: v10, its
+  // edge taken at a noisy level so it does not follow the columns' triangles, and only where
+  // the ground is no steeper than sand can lie; the ramp at the side of the cave mouth came
+  // out as a white pyramid with a sawtooth top).
+  // (Only where there is any: this ran on every pixel of the island.)
+  if (vRock.x > 0.005) {
+    float underSand = smoothstep(0.25, 0.6, vRock.x + (tn(g * 1.3 + h) - 0.5) * 0.45 + (tn(g * 4.1) - 0.5) * 0.15)
+                    * smoothstep(0.68, 0.8, upC);
+    sand = max(sand, underSand);
+  }
 
   // Ground cover on anything short of a sheer face, and in clumps along the ledges.
-  float veg = smoothstep(0.3, 0.46, up + (n1 - 0.5) * 0.25);
+  // (v10: from 0.3..0.46: on the steep faces of the head it painted olive smears over the rock,
+  // where the photos show white rock and the plants on it.)
+  // (A narrow band: where it is part rock and part cover both are worked out, the dearest
+  // thing this shader does.)
+  float veg = smoothstep(0.41, 0.47, up + (n1 - 0.5) * 0.25);
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
@@ -331,6 +419,28 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       a.dn += beds.dn * 0.7 * detail;
       a.ao *= mix(1.0, beds.ao, 0.6 * detail);
       a.color = mix(a.color, beds.color, ochre * 0.55);
+    }
+
+    // (v10) At arm's length: the layered scan at its own size (1.8 m), and the pitted grain of
+    // the rough rock scan, for the relief the face's big scans are too coarse to have there.
+    // The marble scan's crack network, which reads as marble up close, pulled further to grey.
+    float closeR = max(wallF, footDust) * smoothstep(0.02, 0.006, fp);
+#ifdef SKIP_CLOSER
+    closeR = 0.0;
+#endif
+    if (closeR > 0.01) {
+      Surf fine = triplanar(L_BEDS, uTile[L_BEDS] / 3.0, vec2(0.23, 0.57));
+      Surf grain = triplanar(L_WET, 0.8, vec2(0.61, 0.19));
+      float lf = luma(fine.color) / luma(uGain[L_BEDS] * lin(vec3(0.482, 0.322, 0.194)));
+      float lg = luma(grain.color) / luma(uGain[L_WET] * lin(vec3(0.271, 0.251, 0.215)));
+      a.color = mix(a.color, vec3(luma(a.color)) * uGain[L_LIMESTONE] / luma(uGain[L_LIMESTONE]), 0.5 * closeR);
+      a.color *= mix(1.0, clamp(lf, 0.5, 1.4) * clamp(lg, 0.7, 1.25), 0.7 * closeR);
+      a.dn = mix(a.dn, a.dn * 0.5 + fine.dn * 1.1 + grain.dn * 1.2, closeR);
+      a.ao *= mix(1.0, fine.ao * grain.ao, 0.7 * closeR);
+      a.rough = mix(a.rough, 0.95, closeR * 0.5);
+      // Sand in the hollows at the foot: where the scans are darkest (the pits and seams).
+      float hollow = 1.0 - smoothstep(0.55, 1.0, lf * lg);
+      a.color = mix(a.color, uSandAlb * 0.9, footDust * max(hollow, 0.35) * 0.8);
     }
 
     // The bedding: each bed its own shade, grey or creamy, the seams between them darker
@@ -418,6 +528,15 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     gr.color *= mix(vec3(1.0), vec3(0.8, 0.88, 0.78), smoothstep(0.52, 0.68, cover));
     gr.color *= mix(vec3(1.0), vec3(1.15, 1.12, 1.08), smoothstep(0.42, 0.3, cover));
     gr.color = mix(gr.color, gr.color * vec3(1.9, 1.5, 1.35), smoothstep(0.6, 0.78, n2) * 0.6);
+    // (v10) Up on the headland the ground between the scrub is drier, olive and straw with
+    // bare earth, where it was a lime lawn; greener down the gullies.
+    float headland = 1.0 - smoothstep(180.0, 320.0, length(g - vec2(60.0, 60.0)));
+    // (From the noise already worked out: another fbm here cost 5% of the overview.)
+    float dryG = headland * smoothstep(0.4, 0.62, n2 * 0.7 + n1 * 0.3) * smoothstep(0.85, 0.6, up);
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(1.5, 1.2, 0.62), clamp(headland * 0.15 + dryG * 0.3, 0.0, 0.5));
+    // And from a way off the cover is greyer, as the plants are (impostors.js).
+    float farG = smoothstep(50.0, 220.0, distance(P, cameraPosition));
+    gr.color = mix(gr.color, vec3(luma(gr.color)) * vec3(0.98, 1.04, 0.8), 0.5 * farG);
     // Under the crowns (v7, the worker's canopy cover in the data's alpha on land): leaf
     // litter and bare earth, and shade, which the lighting takes from tCanopy.
     float canopy = clamp(-D.a, 0.0, 1.0);
@@ -464,12 +583,18 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     } else if (h < 0.0) wetS = 1.0;
     // (Single octaves of noise here: the sand covers most of the frame on the beach, and at
     // these scales the eye cannot tell them from fbm.)
-    float trample = (1.0 - firm) * smoothstep(0.3, 0.62, 0.65 * tn(g * 0.09 + 5.3) + 0.35 * tn(g * 0.21 + 1.1) + 0.12 * (n1 - 0.5));
+    // How trodden it is: above the swash nearly everywhere (it is a busy beach), more in some
+    // stretches; below it the waves smooth it and only fresh prints show.
+    float trample = (1.0 - firm) * (0.45 + 0.55 * smoothstep(0.25, 0.7, 0.65 * tn(g * 0.07 + 5.3) + 0.35 * tn(g * 0.19 + 1.1)));
     Surf sd = Surf(uSandAlb, vec3(0.0), 0.92, 1.0);
     // Tone: broad patches, drift lines of paler sand, and the pinkish grains of the
-    // foraminifera sorted into streaks.
-    float tone = (n2 - 0.5) * 0.08 + (tn(g * 0.31 + 1.7) - 0.5) * 0.05;
+    // foraminifera sorted into streaks. (v10: stronger, and in three colours, whiter, creamier
+    // and a dull grey-beige, so the beach is not one colour everywhere.)
+    float tone = (n2 - 0.5) * 0.16 + (tn(g * 0.31 + 1.7) - 0.5) * 0.12 + (tn(g * 0.045 + 9.0) - 0.5) * 0.16;
     sd.color *= 1.0 + tone;
+    // (From noise already worked out.)
+    float cream = smoothstep(0.45, 0.75, n2), dull = smoothstep(0.52, 0.78, n1 * 0.6 + (1.0 - n2) * 0.4);
+    sd.color *= mix(vec3(1.0), vec3(1.03, 0.98, 0.9), cream * 0.8) * mix(vec3(1.0), vec3(0.9, 0.88, 0.86), dull * 0.7 * (1.0 - firm));
     sd.color *= mix(vec3(1.0), vec3(1.035, 0.985, 0.95), smoothstep(0.55, 0.8, tn(vec2(g.x * 0.05, g.y * 0.2) + 8.0)));
     // From further off, the aerial scan's variation in colour (its ripples are too small to
     // see from there; up close they came out half a metre apart, which the photos do not show).
@@ -499,7 +624,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         Surf b = topLayer(L_SAND_DRY, uTile[L_SAND_DRY] * 1.37, vec2(0.8, 0.6), vec2(0.31, 0.77), true);
         mixSurf(a, b, smoothstep(0.3, 0.7, tn(g * 0.33 + 2.0)) * close);
       }
-      a.dn *= mix(0.35, 1.0, trample);
+      a.dn *= mix(0.35, 0.7, trample);
       if (firm > 0.001) {
         if (close > 0.0) {
           Surf fs = topLayer(L_SAND_FIRM, uTile[L_SAND_FIRM], vec2(0.6, -0.8), vec2(0.13, 0.4), true);
@@ -517,6 +642,59 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       sd.rough = mix(sd.rough, a.rough, nearW);
       sd.ao = mix(1.0, a.ao, nearW * 0.7);
     }
+    // The relief: lumps and hollows, and footprints up close. The footprints lie on the dry
+    // sand; below the swash's reach only a few fresh ones, shallow.
+    // (Only above the water: the seabed of the whole bay counts as sand, and from the air this
+    // ran over all of it, under water where none of it shows.)
+    float reliefW = (1.0 - smoothstep(0.15, 0.5, fp)) * smoothstep(-0.6, -0.2, h);
+#ifdef SKIP_SANDRELIEF
+    reliefW = 0.0;
+#endif
+    if (reliefW > 0.0) {
+      vec3 l1 = tnd(g * 0.85 + 2.1);
+      // (Lumps: 9 cm over a metre or so; the smaller ones are in the trampled layer. Gentler on
+      // the firm sand.)
+      float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
+      vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
+      float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
+      float cav = 0.0;
+      // (Out to where a print is a few pixels: from the switchbacks, 50 m above the beach, the
+      // two reads bought nothing the mottle does not give.)
+      float printW = (1.0 - smoothstep(0.035, 0.08, fp)) * mix(0.1, 1.0, trample);
+      vec3 tr = vec3(0.0);
+      if (printW > 0.0) {
+        // Twice, turned and scaled against each other and handed over by a noise, so the tile
+        // does not repeat.
+        vec3 T1 = trampleAt(vec2(1.0, 0.0), 1.0, vec2(0.0));
+        vec3 T2 = trampleAt(vec2(0.6, 0.8), 1.37, vec2(0.41, 0.13));
+        // (A narrow hand-over: two unrelated reliefs averaged half and half cancel out flat.)
+        tr = mix(T1, T2, smoothstep(0.47, 0.53, tn(g * 0.21 + 6.0)));
+        cav = tr.z * printW;
+      }
+      slope *= reliefW * 2.0;
+      // (The layer stores the tilt as its sine, which flattens the steep walls of a print: 3.2
+      // brings them back to what the slope worked out in the shader gave.)
+      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * 3.2 * printW * reliefW;
+      // In a print the sand is disturbed, a touch darker and duller, and the pit sees less sky;
+      // the pushed-up rims are fresh dry grains, a touch lighter.
+      sd.color *= (1.0 - 0.1 * cav) * (1.0 + lumpH * 1.5 * reliefW);
+      sd.ao *= 1.0 - 0.4 * cav;
+      // The pits shade the sun too: grains and the pit's own rim throw tiny shadows the
+      // relief is too coarse to cast. And trodden sand seen at a low angle shows more of the
+      // shaded sides of its lumps than it does from above (from the clifftop, looking down at
+      // 25 degrees and more, this is 1: the viewpoint's sand stays as measured).
+      // (Into the occlusion, which the lighting already takes for the sun too: another value
+      // kept alive to the lighting costs this shader a lot, whatever it does.)
+      vec3 Vs = normalize(cameraPosition - P);
+      sd.ao *= (1.0 - 0.3 * cav) * mix(1.0, 0.62 + 0.38 * smoothstep(0.06, 0.4, Vs.y), trample * reliefW);
+    }
+    // Further off, where a print is smaller than a few pixels: trodden sand as a mottle of
+    // slightly darker and lighter patches, so the beach still has a grain going into the distance.
+    float farMottle = smoothstep(0.03, 0.09, fp) * (1.0 - firm) * step(0.0, h);
+#ifdef SKIP_FARMOTTLE
+    farMottle = 0.0;
+#endif
+    if (farMottle > 0.0) sd.color *= 1.0 + farMottle * ((tn(g * 3.1) - 0.5) * 0.3 + (n1 - 0.5) * 0.2 - 0.08 * trample);
     // Along the foot of the walls (vFoot: metres out from it).
     // Where the swash reaches the rock it leaves a narrow maroon band (the red grains of
     // foraminifera and coralline algae it sorts out there, beach-white-sand-surf.jpg); all
@@ -556,6 +734,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   }
 
   tNormalW = normalize(N + s.dn * 0.9);
+  // Banked sand lies at its angle of repose (about 33 degrees), whatever the rock under it does.
+  if (tBanked > 0.0) {
+    vec2 oh = vec2(N.x, N.z);
+    vec3 repose = normalize(vec3(oh / max(length(oh), 1e-3) * 0.65, 1.0).xzy);
+    tNormalW = normalize(mix(tNormalW, normalize(repose + s.dn * 0.9), tBanked));
+  }
   tRough = clamp(s.rough, 0.2, 1.0);
   tAO = s.ao * (1.0 - 0.4 * tCanopy);
   vec3 col = s.color;

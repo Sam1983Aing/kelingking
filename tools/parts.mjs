@@ -8,7 +8,7 @@
 // A part is a define: SKIP_x on the ground's material, WSKIP_x (sets SKIP_x) on the sea's;
 // SKIP_a+WSKIP_b switches several at once.
 // `none` in the list times everything on again, as a check on the spread.
-// Needs the local server (python3 -m http.server 5178).
+// Needs the local server (python3 tools/serve.py).
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

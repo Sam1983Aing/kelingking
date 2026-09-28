@@ -79,8 +79,11 @@ function lookKeys(W) {
 // turn passing ZIGZAG), the heading is smoothed across ZIGZAG_TURN metres instead, so the view
 // swings only part of the way with each short leg.
 const TURN = 2.5, LEAD = 1.5, ZIGZAG = 60, ZIGZAG_TURN = 6;
-// How much of the path's grade (the slope over the next few metres) goes into the pitch.
-const GRADE = 0.3;
+// How much of the path's grade (the slope over the next few metres) goes into the pitch. (v10:
+// 0.6, from 0.3. On a 50 degree flight every step ahead is more than 50 degrees below level, so
+// at 0.3 the camera looked 27 degrees down and the steps only grazed the bottom of the frame:
+// going down a stair, Sam saw the horizon.) The pitch goes no lower than STEEPEST.
+const GRADE = 0.6, STEEPEST = -46;
 // The scroll slows where the view turns: TURN_PACE degrees of turn take as much scroll as a
 // metre walked (about 60 m or 110 degrees a screen on the switchbacks).
 const TURN_PACE = 1.8;
@@ -196,17 +199,24 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
     // The view's pull: up to the bias either side, and none when the view is straight behind
     // (so the look cannot flip from one side to the other).
     const d = wrap(toView - fwd[i]);
-    const bias = A.bias + (B.bias - A.bias) * u;
+    // (v10) Down a steep flight a walker watches the steps: the look leans toward the view less
+    // there, down to 40% of its lean on a 40 degree grade.
+    const steep = 1 - 0.6 * smooth01((-grade[i] - 15) / 25);
+    const bias = A.bias >= 180 ? A.bias + (B.bias - A.bias) * u : (A.bias + (B.bias - A.bias) * u) * steep;
     const most = bias >= 180 ? 180 : bias * lean + (180 - bias * lean) * Math.max(0, (bias - 90) / 90);
     const pull = Math.sign(d) * Math.min(Math.abs(d), most) * (most >= 180 ? 1 : 1 - smooth01((Math.abs(d) - 120) / 60));
     yawRaw[i] = fwd[i] + pull;
     const full = Math.max(0, (bias - 90) / 90);   // looking at the view only: no grade in the pitch
-    pitchRaw[i] = A.pitch + (B.pitch - A.pitch) * u + GRADE * grade[i] * (1 - full);
+    // (Coming off the last flight onto the sand the head comes up: the grade fades out of the
+    // pitch over the last 14 m, or the sand chapter opened on a frame of plain sand.)
+    const offSteps = 1 - smooth01((w - (W.foot - 14)) / 11);
+    pitchRaw[i] = Math.max(A.pitch + (B.pitch - A.pitch) * u + GRADE * grade[i] * (1 - full) * offSteps, STEEPEST);
     fovRaw[i] = A.fov + (B.fov - A.fov) * u;
   }
   // (The yaw unwrapped again: fwd + pull can cross north between samples.)
   for (let i = 1; i < n; i++) yawRaw[i] = yawRaw[i - 1] + wrap(yawRaw[i] - yawRaw[i - 1]);
-  const yawS = gauss(yawRaw, 2 / DW), pitchS = gauss(pitchRaw, 3 / DW), fovS = gauss(fovRaw, 3 / DW);
+  // (Pitch over 5 m, v10: with the grade in it, it nodded at the top and foot of each flight.)
+  const yawS = gauss(yawRaw, 2 / DW), pitchS = gauss(pitchRaw, 5 / DW), fovS = gauss(fovRaw, 3 / DW);
   // The viewpoint's frame exactly at the start (smoothing pulls it toward what comes next).
   const vp = shots.viewpoint;
   const vpYaw = yawS[0] + wrap(vp.yaw - yawS[0]);
@@ -258,7 +268,7 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
   // the view turns over it, so the camera slows through the bends and walks the straights.
   const cost = new Float64Array(n);
   for (let i = 1; i < n; i++) {
-    const turn = Math.abs(yawS[i] - yawS[i - 1]) + 0.5 * Math.abs(pitchS[i] - pitchS[i - 1]);
+    const turn = Math.abs(yawS[i] - yawS[i - 1]) + Math.abs(pitchS[i] - pitchS[i - 1]);
     cost[i] = cost[i - 1] + DW + turn / TURN_PACE;
   }
   const costAt = (w) => { const f = Math.min(Math.max(w / DW, 0), n - 1.0001), i = Math.floor(f); return cost[i] + (cost[i + 1] - cost[i]) * (f - i); };

@@ -4,7 +4,7 @@
 // each frame (one pixel in sixteen from v9), "whole march" a still frame's or a jump's.
 //   node tools/cloud-bench.mjs eastCove viewpoint --rounds=8
 //   node tools/cloud-bench.mjs eastCove --set="clouds.coverage=0.5"
-// Needs the local server (python3 -m http.server 5178).
+// Needs the local server (python3 tools/serve.py).
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

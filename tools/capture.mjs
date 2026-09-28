@@ -21,7 +21,7 @@
 //   node tools/capture.mjs viewpoint --console      print the page's warnings and errors
 //
 // Needs the local server running (http://localhost:5178, see .claude/launch.json or
-// `python3 -m http.server 5178`). Output goes to captures/<shot>[-compare].png
+// `python3 tools/serve.py`). Output goes to captures/<shot>[-compare].png
 
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';

@@ -18,7 +18,7 @@ const MAGICK = process.env.MAGICK || '/opt/ImageMagick/bin/convert';
 const run = (...args) => execFileSync(MAGICK, args, { stdio: ['ignore', 'ignore', 'pipe'] });
 
 let total = 0;
-for (const s of [...SURFACES, ...TRAIL_SURFACES]) {
+for (const s of [...SURFACES, ...TRAIL_SURFACES].filter((s) => !s.gen)) {
   const dir = join(src, s.id);
   const files = {
     color: join(out, `${s.id}_color.jpg`),
@@ -39,6 +39,6 @@ writeFileSync(join(out, 'CREDITS.md'), `# Texture credits
 
 All textures are from Poly Haven (${manifest.source}) under CC0 1.0, resized and repacked.
 
-${[...SURFACES, ...TRAIL_SURFACES].map((s) => `- ${s.id}: ${manifest.textures[s.id]?.page} (${s.use})`).join('\n')}
+${[...SURFACES, ...TRAIL_SURFACES].filter((s) => !s.gen).map((s) => `- ${s.id}: ${manifest.textures[s.id]?.page} (${s.use})`).join('\n')}
 `);
 console.log(`total ${(total / 1e6).toFixed(1)} MB`);
