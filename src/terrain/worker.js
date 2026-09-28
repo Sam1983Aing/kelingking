@@ -291,7 +291,7 @@ function trailData(hf, layout) {
   const meshes = {};
   for (const k of ['concrete', 'dirt']) meshes[k] = { position: take(geo[k].position), normal: take(geo[k].normal), trail: take(geo[k].trail), index: take(geo[k].index) };
   const inst = {};
-  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'rope']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
+  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'lashPost0', 'lashPost1', 'lashPost2', 'lashRail0', 'lashRail1', 'lashRail2']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
   const line = {};
   for (const k of ['x', 'y', 's', 'hd', 'ht', 'w']) line[k] = Float32Array.from(r[k]);
   for (const k in line) take(line[k]);

@@ -15,6 +15,104 @@ import { loadSurfaceTextures } from '../terrain/surface-textures.js';
 
 const srgbGain = (s) => s.target.map((t, i) => Math.pow(t, 2.2) / Math.pow(s.avg[i], 2.2));
 
+// A cord lashing (v13): what one joint of a bamboo rail is tied with, in two parts (geometry.js has
+// the frames). The cord is thin, a 5 mm nylon line, where v6 to v12 had a smooth blue collar 7 cm
+// tall. aTrail carries the angle round the cord and the metres along it, for the twist in the
+// shader.
+//   'post'  turns round the post just above and below the rail (post radius about 0.04, the
+//           rail's axis 0.055 out from the post's), and a knot on the inside of the path with two
+//           loose ends hanging from it,
+//   'rail'  a spiral of turns round the rail on each side of the post, wound at the cord's own
+//           pitch, so they read on the front of the rail, where the post's turns are hidden.
+// Each in three variants, a turn or two different.
+function lashingGeometry(kind, variant) {
+  let seed = 9173 + variant * 4409 + (kind === 'rail' ? 77 : 0);
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const pos = [], nrm = [], tr = [], idx = [];
+  const tube = (path, radius, radial) => {
+    const n = path.length, base = pos.length / 3;
+    // Frames along the path by parallel transport.
+    const tan = path.map((p, i) => {
+      const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)];
+      const t = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...t) || 1;
+      return t.map((v) => v / l);
+    });
+    let N = Math.abs(tan[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let along = 0;
+    for (let i = 0; i < n; i++) {
+      const t = tan[i];
+      const d = N[0] * t[0] + N[1] * t[1] + N[2] * t[2];
+      N = [N[0] - t[0] * d, N[1] - t[1] * d, N[2] - t[2] * d];
+      const nl = Math.hypot(...N) || 1; N = N.map((v) => v / nl);
+      const B = [t[1] * N[2] - t[2] * N[1], t[2] * N[0] - t[0] * N[2], t[0] * N[1] - t[1] * N[0]];
+      if (i > 0) along += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2]);
+      for (let j = 0; j < radial; j++) {
+        const a = (j / radial) * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+        const nx = N[0] * c + B[0] * s2, ny = N[1] * c + B[1] * s2, nz = N[2] * c + B[2] * s2;
+        pos.push(path[i][0] + nx * radius, path[i][1] + ny * radius, path[i][2] + nz * radius);
+        nrm.push(nx, ny, nz);
+        tr.push(a, along, 0, 9);
+      }
+    }
+    for (let i = 0; i + 1 < n; i++) {
+      for (let j = 0; j < radial; j++) {
+        const a = base + i * radial + j, b = base + i * radial + (j + 1) % radial;
+        const c = base + (i + 1) * radial + (j + 1) % radial, d = base + (i + 1) * radial + j;
+        idx.push(a, d, c, a, c, b);
+      }
+    }
+  };
+  const cord = 0.0028, TAU = Math.PI * 2;
+  if (kind === 'post') {
+    // Rings round the post, three above the rail and two or three below, each a little tilted,
+    // a little bigger or smaller, and not quite closed: the end runs on past the start.
+    const nAbove = [2, 3, 2][variant], nBelow = [2, 2, 3][variant];
+    const ring = (y0, k) => {
+      const R = 0.0432 + (rnd() - 0.5) * 0.0026, ph = rnd() * TAU, tilt = (rnd() - 0.5) * 0.007;
+      const path = [];
+      for (let j = 0; j <= 11; j++) {
+        const th = ph + (j / 10) * TAU;
+        path.push([R * Math.cos(th), y0 + tilt * Math.sin(th) + 0.0011 * Math.sin(3 * th + k), R * Math.sin(th)]);
+      }
+      tube(path, cord * (0.92 + 0.16 * rnd()), 3);
+    };
+    for (let i = 0; i < nAbove; i++) ring(0.0335 + i * 0.0058 + (rnd() - 0.5) * 0.0012, i);
+    for (let i = 0; i < nBelow; i++) ring(-(0.0335 + i * 0.0058) + (rnd() - 0.5) * 0.0012, i + 5);
+    // The knot on the inside face of the top turn, and the two ends.
+    const ka = Math.PI / 2 + (variant - 1) * 0.5 + (rnd() - 0.5) * 0.3, R = 0.0475;
+    const kx = R * Math.cos(ka), kz = R * Math.sin(ka), ky = 0.0335 + (nAbove - 1) * 0.0058;
+    tube([[kx - 0.006, ky, kz - 0.001], [kx, ky + 0.0015, kz + 0.002], [kx + 0.006, ky, kz - 0.001]], 0.0052, 5);
+    tube([[kx - 0.003, ky - 0.004, kz + 0.002], [kx + 0.002, ky + 0.003, kz + 0.003], [kx + 0.004, ky - 0.002, kz]], 0.0042, 5);
+    for (let e = 0; e < 2; e++) {
+      const L = (e === 0 ? 0.075 : 0.038) * (0.7 + 0.6 * rnd()), side = e === 0 ? 1 : -1;
+      const path = [];
+      for (let j = 0; j <= 5; j++) {
+        const t = j / 5;
+        path.push([kx + side * (0.003 + 0.012 * t * t) + (rnd() - 0.5) * 0.0015, ky - 0.004 - L * t, kz + 0.004 + 0.045 * Math.sin(t * 2.0) * (0.75 + 0.25 * e)]);
+      }
+      tube(path, 0.0023, 3);
+    }
+  } else {
+    // A spiral round the rail, from just clear of the post outward, on each side.
+    const nA = [2, 3, 2][variant], nB = [2, 2, 3][variant], pitch = 0.0057;
+    for (const [sgn, n] of [[1, nA], [-1, nB]]) {
+      const path = [], seg = 10, R0 = 0.0287, ph = rnd() * TAU;
+      for (let j = 0; j <= n * seg; j++) {
+        const th = ph + (j / seg) * TAU;
+        const R = R0 + 0.0007 * Math.sin(2.1 * th + variant);
+        path.push([sgn * (0.052 + pitch * (j / seg)), R * Math.sin(th), R * Math.cos(th)]);
+      }
+      tube(path, cord * (0.94 + 0.12 * rnd()), 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aTrail', new THREE.Float32BufferAttribute(tr, 4));
+  g.setIndex(idx);
+  return g;
+}
+
 function patch(src, find, repl) {
   const n = src.split(find).length - 1;
   if (n !== 1) throw new Error(`trail shader patch matched ${n} times: ${find.slice(0, 60)}`);
@@ -43,6 +141,24 @@ vLocalN = normal;
   vScale = sc;
   vRot = mat3(instanceMatrix[0].xyz / sc.x, instanceMatrix[1].xyz / sc.y, instanceMatrix[2].xyz / sc.z);
   vRand = aRand;
+#ifdef TR_BAMBOO
+  {
+    // (v13) A bamboo pole is not a ruler: fatter at the foot and thinner at the top, bowed a
+    // centimetre or two whichever way it grew, and cut on a slant where it was sawn.
+    float hy = position.y + 0.5;
+#ifdef BAMBOO_POST
+    float taper = mix(1.1, 0.9, hy);
+#else
+    float taper = mix(1.03, 0.97, hy);
+#endif
+    float ang = aRand * 37.0;
+    vec2 bow = vec2(cos(ang), sin(ang)) * (0.012 + 0.014 * fract(aRand * 7.3)) * sin(3.14159 * hy) / max(sc.x, 1e-3);
+    transformed.xz = transformed.xz * taper + bow;
+    // The cut: the top face tilted about 25 degrees, toward a direction of its own.
+    float cutA = aRand * 91.0;
+    transformed.y += step(0.499, position.y) * 0.47 * sc.x / max(sc.y, 1e-3) * (cos(cutA) * position.x + sin(cutA) * position.z);
+  }
+#endif
 #else
   vLocal = position;
   vScale = vec3(1.0);
@@ -245,7 +361,9 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   // (v10) Loose soil at the back of each tread, darker and browner.
   if (vTrail.z < 0.5) {
     col *= mix(vec3(0.7, 0.62, 0.52), vec3(1.0), smoothstep(0.03, 0.16, vTrail.w + 0.05 * (n1 - 0.5)));
-    trSelf = smoothstep(0.05, 0.08, vTrail.w + 0.03 * (n1 - 0.5));
+    // (v13: a floor of 0.3. The nosing shades the foot of the riser, but the sun has a width and the
+    // soil there is lit by the sky and by light off the risers: it was a pure black strip.)
+    trSelf = mix(0.3, 1.0, smoothstep(0.035, 0.09, vTrail.w + 0.03 * (n1 - 0.5)));
   }
 #elif defined(TR_WOOD)
 #ifdef LOG
@@ -272,16 +390,25 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
 #endif
 #elif defined(TR_BAMBOO)
   // Bamboo poles: straw to grey-green, glossy between the nodes, a ring every 25 to 40 cm.
+  // (v13: the rings stand up, dark, with the pole a shade paler above each; fine fibres run along it,
+  // and here and there a split.)
   float along = vLocal.y + vRand * 3.0;
   float seg = 0.25 + 0.15 * vRand;
-  float node = 1.0 - smoothstep(0.004, 0.02, abs(fract(along / seg) - 0.5) * seg);   // metres to the ring
-  float streak = tn(vec2(along * 3.0, atan(vLocal.x, vLocal.z) * 6.0));
+  float ang = atan(vLocal.x, vLocal.z);
+  float sd = (fract(along / seg) - 0.5) * seg;                       // metres to the ring, signed
+  float node = 1.0 - smoothstep(0.003, 0.016, abs(sd));
+  float streak = tn(vec2(along * 3.0, ang * 6.0));
+  float fib = tn(vec2(along * 1.6, ang * 11.0)) * 0.6 + tn(vec2(along * 5.0 + 3.0, ang * 27.0)) * 0.4;
   // Mostly weathered to grey-tan; the odd newer pole still straw coloured.
   vec3 fresh = lin(vec3(0.66, 0.57, 0.36)), old = lin(vec3(0.5, 0.48, 0.41));
-  col = mix(fresh, old, smoothstep(0.15, 0.45, vRand)) * (0.8 + 0.3 * streak);
+  col = mix(fresh, old, smoothstep(0.15, 0.45, vRand)) * (0.78 + 0.28 * streak) * (0.86 + 0.28 * fib);
   col *= mix(vec3(1.0), vec3(0.7, 0.68, 0.62), smoothstep(0.55, 0.8, tn(vec2(along * 1.7, vRand * 30.0))) * 0.6);   // grime
-  col *= 1.0 - 0.35 * node;
-  trRough = mix(0.45, 0.8, vRand);
+  col *= 1.0 - 0.5 * node;
+  col *= mix(1.0, 1.08, smoothstep(0.0, 0.05, sd) * (1.0 - smoothstep(0.05, 0.13, sd)));
+  float split = smoothstep(0.9, 0.96, tn(vec2(along * 0.8 + 5.0, ang * 2.5 + vRand * 40.0)));
+  col *= 1.0 - 0.45 * split * smoothstep(0.35, 0.0, abs(fract(along * 0.5) - 0.5));
+  trNormal = normalize(N + vRot * vec3(0.0, sign(sd) * node * 0.5 * smoothstep(0.0, 0.004, abs(sd)) + (fib - 0.5) * 0.0, 0.0));
+  trRough = mix(0.45, 0.8, vRand) + 0.15 * node;
 #elif defined(TR_STONE)
   // (v10) Loose limestone: pale and dusty grey, pitted, each stone its own shade, stained with
   // soil where it sits in the ground.
@@ -294,10 +421,16 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   col = mix(col, col * vec3(0.66, 0.56, 0.44), soil * 0.8);
   trRough = 0.85;
 #elif defined(TR_ROPE)
-  // Blue rope, the nylon kind, faded by the sun, wound round in strands.
-  float tw = sin((vLocal.y * 60.0 + atan(vLocal.x, vLocal.z) * 2.0) * 1.0);
-  col = lin(mix(vec3(0.12, 0.32, 0.72), vec3(0.3, 0.48, 0.72), vRand)) * (0.8 + 0.2 * tw);
-  trRough = 0.7;
+  // (v13) The blue nylon cord of trail-mid-descent-b.jpg: a saturated cyan-blue, the sun-faded
+  // ones paler and greyer, three strands twisted (diagonal stripes along it: a turn every 8 mm),
+  // dusty where it lies against the post. vTrail: the angle round the cord and metres along it.
+  float ph = vTrail.y * 785.0 + vTrail.x * 2.0;
+  float tw = sin(ph);
+  tw = mix(tw, 0.0, smoothstep(1.0, 3.0, fwidth(ph)));
+  vec3 fresh = lin(vec3(0.03, 0.46, 0.70)), faded = lin(vec3(0.24, 0.52, 0.62));
+  col = mix(fresh, faded, smoothstep(0.25, 0.9, vRand)) * (0.86 + 0.16 * tw);
+  col *= mix(vec3(1.0), vec3(0.72, 0.68, 0.62), 0.5 * tn(vLocal.xy * 90.0 + vRand * 20.0));
+  trRough = 0.62;
 #endif
   if (uClayT > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); trNormal = N; trRough = 0.93; }
   return col;
@@ -365,14 +498,15 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
 
   const mats = {
     concrete: material('concrete'), dirt: material('dirt'), timber: material('wood'), log: material('wood', { LOG: 1 }),
-    bamboo: material('bamboo'), rope: material('rope'), stone: material('stone'),
+    bamboo: material('bamboo'), bambooPost: material('bamboo', { BAMBOO_POST: 1 }), rope: material('rope'), stone: material('stone'),
   };
   const group = new THREE.Group();
   group.name = 'trail';
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
-  const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 1, false);
-  const unitRope = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+  const unitCylRail = new THREE.CylinderGeometry(1, 1, 1, 10, 6, false);   // (bamboo rails: bowed in the vertex shader)
+  const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 10, false);
+  const lashPostGeo = [0, 1, 2].map((v) => lashingGeometry('post', v)), lashRailGeo = [0, 1, 2].map((v) => lashingGeometry('rail', v));
   // (v10) A stone: a faceted, lumpy ball, flat underneath, about 1 across. Limestone breaks
   // into angular pieces, so its facets stay (no smoothing across them).
   const unitStone = (() => {
@@ -400,7 +534,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   };
 
   function update(data) {
-    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitRope && c.geometry !== unitStone && c.geometry.dispose(); }
+    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitCylRail && c.geometry !== unitStone && c.geometry.dispose(); }
     if (!data) return;
     for (const k of ['concrete', 'dirt']) {
       const d = data.meshes[k];
@@ -432,9 +566,15 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     if (data.inst.stones) inst('stones', unitStone, mats.stone, false);
     inst('timberPosts', unitBox, mats.timber);
     inst('timberRails', unitBox, mats.timber);
-    inst('bambooPosts', unitCylFine, mats.bamboo);
-    inst('bambooRails', unitCyl, mats.bamboo);
-    inst('rope', unitRope, mats.rope);
+    // (v13: no depth pass for the bamboo. The poles are bowed and tapered in the vertex shader, and
+    // the pass draws them straight: where the real pole was behind that depth, nothing was drawn.)
+    inst('bambooPosts', unitCylFine, mats.bambooPost, false);
+    inst('bambooRails', unitCylRail, mats.bamboo, false);
+    // (Three variants of each part of the lashing, no depth pass: a few millimetres of cord.)
+    for (let v = 0; v < 3; v++) {
+      if (data.inst['lashPost' + v]) inst('lashPost' + v, lashPostGeo[v], mats.rope, false);
+      if (data.inst['lashRail' + v]) inst('lashRail' + v, lashRailGeo[v], mats.rope, false);
+    }
     // Where the sections change, for the dirt's colour (metres along).
     uniforms.uSections.value.set(...data.sectionEnds);
   }
