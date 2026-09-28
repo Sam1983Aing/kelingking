@@ -5,3 +5,6 @@ captures/
 
 # Raw CC0 downloads (Poly Haven). Big; fetch with tools/fetch-assets.mjs.
 assets-src/
+
+# The standalone build made against the local server, for testing (tools/build-standalone.mjs --local).
+kelingking-local.html

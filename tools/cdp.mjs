@@ -9,6 +9,15 @@ import { join } from 'node:path';
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
+// Every Chrome still open when node exits is killed, however it exits: a tool that throws or is
+// interrupted before its close() used to leave Chrome running with the page still drawing (v11
+// found four, an hour old, holding the GPU at 100% and every timing 3 to 5 times too slow).
+const live = new Set();
+process.on('exit', () => { for (const c of live) { try { c.kill(); } catch {} } });
+for (const [sig, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) {
+  process.on(sig, () => process.exit(code));
+}
+
 export async function launch() {
   const profile = mkdtempSync(join(tmpdir(), 'kelingking-cdp-'));
   const chrome = spawn(CHROME, [
@@ -16,6 +25,8 @@ export async function launch() {
     '--no-first-run', '--no-default-browser-check', '--hide-scrollbars',
     '--enable-webgl', '--ignore-gpu-blocklist', '--use-angle=metal', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  live.add(chrome);
+  chrome.on('exit', () => live.delete(chrome));
   const wsUrl = await new Promise((resolve, reject) => {
     let buf = '';
     chrome.stderr.on('data', (d) => { buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) resolve(m[1]); });

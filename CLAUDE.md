@@ -18,8 +18,15 @@ section in `PROCESS.md`. Problems that belong to another version go into that ve
   it tells browsers not to reuse stale files (with plain `http.server`, Safari mixed an old
   script with new ones and the loader hung at 99).
 - **`node --check` on a `.js` file treats it as a script**, so module-only mistakes pass.
-  Check a copy named `.mjs` instead.
+  Check a copy named `.mjs` instead. The other way round it fails too: node 22 and later take
+  a `.js` file with an `import` in it for a module and pass it, so `node --check` cannot prove
+  a standalone bundle is a classic script. `tools/build-standalone.mjs` compiles each inline
+  script with `vm.Script`, which can.
 - **A backtick inside a comment inside a GLSL template string ends the JavaScript string.**
+- **The page loads a baked terrain** (`assets/terrain/terrain-1024.bin`, v11) instead of
+  generating it. After changing the terrain, the path, the plants' scatter or the layout, run
+  `node tools/bake-terrain.mjs`. On localhost the page notices a stale bake (a warning in the
+  console) and generates instead, so nothing breaks, but it loads 8 s slower until you rebake.
 - **When a page never becomes ready,** `capture.mjs` prints its console. Read that before
   guessing.
 - **Scripted find-and-replace edits:** assert the old text is there exactly once, or the edit

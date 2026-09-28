@@ -29,6 +29,11 @@ const LOD = {
 // hideParts: plant meshes left out, by the start of their names (near:grass, impostor:0, ...;
 // main.js vegHide=), for timing one against the other with tools/ab.mjs --a=self.
 export async function createVegetation(renderer, lightUniforms, { wind = {}, detailScale = 1, hideParts = [] } = {}) {
+  // (v11) Growing takes about 2 s of JavaScript. Let the page start its downloads and the
+  // terrain first, and grow a variant at a time, handing back between them so the loader's
+  // counter keeps moving.
+  const breathe = () => new Promise((r) => setTimeout(r, 0));
+  await breathe();
   const t0 = performance.now();
   for (const l of Object.values(LOD)) if (l.detail) l.detail = l.detail.map((d) => Math.max(2.01, d * detailScale));
   const shared = {
@@ -42,10 +47,14 @@ export async function createVegetation(renderer, lightUniforms, { wind = {}, det
   const leafTex = leafAtlas();
 
   // Grow every variant of every species that has a 3D form.
-  const species = SPECIES.map((sp) => {
+  const species = [];
+  for (const sp of SPECIES) {
     const grow = GROWERS[sp.id];
-    if (!grow) return null;
-    const variants = sp.heights.map((h, v) => {
+    if (!grow) { species.push(null); continue; }
+    const variants = [];
+    for (let v = 0; v < sp.heights.length; v++) {
+      await breathe();
+      const h = sp.heights[v];
       const info = grow(1000 + v * 17, { height: h });
       info.variant = v;
       const geometry = info.builder.geometry();
@@ -59,10 +68,10 @@ export async function createVegetation(renderer, lightUniforms, { wind = {}, det
         levels.push(li.builder.geometry());
         info.levelTris.push(li.builder.tris);
       }
-      return { info, geometry, levels };
-    });
-    return { id: sp.id, lod: LOD[sp.id], variants, capacity: sp.id === 'grass' ? 6000 : 3000 };
-  });
+      variants.push({ info, geometry, levels });
+    }
+    species.push({ id: sp.id, lod: LOD[sp.id], variants, capacity: sp.id === 'grass' ? 6000 : 3000 });
+  }
   const near = createNearPlants({ species: species.map((s) => s ?? { id: 'none', lod: { near: 0, far: 0 }, variants: [] }), shared, leafTex });
   const growMs = Math.round(performance.now() - t0);
 

@@ -5,11 +5,13 @@ import * as THREE from 'three';
 import { SURFACES } from './surfaces.js';
 import { trampleNormal } from './trample.js';
 
-// A layer made in code (v10): its normal from the generator, colour and mask flat.
+// A layer made in code (v10): its normal from the generator, colour and mask flat. Also what a
+// scan that will not load becomes (v11, the standalone file offline): flat, in the scan's own
+// average colour, so the shader's target / avg still lands on the island's colour.
 function generated(s, kind, size) {
   if (kind === 'normal' && s.gen === 'trampled') return trampleNormal(size);
   const px = new Uint8Array(size * size * 4);
-  const v = kind === 'mask' ? [235, 255, 0, 255] : [128, 128, 128, 255];
+  const v = kind === 'mask' ? [235, 255, 0, 255] : kind === 'color' && s.avg ? [...s.avg.map((c) => Math.round(c * 255)), 255] : [128, 128, 128, 255];
   for (let i = 0; i < px.length; i += 4) px.set(v, i);
   return px;
 }
@@ -17,8 +19,9 @@ function generated(s, kind, size) {
 async function pixels(url, size) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${url}`);
-  // No flip: layer rows stay in file order, and the shader's uv is laid out to match.
-  const bmp = await createImageBitmap(await res.blob(), { colorSpaceConversion: 'none' });
+  // No flip: layer rows stay in file order, and the shader's uv is laid out to match. (Typed as
+  // a JPEG whatever the server said: GitHub's raw file server calls everything text/plain.)
+  const bmp = await createImageBitmap(new Blob([await res.arrayBuffer()], { type: 'image/jpeg' }), { colorSpaceConversion: 'none' });
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(bmp, 0, 0, size, size);
@@ -28,7 +31,7 @@ async function pixels(url, size) {
 async function arrayTexture(kind, size, colorSpace, base, list) {
   // (A layer that will not load is left flat, with a warning, rather than failing the rest.)
   const layers = await Promise.all(list.map((s) => (s.gen ? generated(s, kind, size)
-    : pixels(`${base}${s.id}_${kind}.jpg`, size).catch((e) => { console.warn(`texture ${s.id} ${kind}: ${e.message}`); return generated({}, kind, size); }))));
+    : pixels(`${base}${s.id}_${kind}.jpg`, size).catch((e) => { console.warn(`texture ${s.id} ${kind}: ${e.message}`); return generated({ avg: s.avg }, kind, size); }))));
   const data = new Uint8Array(size * size * 4 * layers.length);
   layers.forEach((px, i) => data.set(px, i * size * size * 4));
   const tex = new THREE.DataArrayTexture(data, size, size, layers.length);
