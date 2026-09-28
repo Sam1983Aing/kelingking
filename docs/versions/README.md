@@ -15,8 +15,8 @@ version. A session works on its element only, and goes deep on it.
 | v7 | Plants | [v7-plants.md](v7-plants.md) | done, tag `v7` |
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | done, tag `v8` |
 | v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, tag `v9` |
-| v10 | Polish pass over v1 to v9, from Sam's notes on the v9 page | [v10-polish.md](v10-polish.md) | done, waiting for Sam |
-| v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | |
+| v10 | Polish pass over v1 to v9, from Sam's notes on the v9 page | [v10-polish.md](v10-polish.md) | done, tag `v10` |
+| v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | next |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
