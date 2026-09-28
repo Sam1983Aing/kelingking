@@ -74,7 +74,8 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   // then 'loaded' once all of them are in.
   const listeners = {};
   const on = (name, fn) => { (listeners[name] ??= []).push(fn); };
-  const emit = (name, ...a) => (listeners[name] ?? []).forEach((fn) => fn(...a));
+  // (Each also a performance mark, kl:name, for tools/load-time.mjs, v11.)
+  const emit = (name, ...a) => { performance.mark('kl:' + name); (listeners[name] ?? []).forEach((fn) => fn(...a)); };
 
   // ---------------------------------------------------------------- renderer and scene
 
@@ -243,12 +244,43 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     loadedSent = true;
     emit('loaded');
   }
-  const worker = new Worker(new URL('./terrain/worker.js', import.meta.url), { type: 'module' });
-  // Errors in the worker do not reach the page's console on their own.
-  worker.onerror = (e) => console.error('terrain worker failed:', e.message, e.filename, e.lineno);
-  worker.onmessage = (e) => {
-    if (e.data.id !== genId) return;
-    hf = e.data;
+  // The terrain comes from the worker, or (v11) from the bake: the worker's output at the page's
+  // resolution, baked by tools/bake-terrain.mjs into a file that downloads in a second or two
+  // instead of taking 8 s to generate. The tools (q=2048) and any change to the layout from the
+  // URL generate it; bake=0 forces that.
+  let worker = null;
+  function startWorker() {
+    if (worker) return;
+    worker = new Worker(new URL('./terrain/worker.js', import.meta.url), { type: 'module' });
+    // Errors in the worker do not reach the page's console on their own.
+    worker.onerror = (e) => console.error('terrain worker failed:', e.message, e.filename, e.lineno);
+    worker.onmessage = (e) => receive(e.data);
+  }
+  const canBake = !capture && state.quality === 1024 && params.get('bake') !== '0'
+    && !['faceStep', 'trail', 'lab'].some((k) => params.has(k));
+  async function loadBake() {
+    const res = await fetch(new URL('../assets/terrain/terrain-1024.bin', import.meta.url));
+    if (!res.ok) throw new Error(`${res.status}`);
+    let buf = new Uint8Array(await res.arrayBuffer());
+    // (Gzipped by the bake tool; a server that sent it with Content-Encoding has undone that.)
+    if (buf[0] === 0x1f && buf[1] === 0x8b) buf = new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+    const { decodeBake } = await import('./terrain/bake-format.js');
+    const data = decodeBake(buf);
+    // Out of date? The layout always; the generator's sources when they can be read (the page
+    // served from a working copy). Either way the worker makes it instead.
+    const hex = async (str) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)))].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    if (crypto?.subtle) {
+      if (data.bake.layoutHash !== await hex(JSON.stringify(layout))) throw new Error('the layout has changed since the bake');
+      if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+        const texts = await Promise.all(data.bake.sources.map((f) => fetch(new URL('../' + f, import.meta.url)).then((r) => r.text())));
+        if (data.bake.sourceHash !== await hex(data.bake.sources.map((f, i) => f + '\n' + texts[i]).join('\n'))) throw new Error('the terrain code has changed since the bake (node tools/bake-terrain.mjs)');
+      }
+    }
+    return data;
+  }
+  function receive(data) {
+    if (data.id !== genId) return;
+    hf = data;
     terrain.update(hf);
     const tex = new THREE.DataTexture(hf.water, hf.N, hf.N, THREE.RGBAFormat, THREE.HalfFloatType);
     tex.minFilter = THREE.LinearFilter;
@@ -279,6 +311,7 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   function regenerate() {
     genId++;
     emit('generating');
+    startWorker();
     worker.postMessage({ id: genId, layout, N: state.quality, M: state.quality >= 2048 ? 2049 : 1025 });
   }
   // lab=x,y[,gap]: every species and variant in a row, for looking at them one by one.
@@ -296,7 +329,13 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   }
   let regenTimer = 0;
   const regenerateSoon = () => { clearTimeout(regenTimer); regenTimer = setTimeout(regenerate, 250); };
-  regenerate();
+  if (canBake) {
+    genId = 1;
+    emit('generating');
+    const t0 = performance.now();
+    loadBake().then((data) => { data.id = genId; data.baked = Math.round(performance.now() - t0); receive(data); })
+      .catch((e) => { console.warn(`terrain bake not used (${e.message}): generating it`); regenerate(); });
+  } else regenerate();
 
   const groundAt = (x, y) => (hf ? sample(hf.heights, hf.N, hf.cell, hf.extent.x0, hf.extent.y0, x, y) : 0);
 

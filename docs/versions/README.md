@@ -120,6 +120,8 @@ node tools/scroll-clip.mjs --stills=2.3,2.5 --size=1280x720  # stills from the r
 node tools/scroll-clip.mjs --from=5 --to=9 --drag=3,-70      # a recording with a look to the left at 3 s (v9)
 node tools/cloud-bench.mjs eastCove viewpoint                # what the cloud march costs a frame (v9)
 node tools/ab.mjs stairs --a=v8 --b=b55d70f                  # two commits against each other (v9)
+node tools/bake-terrain.mjs                                  # bake the terrain the page loads (v11; --check)
+node tools/load-time.mjs                                     # how long the page takes to load, step by step (v11)
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,

@@ -321,6 +321,7 @@ export function startScroll({ params }) {
   // compiled and every texture uploaded behind the loader (not the first time the camera gets
   // there), and time a few to pick the resolution.
   async function warmUp() {
+    performance.mark('kl:warm-start');
     const frame = () => new Promise((r) => requestAnimationFrame(r));
     const gl = renderer.getContext(), px = new Uint8Array(4);
     const timed = [];
@@ -352,12 +353,14 @@ export function startScroll({ params }) {
     jumpTo(pace.screensAt(at0));
     placeCamera(0, true);
     done.add('warm');
+    performance.mark('kl:warm-end');
   }
   app.on('loaded', () => { loaded = true; warmUp().catch((e) => console.error('warm-up failed', e)); });
 
   // The loader lifts from black onto the bay, and the title comes up line by line.
   function begin(skip = false) {
     started = true;
+    performance.mark('kl:begin');
     html.classList.remove('loading');
     if (skip) { gsap.set(loaderEl, { autoAlpha: 0 }); gsap.set(['.hud', '.rail'], { autoAlpha: 1 }); lenis?.start(); wordsOn = true; window.__ready = true; return; }
     const t = gsap.timeline();
