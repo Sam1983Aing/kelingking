@@ -399,18 +399,21 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   vec2 qa = vec2(dot(q, up), dot(q, vec2(-up.y, up.x)));
   qa.x /= 1.0 + str;
   float body = fbm3(q * 0.5 + 4.1) * 0.55 + fbm3(qa * 2.2 + 9.7) * 0.45;
-  float fine = fp < 0.03 ? vnoise(qa * 9.0 + 2.7) : 0.5;
-  float base = body + (fine - 0.5) * 0.18 * smoothstep(0.03, 0.012, fp);
-  float soft = clamp(fwidth(base) * 1.5, 0.015, 0.12);
+  // (v12) The ragged edge and the holes from 8 cm a pixel, where they started at 3: from the
+  // water's edge stop (a pixel of 3 to 6 cm on the swash) the foam was smooth blobs with hard
+  // edges, like cut paper.
+  float fine = fp < 0.08 ? vnoise(qa * 9.0 + 2.7) * 0.65 + vnoise(qa * 23.0 + 5.3) * 0.35 : 0.5;
+  float base = body + (fine - 0.5) * 0.26 * smoothstep(0.08, 0.02, fp);
+  float soft = clamp(fwidth(base) * 1.5, 0.03, 0.12);
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
-  float thin = cover * (1.0 - smoothstep(0.55, 0.9, amount));
-  if (thin > 0.01 && fp < 0.035) {
+  float thin = cover * (1.0 - smoothstep(0.6, 0.97, amount));
+  if (thin > 0.01 && fp < 0.08) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
     float w2 = fp < 0.018 ? 1.0 - smoothstep(0.0, 0.3, cells(qw * 9.5 + 3.1, uTime * 0.7)) : 0.5;
     float walls = max(w1, w2 * 0.8);
-    float k = smoothstep(0.035, 0.018, fp);
+    float k = smoothstep(0.08, 0.025, fp);
     cover *= mix(1.0, walls, thin * k * smoothstep(1.0 - amount + 0.25, 1.0 - amount, base) * 0.9);
   }
   return cover;
