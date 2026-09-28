@@ -40,22 +40,22 @@ Hero frames, rendered with `node tools/hero.mjs v14`. The sea is frozen at 17 s.
 
 ## Frame times
 
-Time to render one frame to completion at 1400 px wide, pixel ratio 1, best of three rounds, on
-the build machine (Apple M1 Max). Absolute times depend on what else is using the GPU, so only
-the change column means anything: it is against v13, timed in the same run.
+Time to render one frame to completion at 1400 px wide, pixel ratio 1, from a complete
+timing round on the build machine (Apple M1 Max). The change column is from eight
+alternating side-by-side rounds against v13; it is more stable than absolute times.
 
 | Frame | Time | fps | Change |
 |---|---|---|---|
-| Overview, straight down | 12.4 ms | 81 | -1% |
-| Clifftop viewpoint | 8.1 ms | 123 | +3% |
-| On the stairs | 9.5 ms | 105 | -14% |
-| Top of the trail | 5.7 ms | 175 | -34% |
-| Low on the trail | 9.0 ms | 111 | +1% |
-| On the sand | 10.5 ms | 95 | +30% (over budget) |
-| At the water's edge | 11.4 ms | 88 | -3% |
-| Shore break, eye level | 10.1 ms | 99 | +16% (over budget) |
-| Head from the sea | 9.5 ms | 105 | +7% |
+| Overview, straight down | 18.4 ms | 54 | 0% |
+| Clifftop viewpoint | 13.1 ms | 76 | +3% |
+| On the stairs | 13.9 ms | 72 | +6% |
+| Top of the trail | 7.8 ms | 128 | -3% |
+| Low on the trail | 13.6 ms | 74 | +2% |
+| On the sand | 12.5 ms | 80 | 0% |
+| At the water's edge | 14.8 ms | 68 | -3% |
+| Shore break, eye level | 14.2 ms | 70 | -2% |
+| Head from the sea | 11.1 ms | 90 | +1% |
 
-The beach and shore-break flags above come from separate timed runs with unstable GPU
-load. In the alternating side-by-side v13 comparison, beach was -3% and shoreBreak +1%;
-viewpoint was +8% and sideFromSea +6%. See `PROCESS.md` for the method.
+The full `hero.mjs` timing sequence stopped when its second swash page did not become ready.
+That page loaded in a separate retry; the paired run completed all nine views. See
+`PROCESS.md` for the method and limitation.

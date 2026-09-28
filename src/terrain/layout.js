@@ -95,9 +95,9 @@ export function defaultLayout() {
       // The wall at the south end of the beach drops sheer from its rim; the mesh builder
       // then cuts it back underneath into the overhang (overhangs, below).
       { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
-      // The jaw slopes from its narrow green ridge into the projecting beak. A near-vertical
-      // five-metre drop made it read as part of the head's flat limestone face.
-      { name: 'jaw', at: [30, 80], r: 35, face: 30, pf: 1.15 },
+      // Keep the sloping beak local to the jaw tip. Spreading this gentler face toward the
+      // beach-wall overhang pulled its cave into a blocky cone at sand level.
+      { name: 'jaw', at: [14, 89], r: 20, face: 24, pf: 1.15 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
       { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },

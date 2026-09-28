@@ -2225,9 +2225,10 @@ sea face, and a lower, separate beak over the beach arch. This pass changed shap
   the sea face and the outer ridge falls away less abruptly. A first pass held the outer brow
   too high; the viewpoint outline caught it, so its last two heights came back down.
 - The jaw spur is narrower and tapers toward the beach. The old five-metre face width made
-  its green ridge drop almost vertically into the same pale wall as the head. A 30 m local
-  face profile lets that ridge descend into a distinct triangular beak while leaving the
-  main head's sea face sheer.
+  its green ridge drop almost vertically into the same pale wall as the head. A 24 m face
+  profile, centered on the jaw tip, lets that ridge descend into a distinct triangular beak
+  while leaving the main head's sea face sheer. The first, broader jaw profile pulled the
+  beach overhang into a blocky cone. Confining it to a 20 m radius restored the cave.
 - The revised layout is included in the 1024 terrain bake.
 
 ### How it was judged
@@ -2239,11 +2240,13 @@ local and are not part of the gallery or the commit.
 
 ### Speed
 
-`hero.mjs v14` gave beach +30% and shoreBreak +16% against v13 using the best of three
-separate timed rounds, but the machine's background GPU load swung those rounds in both
-directions. In the paired `ab.mjs` run (eight alternating rounds with both pages open),
-beach was -3%, shoreBreak +1%, viewpoint +8%, and sideFromSea +6%. The shape pass stays
-within the project's 10% frame budget on that more reliable comparison.
+With the final v13 merge as the base and the jaw's profile confined to its tip, the paired
+`ab.mjs --hero --a=v13 --rounds=8` run completed all nine views: overview 0%, viewpoint
++3%, stairs +6%, trailTop -3%, trailLow +2%, beach 0%, swash -3%, shoreBreak -2%, and
+sideFromSea +1%. All are within the 10% frame budget. `hero.mjs v14` refreshed the gallery
+but its second swash timing page did not become ready within two minutes, so that sequence
+stopped before writing its table. A separate swash timing retry loaded normally. The gallery
+uses its one complete timed round for absolute milliseconds and the paired run for changes.
 
 ### Still weak
 
