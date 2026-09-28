@@ -39,6 +39,7 @@ moving on. The plan, the rules and a brief per version are in
 | v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | done |
 | v10 | Polish pass over v1 to v9 | done |
 | v11 | Speed and the shareable build | done |
+| v12 | The breaking wave, and the clouds | ready for Sam |
 
 ## Run it
 

@@ -2012,3 +2012,101 @@ module worker from `file://`, so:
   bits, but the mesh already lands within 24 mm.
 - Phones and slower laptops are untried. A phone would need a lighter scene chosen before
   loading (q=512, fewer plants).
+
+## v12: the breaking wave, and the clouds (2026-09-27, overnight)
+
+After v11 Sam said the waves and the water still felt weak. He pointed at the
+`3d-ultra-realistic-water` skill. I read it, and it is one kind of water, a deep open sea from
+a ship at sunset (eight Gerstner waves, wakes, buoyancy), with no seabed, no shallows and no
+surf. Our sea already does more on its own ground (an FFT spectrum, the sub-pixel slope spread).
+Sam said to leave the skill and fix the break itself: it does not feel smooth and natural when
+a wave breaks. Then, from the sand stop of the standalone file: the clouds feel weird too.
+
+### How the break was judged
+
+In motion: `capture.mjs shoreBreak swash --clip=10`, then sheets of twelve frames 0.2 s apart
+through one break, before and after each change. The landing page too, held at the sand stop
+and at the water's edge (`scroll-clip.mjs --from=18.4 --to=18.6 --speed=0.02`), and the same
+from v11 (`--url=` a `git archive v11` copy) for the side by side. And numbers:
+`breaker.readColumns()` (new) reads each column's stage and wave height back from the column
+pass.
+
+### What was wrong, and what changed
+
+- **Weak.** The waves broke at 0.4 to 1.3 m (median 1.2). Each started to shrink at the break
+  point, while its lip was still in the air, so it lost height exactly as it broke. Now a wave
+  keeps its height until the lip lands (stage 0.8), and the swell is 1.5 m where it was 1.1:
+  1.3 to 1.9 m at the break, Kelingking's usual shore break. The beach is 1 in 10 there (1.6
+  to 2.4 m deep where they break), so the depth limit does not bind.
+- **It popped.** A second before breaking the wave already stood tall but in the flat water's
+  pale cyan, and half a second later the breaker mesh took over with chrome glints. The glints
+  were the sea's ripples laid at full slope on a lip, which is stretched smooth: at half slope
+  and a little rougher there, the lip shows a thin glint line along its crest.
+- **Cut out.** Holes in the tearing lip were blobs half a metre across. They are fingers a
+  decimetre or two wide, only over the last few centimetres of the lip. The white water's
+  crevices went to 30% of the light, so a third of it was grey in the noon sun. Now 62 to 78%,
+  lit by the sky and the light through the foam.
+- **A comb.** At the collapse the whole face turned white at once, drawn with the face's
+  streaks. Now the white water starts where the lip lands and boils up the face over a few
+  tenths of a second, its top edge a row of billows, never over the smooth back of the wave.
+- **White panes.** Covered by that white water, the collapsed heap lying on the sea's own bore
+  showed as flat white panes with straight edges. It sinks under the sea at the handover now.
+- **Cracks.** Within a second of the bore the white water turned into a net of polygon cells.
+  It stays heaped until it has thinned to a quarter (0.45 before), and in thicker foam the cell
+  walls are faint, so it thins into patches with holes and only then into lace.
+- **No impact.** Spray where the lip lands went up at 2 to 5.5 m/s and stayed a low fringe. Up
+  to 8 m/s now (about 3 m up, a few puffs higher), 16 particles per metre of beach where there
+  were 10, the finer part hanging in the air longer.
+- **Snow.** Close to the camera a spray puff is over a hundred pixels, and the grid of specks
+  drawn through it (for droplets) covered the wave behind in even white dots. Specks only in
+  puffs a few dozen pixels across now, and sparser. Up close a puff is mist.
+
+- **Lavender under the curl.** The white water in the lip and the tube was lit by its surface
+  normal, which points down under the curl, so by the sky alone. It is a volume of bubbles and
+  water with the sun on it from above, lit by the way up now, and bright.
+- **Spikes.** Even as fingers, the holes cut in the lip's tip read from the front as a row of
+  spikes. The tip is whole now and tears into foam instead.
+- **Cut-paper swash.** The swash's ragged edge and holes only started under 3 cm a pixel,
+  which the page never reaches. From 8 cm now, so the patches seen from the water's edge
+  stop are a little more ragged. The front band is still a solid strip.
+
+Tried and taken out: a band of froth where the lip comes within a few decimetres of the sea,
+to hide a jagged line at eye level. The line was not the two meshes crossing but the sea's own
+bore in the foreground, drawn by its grid at a grazing angle (v1's teeth). The band did nothing.
+
+### The clouds
+
+- **Pills and balls.** A small puff (100 to 300 m across) could be given 300 to 540 m of height:
+  taller than wide. Now no puff is under 400 m across, and a small cloud is at most half as
+  tall as it is wide, easing off from 0.3 to 0.5 km in radius, so the big heaps over the island
+  still tower. The first try capped every blob, turrets too, and flattened the heaps into loaves.
+  A second widened the small puffs by drawing their radius differently, which took more random
+  numbers and put every cloud in the sky somewhere else (the comparison was of two different
+  skies). The turret count now comes from the radius as drawn, so the sky is the same one.
+- **No flat bases.** Each cloud's base curled up by 100 m toward its edge, which rounded every
+  underside, and faded in over 60 m. Flat to the edge now, over 30 m.
+- **Cotton wool.** The rim's density ramp is about half as wide, so the lobes are crisper.
+- Tried and taken out: filling the core of each blob to close the few blue holes the edge noise
+  ate into it. It lifted the whole lower body over the edge threshold and smoothed it into a
+  bell.
+
+### Speed
+
+Side by side with v11 (`ab.mjs --hero --a=v11`, before the last two changes): overview -0%,
+viewpoint +3%, stairs -1%, trailTop +2%, trailLow +2%, beach +2%, swash +1%, sideFromSea +2%.
+shoreBreak came out -20%, but its frozen moment is now a different, bigger wave, so it is not
+a comparison. `hero.mjs v12` then put swash at +26%. The same frame and beach side by side
+after the swash change: +2% and +2%. The spray has 60% more particles where the lip lands,
+most of them culled when no wave is breaking.
+
+### Still weak
+
+- At eye level in the surf (`shoreBreak`, which the page never shows) the lip's tip is a
+  straight white edge for a moment, and the sea's own bore in the foreground has a jagged
+  silhouette (v1's teeth, from its grid at a grazing angle).
+- The swash's front band is a solid white strip with a hard inner edge, and in one place it
+  steps (the swash map's texels).
+- Cloud bases are flat now but only a little greyer than the tops. The shaded sides still read
+  a touch soft, like cotton, up close.
+- The small glitch smudge in Sam's screenshot was not found. With no puff under 400 m and the
+  pills gone it may be gone too, but that is not checked.

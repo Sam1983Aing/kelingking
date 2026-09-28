@@ -17,6 +17,7 @@ version. A session works on its element only, and goes deep on it.
 | v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, tag `v9` |
 | v10 | Polish pass over v1 to v9, from Sam's notes on the v9 page | [v10-polish.md](v10-polish.md) | done, tag `v10` |
 | v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | done, tag `v11` |
+| v12 | The breaking wave, and the clouds (Sam's notes after v11) | [v12-surf.md](v12-surf.md) | ready for Sam |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

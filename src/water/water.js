@@ -12,7 +12,7 @@ import { createSpray } from './spray.js';
 export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}, simOpts = {}) {
   const params = {
     period: 9,          // seconds between waves
-    swell: 1.1,         // wave height at sea (m)
+    swell: 1.5,         // wave height at sea (m). (v12: 1.1 broke at 0.4 to 1.3 m, where Kelingking's shore break is 1.5 to 3)
     breakAt: 20,        // where waves break on the beach (m offshore)
     runup: 0.85,        // how high an average wave's swash runs up the sand (m above still water)
     swashT: 2.6,        // seconds its uprush takes (the backwash takes 1.8 times as long)
