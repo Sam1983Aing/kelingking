@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 4eba830. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
+  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 77b499a. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kelingking</title>
@@ -82740,6 +82740,7 @@ function valueNoise2(rand, n) {
 
 function makeWeather(p) {
   const N = WEATHER_SIZE, km = p.period / N;
+  const layerKm = p.top - p.base;
   const R = new Float32Array(N * N), G = new Float32Array(N * N), B = new Float32Array(N * N);
   const rand = mulberry32(p.seed * 9973 + 1);
   // Clusters: a slow field (a lattice every 8 km) that says where the sky is busy.
@@ -82762,9 +82763,18 @@ function makeWeather(p) {
     }
   };
   // A cloud: a body and turrets around it; the big ones are heaps of turrets.
-  const cloud = (cx, cy, r, h) => {
-    blob(cx, cy, r, h);
+  const cloud = (cx, cy, r, h, rMin = 0) => {
+    // (v12) A small puff is at most half as tall as it is wide (r in km: 0.2 at most 200 m
+    // tall, 0.3 at most 300 m). Without it a puff 250 m across could stand 500 m tall, and the
+    // small ones floated as pills. From 0.5 km up the heaps tower as they did (congestus,
+    // over the island). (Its turrets scale with it.)
+    // (The turret count from the radius as drawn, so the random sequence, and with it every
+    // other cloud in the sky, stays where it was.)
     const n = 2 + Math.floor(rand() * 3) + Math.floor(r * 5);
+    r = Math.max(r, rMin);
+    const k = Math.min(Math.max((r - 0.3) / 0.2, 0), 1);
+    h = Math.min(h, r * (1.0 + 5.0 * k * k * (3 - 2 * k)) / layerKm);
+    blob(cx, cy, r, h);
     for (let t = 0; t < n; t++) {
       const a = rand() * Math.PI * 2, d = r * (0.3 + 0.55 * rand());
       blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * (0.3 + 0.35 * rand()), h * (0.45 + 0.5 * rand()));
@@ -82783,7 +82793,8 @@ function makeWeather(p) {
       // couple of kilometres across and high.
       const size = Math.pow(r3, 2.6) * (0.5 + 0.8 * b);
       const r = 0.1 + 1.1 * size * (0.7 + 0.6 * r4), h = Math.min(1, 0.12 + 0.55 * size + 0.35 * r4 * size + 0.1 * r4);
-      cloud(cx, cy, r, h);
+      // (v12: at least 200 m in radius, where it was 100: the smallest only showed as balls.)
+      cloud(cx, cy, r, h, 0.2);
     }
   }
   // The cumulus of the photo day: a tall heap about 3 km east of the viewpoint (where the
@@ -82942,7 +82953,7 @@ uniform vec2 uCloudBank;      // how much of the far sea the bank covers, the hi
 #define DETAIL_KM 0.19
 #endif
 #ifndef EDGE
-#define EDGE 0.12
+#define EDGE 0.065   // (v12: 0.12 left every cloud with a soft, fuzzy rim, like cotton wool)
 #endif
 #ifndef ERODE
 #define ERODE 0.72
@@ -82981,8 +82992,9 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
   // The base is flat under the middle of a cloud and curves up toward its edge, and it sits a
   // little higher or lower from one cloud to the next (by up to 120 m), so the bases do not
   // line up across the sky.
-  float lift = 0.12 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 19.0, 3.0).r - 0.5)
-             + 0.1 * (1.0 - w.r) * (1.0 - w.r);
+  // (v12: flat right to the edge. It curled up by 100 m toward the edge of each cloud, which
+  // rounded every underside like a ball.)
+  float lift = 0.12 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 19.0, 3.0).r - 0.5);
   float hn = (h - uCloudLayer.x - lift) / (uCloudLayer.y - uCloudLayer.x);
   if (hn <= 0.0) return 0.0;
   // Cumulus: a flat base (about 60 m of fade) and the weather map's domes over it, rounded
@@ -82994,7 +83006,8 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
   float dc = 0.0;
   if (hn < top && w.r > 0.01) {
     float rel = hn / top;
-    float prof = smoothstep(0.0, 0.025, hn) * (1.0 - smoothstep(0.35, 1.0, rel));
+    // (v12: the base fades in over 30 m, where it was 60: a cumulus has a flat, crisp base.)
+    float prof = smoothstep(0.0, 0.012, hn) * (1.0 - smoothstep(0.35, 1.0, rel));
     vec3 q = vec3(p.x - uCloudWind.x, h, p.z - uCloudWind.y) / SHAPE_KM;
     float shape = textureLod(uCloudShape, q, lodFor(SHAPE_KM / 64.0)).r;
     // Full density a short way inside the surface: a cumulus has an edge, not a fade.
@@ -83798,7 +83811,11 @@ Surf surfAt(vec2 p, vec4 d) {
   float offshoreFade = (1.0 - smoothstep(110.0, 200.0, s)) * beachy;
   float grow = 0.2 + 2.0 * smoothstep(br + 70.0, br, s);
   float broken = smoothstep(br + 1.0, br - 5.0, s);
-  float shrink = mix(1.0, 0.18 + 0.3 * clamp(s / max(br, 1.0), 0.0, 1.0), broken);
+  // (v12) The wave keeps its height while it throws its lip, and only settles into the bore
+  // once the lip has landed (about 1.5 m past the break point, breaker.js's stage 0.8). It
+  // shrank from the break point on, so each wave was losing height while its lip was still in
+  // the air, and broke at 0.4 to 1.3 m.
+  float shrink = mix(1.0, 0.18 + 0.3 * clamp(s / max(br, 1.0), 0.0, 1.0), smoothstep(br - 1.0, br - 7.0, s));
   float A = uSwell * grow * big * offshoreFade * shrink;
   float Ak = uSwell * grow * bigK * offshoreFade * shrink;
   // A wave cannot be much taller than the water is deep (it breaks at about 0.8 of the
@@ -84037,18 +84054,21 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   vec2 qa = vec2(dot(q, up), dot(q, vec2(-up.y, up.x)));
   qa.x /= 1.0 + str;
   float body = fbm3(q * 0.5 + 4.1) * 0.55 + fbm3(qa * 2.2 + 9.7) * 0.45;
-  float fine = fp < 0.03 ? vnoise(qa * 9.0 + 2.7) : 0.5;
-  float base = body + (fine - 0.5) * 0.18 * smoothstep(0.03, 0.012, fp);
-  float soft = clamp(fwidth(base) * 1.5, 0.015, 0.12);
+  // (v12) The ragged edge and the holes from 8 cm a pixel, where they started at 3: from the
+  // water's edge stop (a pixel of 3 to 6 cm on the swash) the foam was smooth blobs with hard
+  // edges, like cut paper.
+  float fine = fp < 0.08 ? vnoise(qa * 9.0 + 2.7) * 0.65 + vnoise(qa * 23.0 + 5.3) * 0.35 : 0.5;
+  float base = body + (fine - 0.5) * 0.26 * smoothstep(0.08, 0.02, fp);
+  float soft = clamp(fwidth(base) * 1.5, 0.03, 0.12);
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
-  float thin = cover * (1.0 - smoothstep(0.55, 0.9, amount));
-  if (thin > 0.01 && fp < 0.035) {
+  float thin = cover * (1.0 - smoothstep(0.6, 0.97, amount));
+  if (thin > 0.01 && fp < 0.08) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
     float w2 = fp < 0.018 ? 1.0 - smoothstep(0.0, 0.3, cells(qw * 9.5 + 3.1, uTime * 0.7)) : 0.5;
     float walls = max(w1, w2 * 0.8);
-    float k = smoothstep(0.035, 0.018, fp);
+    float k = smoothstep(0.08, 0.025, fp);
     cover *= mix(1.0, walls, thin * k * smoothstep(1.0 - amount + 0.25, 1.0 - amount, base) * 0.9);
   }
   return cover;
@@ -84491,7 +84511,10 @@ void main() {
   float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
   // The front of an uprush is a band of foam and bubbles.
   float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
-  float fresh = max(sf.fresh, smoothstep(0.45, 0.95, sim.r) * simW);
+  // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
+  // patches with holes long before it is lace; it went from a white heap to a net of polygon
+  // cells within a second of the bore passing.)
+  float fresh = max(sf.fresh, smoothstep(0.25, 0.95, sim.r) * simW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
@@ -84504,7 +84527,9 @@ void main() {
   if (amount > 0.002 || (caps > 0.002 && fp < 0.6)) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * wLoc.y, fp) : vec2(0.0);
-    pattern = lp.x; ridge = lp.y;
+    // (v12) Thicker foam is patches of bubbles with holes, the cell walls only faint in it:
+    // the walls are what thin foam is left with.
+    pattern = clamp(lp.x - lp.y * 0.4 * smoothstep(0.3, 0.75, amount), 0.0, 1.0); ridge = lp.y;
   }
   float soft = clamp(fwidth(pattern) * 1.5, 0.045, 0.15);
   float lace = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, pattern);
@@ -85711,6 +85736,9 @@ void main() {
   // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
   // flat pane over a sea that is still half tucked.
   y -= 0.4 * smoothstep(0.84, 0.96, tau) * (1.0 - smoothstep(0.35, 0.5, v));
+  // (v12) And the white heap too, at the very end: lying on the sea's own bore it showed as
+  // flat white panes with straight edges once the impact's white water covered it.
+  y -= 0.3 * smoothstep(0.95, 1.06, tau) * smoothstep(0.35, 0.5, v);
   // And in space: on its back, beyond where the sea tucks its crest away (a third of a
   // wavelength behind the crest, surfAt's window), the ribbon lies 10 cm under the sea too.
   y -= 0.1 * smoothstep(0.25, 0.34, -pr.x / L);
@@ -85779,11 +85807,9 @@ void main() {
   // sea draw it, so there is no seam where the ribbon ends.
   if (vInfo.x > 0.86) discard;
   // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
-  if (vInfo.y > 0.2 && vInfo.x > 0.38 && vInfo.x < 0.52) {
-    float rim = 1.0 - abs(vInfo.x - 0.455) / 0.07;
-    float holes = vnoise(vec2(vAlong * 2.3, vInfo.x * 40.0 + vInfo.y * 5.0)) * 0.65 + vnoise(vec2(vAlong * 7.9, vInfo.x * 110.0)) * 0.35;
-    if (holes < rim * 0.75 * smoothstep(0.2, 0.45, vInfo.y)) discard;
-  }
+  // (v12) The lip's tip is no longer cut into holes: seen from the front the cut edges read
+  // as a row of spikes (and in v11, at half a metre, as paper cut-outs). It tears into foam
+  // instead (edge, below).
 #ifdef BFLAT
   gl_FragColor = vec4(0.1, 0.4, 0.5, 1.0); return;
 #endif
@@ -85801,7 +85827,11 @@ void main() {
   vec4 d = dataAt(vMap);
   vec4 oc = oceanSurface(vMap, seaWeights(vMap, d));
   vec3 tA = normalize(cross(N, vec3(0.0, 0.0, 1.0)) + 1e-4), tB = cross(N, tA);
-  N = normalize(N + tA * oc.x + tB * oc.y);
+  // (v12) Water drawn up the face and thrown in the lip is stretched smooth: the ripples there
+  // at half their slope, their sub-pixel spread a little more (below). At full slope the sun
+  // caught them in chrome flakes all along the lip.
+  float stretched = smoothstep(0.2, 0.3, v) * smoothstep(0.02, 0.2, tau);
+  N = normalize(N + (tA * oc.x + tB * oc.y) * mix(1.0, 0.45, stretched));
   vec3 L = uSunDir;
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -85842,7 +85872,7 @@ void main() {
   // in front, not at the dark horizon the sea's model assumes for other waves.
   float downR = smoothstep(0.0, -0.25, reflect(-V, N).y);
   refl = mix(refl, under * 1.6 + uSkyIrr / PI * 0.15, downR);
-  float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, 0.05, 0.6);
+  float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, mix(0.05, 0.11, stretched), 0.6);
   float a2 = rough * rough;
   vec3 Hh = normalize(V + L);
   float NoH = max(dot(N, Hh), 0.0), NoL = max(dot(N, L), 0.0);
@@ -85868,13 +85898,26 @@ void main() {
   float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
-  float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
+  // (v12) It starts where the lip lands, at the foot of the tube, and boils up the face over
+  // the next few tenths of a second, its top edge a row of billows: it was the whole face
+  // turning white at once, drawn with the face's streaks, which read as a grey comb.
+  float rise = smoothstep(0.6, 0.92, tau);
+  float billow = fbm3(vec2(vAlong * 0.45, v * max(H, 0.5) * 1.3) + vec2(tau * 0.6, -tau * 2.2)) * 0.7
+               + vnoise(vec2(vAlong * 1.6, v * max(H, 0.5) * 4.0) + vec2(0.0, -tau * 4.0)) * 0.3;
+  float impactTop = mix(0.72, 0.27, rise) - (billow - 0.5) * 0.12;
+  float impact = smoothstep(0.6, 0.7, tau) * smoothstep(impactTop - 0.05, impactTop + 0.05, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
-  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount), smoothstep(0.92, 1.0, amount));
+  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount * (1.0 - impact)), smoothstep(0.92, 1.0, amount * (1.0 - impact)));
+  // (v12) The impact's white water: dense in the middle of each billow, thinning at its edges
+  // (it was cut out of the water with hard edges).
+  if (impact > 0.002) {
+    float soft = clamp(fwidth(billow) * 2.0, 0.04, 0.2);
+    foam = max(foam, smoothstep(0.35 - soft, 0.62 + soft, billow + impact * 0.55 - 0.1) * uFoam);
+  }
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
   // Only on the back and the floor: the lip and the face are the breaker's own.
@@ -85893,9 +85936,17 @@ void main() {
   // (v9) Light goes a long way through white water before it comes back out, so a side turned
   // from the sun is still lit (wrapped): it was grey-lavender, lit by the sky alone.
   vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max((dot(Nf, L) + 0.7) / 1.7, 0.15) * shadow + uSkyIrr);
+  // (v12) In the thrown lip and the curl the white water is a volume of bubbles and water with
+  // the sun on it from above: lit by the way up, not by the surface's own normal, which points
+  // down under the curl. By its normal it was lit by the sky alone, and came out lavender.
+  float volW = smoothstep(0.3, 0.4, v) * smoothstep(0.12, 0.3, tau);
+  vec3 volRad = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.8 + uSkyIrr);
+  foamRad = mix(foamRad, max(foamRad, volRad), volW);
   // In the crevices: no sun, only sky and light scattered through the foam (as the sea's).
   vec3 crevice = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
-  foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
+  // (v12: the crevices a third as deep, and lit by the sky and by light scattered through the
+  // foam. At full depth a third of the white water went grey in the noon sun.)
+  foamRad = mix(mix(col, crevice, 0.85), foamRad, mix(1.0, mix(0.78, 1.0, rel.x), relW));
   // Thin white water shows the water through it.
   col = mix(col, foamRad, foam * mix(0.7, 1.0, smoothstep(0.3, 0.9, amount)));
 
@@ -86007,6 +86058,15 @@ function createBreaker(renderer, waterUniforms) {
     mesh,
     material,
     get columns() { return nCols; },
+    // (v12, for the tools) Each column's crest x, y and stage, on, wavelength, height, as the
+    // column pass last worked them out.
+    readColumns() {
+      if (!target) return null;
+      const a = new Float32Array(nCols * 4), b = new Float32Array(nCols * 4);
+      renderer.readRenderTargetPixels(target, 0, 0, nCols, 1, a, undefined, 0);
+      renderer.readRenderTargetPixels(target, 0, 0, nCols, 1, b, undefined, 1);
+      return { crest: a, stage: b };
+    },
     // Order the chunks near to far from the camera.
     sortChunks(camera) {
       if (!chunks.length) return;
@@ -86169,7 +86229,7 @@ void main() {
     float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.72, 0.92, aSeed.x);
     float speed = bc.L / uPeriod;                  // the crest's speed (m/s)
     float age = (bc.tau - tauE) * 8.0 / speed;
-    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(0.8, 1.5, aSeed.y);
+    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(1.0, 2.2, aSeed.y);
     if (age < 0.0 || age > life) { kill(); return; }
     // Where the lip was then: the crest stood further out by what it has travelled since.
     vec2 pcE = bc.pc + bc.n * (bc.tau - tauE) * 8.0;
@@ -86195,9 +86255,14 @@ void main() {
       size = mix(0.15, 0.4, aSeed.w);
       alpha = 0.7; mist = 0.35;
     } else {                  // thrown up where the lip lands
-      vel = fwd * speed * mix(0.7, 1.2, aSeed.w) + vec3(0.0, mix(2.0, 5.5, aSeed.z) * clamp(bc.H / 1.5, 0.5, 1.4), 0.0) + side * (aSeed.x - 0.5) * 2.0;
-      size = mix(0.5, 1.3, aSeed.w);
-      alpha = 0.8; mist = 0.4;
+      // (v12) The lip landing on the trough throws spray higher than the wave itself: up to
+      // 8 m/s, which lifts it about 3 m, a few puffs half again. It went up at 2 to 5.5 m/s
+      // and stayed a low fringe, so the impact had no burst to it.
+      float kick = aSeed.z * aSeed.z;
+      vel = fwd * speed * mix(0.5, 1.2, aSeed.w) + vec3(0.0, mix(2.5, 8.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.4;
+      g = mix(G, 6.0, step(0.6, aSeed.y));     // the finer part of it hangs in the air
+      size = mix(0.6, 1.6, aSeed.w);
+      alpha = 0.85; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
     }
     vec2 wind = uWindDrift * mix(0.3, 1.0, mist);
     pos = p0 + vel * age + vec3(wind.x, 0.0, -wind.y) * age - vec3(0.0, 0.5 * g * age * age, 0.0);
@@ -86287,13 +86352,17 @@ void main() {
   vec2 pc = gl_PointCoord;
   float torn = vnoise(pc * 3.1 + seed) * 0.6 + vnoise(pc * 7.3 - seed * 0.37) * 0.4;
   float body = exp(-r * 2.6) * smoothstep(1.0, 0.55, r) * smoothstep(0.25, 0.75, torn + 0.35 - 0.3 * vColor.w);
+  // (v12) Only in puffs a few dozen pixels across, and sparse. Close to the camera a puff is a
+  // hundred pixels and more, and a grid of specks through it covered the face of the wave
+  // behind in even white dots, like snow: there a puff is mist.
   float drops = 0.0;
-  if (mist < 0.95 && vPx > 12.0) {
-    float n = clamp(vPx / 3.0, 6.0, 48.0);
+  float dropsOn = smoothstep(12.0, 18.0, vPx) * (1.0 - smoothstep(45.0, 80.0, vPx));
+  if (mist < 0.95 && dropsOn > 0.0) {
+    float n = clamp(vPx / 3.0, 6.0, 20.0);
     vec2 g = pc * n, cell = floor(g), f = fract(g);
     vec2 h = vec2(fract(sin(dot(cell + seed, vec2(12.9898, 78.233))) * 43758.5453), fract(sin(dot(cell + seed, vec2(39.3468, 11.135))) * 24634.6345));
-    float keep = step(h.y, (0.35 - 0.25 * vColor.w) * smoothstep(0.9, 0.2, r));
-    drops = keep * smoothstep(0.34, 0.12, length(f - 0.25 - 0.5 * h));
+    float keep = step(h.y, (0.2 - 0.14 * vColor.w) * smoothstep(0.9, 0.2, r));
+    drops = keep * smoothstep(0.34, 0.12, length(f - 0.25 - 0.5 * h)) * dropsOn;
   }
   float a = vColor.y * (body * mix(0.45, 0.3, mist) + drops * (1.0 - mist) * 0.85);
   if (a < 0.003) discard;
@@ -86333,7 +86402,7 @@ function createSpray(waterUniforms) {
     const rows = [];
     // Beach: per column of the breaker (every other one, 1 m apart), a few of each kind.
     if (beach) for (let c = 0; c < beach.length / 4; c += 2) {
-      for (const [kind, n] of [[0, 16], [1, 8], [2, 10]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
+      for (const [kind, n] of [[0, 16], [1, 8], [2, 16]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
     }
     // Rock: sites every 2.5 m of coast, a dozen particles each.
     if (rock) for (let k = 0; k < rock.length; k += 5) for (let i = 0; i < 14; i++) rows.push([rock[k], rock[k + 1], rock[k + 2], rock[k + 3], 3, rock[k + 4]]);
@@ -86385,7 +86454,7 @@ const { createSpray } = __m["src/water/spray.js"];
 function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {}, oceanOpts = {}, simOpts = {}) {
   const params = {
     period: 9,          // seconds between waves
-    swell: 1.1,         // wave height at sea (m)
+    swell: 1.5,         // wave height at sea (m). (v12: 1.1 broke at 0.4 to 1.3 m, where Kelingking's shore break is 1.5 to 3)
     breakAt: 20,        // where waves break on the beach (m offshore)
     runup: 0.85,        // how high an average wave's swash runs up the sand (m above still water)
     swashT: 2.6,        // seconds its uprush takes (the backwash takes 1.8 times as long)
