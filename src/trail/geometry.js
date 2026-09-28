@@ -520,7 +520,28 @@ function mesh(smooth = false) {
         if (l < 1e-9) { N[o] = 0; N[o + 1] = 1; N[o + 2] = 0; continue; }
         N[o] /= l; N[o + 1] /= l; N[o + 2] /= l;
       }
-      return { position: P, normal: N, trail: new Float32Array(trail), index: I };
+      const T = new Float32Array(trail);
+      if (!smooth) return { position: P, normal: N, trail: T, index: I };
+      // (v13) Weld: every quad was given four vertices of its own, so a tread of 11 by 20 quads
+      // sent four times as many vertices through the vertex shader (with its haze lookup) as it
+      // has corners. Corners with the same position, normal and attributes are one vertex.
+      const remap = new Uint32Array(P.length / 3), seen = new Map();
+      const outP = [], outN = [], outT = [];
+      const r5 = (v) => Math.round(v * 1e5);
+      for (let i = 0; i < remap.length; i++) {
+        const key = `${r5(P[i * 3])},${r5(P[i * 3 + 1])},${r5(P[i * 3 + 2])},${r5(T[i * 4])},${r5(T[i * 4 + 1])},${r5(T[i * 4 + 2])},${r5(T[i * 4 + 3])},${r5(N[i * 3])},${r5(N[i * 3 + 1])},${r5(N[i * 3 + 2])}`;
+        let j = seen.get(key);
+        if (j === undefined) {
+          j = outP.length / 3;
+          seen.set(key, j);
+          outP.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+          outN.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
+          outT.push(T[i * 4], T[i * 4 + 1], T[i * 4 + 2], T[i * 4 + 3]);
+        }
+        remap[i] = j;
+      }
+      for (let t = 0; t < I.length; t++) I[t] = remap[I[t]];
+      return { position: new Float32Array(outP), normal: new Float32Array(outN), trail: new Float32Array(outT), index: I };
     },
   };
 }

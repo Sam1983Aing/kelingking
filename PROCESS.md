@@ -2110,3 +2110,105 @@ most of them culled when no wave is breaking.
   a touch soft, like cotton, up close.
 - The small glitch smudge in Sam's screenshot was not found. With no puff under 400 m and the
   pills gone it may be gone too, but that is not checked.
+
+## v13: the dirt steps and the bamboo handrail (2026-09-28)
+
+From Sam, on a screenshot of the descent: the blue cord that joins the bamboo "does not look
+good, very below average", and the stairs look "too polygon". He then approved v12 and v13 together,
+and they were merged in that order (v13 was branched from v12).
+
+### How it was judged
+
+Close up, from where a person would look, at cameras on the route (`s` = metres along it, the
+descent is 178 to 304): `contactSheet` through `capture.mjs --eval`, and cameras aimed at
+single lashings (the instance matrices read back from the page, so they stand a half metre
+off one, the plants hidden). No number can say a knot looks like a knot.
+
+### The cord
+
+It was one smooth blue cylinder 7 cm tall, a collar, at each end of each rail. The photo
+(`trail-mid-descent-b.jpg`) has thin blue nylon cord: several turns round the post, a knot,
+loose ends. Now, per joint, two instanced pieces (three variants of each, a turn or two
+different):
+
+- **On the post:** two or three turns above the rail and two or three below, each a little
+  tilted and sized differently and not quite closed, the top one with a knot on the inside
+  and two loose ends hanging from it.
+- **On the rail:** a spiral of two or three turns on each side of the post.
+- The cord itself is 5.6 mm across, drawn as a tube with three radial segments, with a
+  twisted-strand pattern (a turn every 8 mm), sun-faded in some, dusty against the pole.
+- Sized to the post and to the rail at that joint (`lashingMatrices`, geometry.js). The post
+  tapers, so the turns are sized at their height on it.
+- Things that went wrong on the way: the first try was one shape with tilted rings, which
+  from the front read as a vertical stack of ribbons (the tilt is about the wrong axis for a
+  rail that is not on the post's own axis). The rail turns lay inside the rail (the rail is
+  wider than the post's radius I had assumed). The lower rail's cord ran through the upper
+  rail (both on one line). Rails that meet at a post now run past it side by side, on
+  alternate lanes.
+
+### The bamboo
+
+Straight even tubes with a faint ring. Now bowed a centimetre or two in a direction of its
+own, tapered (1.1 at the foot, 0.9 at the top for a post), cut on a slant, with raised dark
+node rings (a pale band above each), fibres along it and now and then a split. The bowing is in
+the vertex shader, and the depth-only pre-pass draws poles as if straight, so for a while
+the ground's own pass covered them where the real pole lay behind that depth: they came out
+black. The bamboo is thin, so it has no pre-pass now.
+
+### The steps
+
+Five or six large flat quads a tread, a razor edge, a flat riser, a straight ramp down each
+side, flat shaded: each read as a slab. Now, on the dirt (the concrete keeps its crisp edges):
+
+- 11 columns across and rows every second route sample (50 cm) in the middle, closer at both
+  ends (3, 7 and 14 cm from the edge).
+- **The front edge rolled over**, a quarter circle up to 5 cm, less where a log lies along it.
+- **Soil heaped at the foot of each riser**, up to 3.6 cm, sloping over 13 cm.
+- **The riser** in four rows, hollowed under the nosing by 1.6 cm and lumpy.
+- **The banks** ease into the ground in two steps that follow it (a straight ramp before).
+- **Smooth shading** across all vertices at the same place, so the nosing shades round and
+  the tread runs into its riser and bank with no crease (`mesh(true)`, geometry.js).
+- Logs now lie on the highest point of the tread's edge (the tread is dished and its edges
+  stand up: a log set to the middle was buried at both ends and came out a wedge).
+- The black strip at the foot of every riser (the nosing's shadow, drawn as none of the sun
+  at all) is a 70% shadow at most now.
+- The dirt went from 20,618 triangles to 104,048: a first try with 17 columns and finer
+  rows was 247,984, and cut to this it looks the same.
+
+The terrain bake had to be rebaked (the path is in it): 11.9 to 13.0 MB gzipped.
+
+### Speed
+
+Side by side with v12 (`ab.mjs --a=v12-surf`): the first pass came out beach +14%,
+trailLow +10%, shoreBreak +11%, stairs +7%. The beach frame does not stand near the path
+but sees all of it, and hiding the lashings alone (a temporary switch) brought it back
+10%: 756 lashing pieces of a few hundred tiny triangles each, all in view from the beach,
+where a 5 mm cord is a tenth of a pixel. Culling in the vertex shader did nothing (the shader runs
+for every vertex). The page now gives the GPU only the lashings within 43 m of the camera,
+refreshed when it has moved 3 m (`cullLashings`, trail.js, called from `renderFrame`): beach
++1% against no lashings and +6% against v12.
+
+`hero.mjs` then put shoreBreak at +25% (a frame that looks out to sea and cannot see the
+path: side by side it was -3%) and trailTop at +7% to +13% over five side by side runs,
+with spreads of -9% to +30% while Sam's own browsers held the GPU at 100%. The dirt mesh sent
+every quad's four corners down as vertices of their own (about 208,000 for 104,000
+triangles), each through the vertex shader with its haze lookup. Welding the corners that
+share a position, normal and attributes makes it 79,000 vertices for the same triangles
+and the same picture, and the bake 13.0 MB. On a quiet Mac after that, side by side
+against v12: trailTop +4% (twice), stairs +3%, trailLow +5%, beach +5%.
+
+The last full check, all nine hero frames side by side (`ab.mjs --hero --a=v12`, 20 rounds,
+the GPU 83% busy with other things): overview +3%, viewpoint +8%, stairs +4%, trailTop +11%,
+trailLow +3%, beach +4%, swash +1%, shoreBreak +0%, sideFromSea -0%. trailTop is the frame that
+stands on dirt steps with the most of them in view, and the noisy one: +1%, +7%, +12%, +13%,
++7%, +4%, +4%, +11% over eight runs, about +7% on average and about 0.4 ms. The `hero.mjs`
+table in the gallery, which times the two builds minutes apart, said trailTop +71%, viewpoint
++33% and trailLow +29% with the head from the sea (untouched) at -42%: not to be believed.
+
+### Still weak
+
+- The steps are smooth earth with one large-scale bump each: a real dirt path on a
+  cliff has roots, stones set in it and washouts. The loose stones are v10's.
+- The lower rail's lashing at a post where the lanes swap: the cord of the outer lane is
+  only the spiral on its own rail.
+- The bamboo's nodes are shaded, not modelled: seen edge on, a pole is a clean cylinder.
