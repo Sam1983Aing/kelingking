@@ -391,6 +391,7 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   function renderFrame() {
     // The plants near the camera are picked for where it is now (near.js).
     if (plants) plants.update(hf?.extent, camera, simTime);
+    trail.cullLashings(camera);
     atmosphere.update(camera);
     if (sky.visible && skyDome.material.uniforms.uHasClouds.value && skyInView()) clouds.render(simTime, camera);
     renderer.render(scene, camera);

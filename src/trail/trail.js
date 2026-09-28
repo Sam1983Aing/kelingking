@@ -533,7 +533,40 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     group.add(p);
   };
 
+  // (v13) The cord lashings, of which only those near the camera are given to the GPU. A lashing is
+  // a few hundred tiny triangles (a 5 mm cord in turns and a knot), and 756 of them stand along
+  // the descent: from the beach, with all of it in view, they cost 2 ms a frame, and past 40 m the
+  // cord is a tenth of a pixel. (Culling in the vertex shader saved nothing, it still ran for every
+  // vertex.) Each mesh keeps all its matrices and copies the near ones in when the camera has
+  // moved 3 m.
+  const lashing = [];
+  const LASH_FAR = 40, LASH_STEP = 3;
+  let lashAt = null;
+  function cullLashings(camera, force = false) {
+    if (!lashing.length) return;
+    const p = camera.position;
+    if (!force && lashAt && Math.hypot(p.x - lashAt.x, p.y - lashAt.y, p.z - lashAt.z) < LASH_STEP) return;
+    lashAt = p.clone();
+    const far2 = (LASH_FAR + LASH_STEP) * (LASH_FAR + LASH_STEP);
+    for (const L of lashing) {
+      const src = L.all, dst = L.mesh.instanceMatrix.array, rnd = L.mesh.geometry.getAttribute('aRand').array;
+      let n = 0;
+      for (let i = 0; i < L.count; i++) {
+        const o = i * 16, dx = src[o + 12] - p.x, dy = src[o + 13] - p.y, dz = src[o + 14] - p.z;
+        if (dx * dx + dy * dy + dz * dz > far2) continue;
+        dst.set(src.subarray(o, o + 16), n * 16);
+        rnd[n] = L.rand[i];
+        n++;
+      }
+      L.mesh.count = n;
+      L.mesh.instanceMatrix.needsUpdate = true;
+      L.mesh.geometry.getAttribute('aRand').needsUpdate = true;
+    }
+  }
+
   function update(data) {
+    lashing.length = 0;
+    lashAt = null;
     for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitCylRail && c.geometry !== unitStone && c.geometry.dispose(); }
     if (!data) return;
     for (const k of ['concrete', 'dirt']) {
@@ -560,6 +593,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       m.name = 'trail-' + k;
       group.add(m);
       if (prepass) withPrepass(m);
+      if (k.startsWith('lash')) lashing.push({ mesh: m, all: d.matrices.slice(), rand: d.rand.slice(), count: d.count });   // (copies: the mesh's own buffers are d.matrices and d.rand)
     };
     inst('logs', unitCyl, mats.log);
     // (No depth pass for the stones: they are small, and cover little of anything.)
@@ -578,5 +612,5 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     // Where the sections change, for the dirt's colour (metres along).
     uniforms.uSections.value.set(...data.sectionEnds);
   }
-  return { group, update, uniforms, materials: mats, ready };
+  return { group, update, cullLashings, uniforms, materials: mats, ready };
 }
