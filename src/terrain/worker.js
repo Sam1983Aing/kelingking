@@ -1,13 +1,16 @@
 // Runs the heightfield generator off the main thread and also derives the
 // object-space normal map, so the page stays responsive while tuning.
+//
+// (v11) The work is generateAll, a plain function: the worker runs it, tools/bake-terrain.mjs
+// runs it in node, and the standalone build (which cannot start a worker from file://) runs it
+// on the page when the bake cannot be downloaded.
 
 import { generateHeightfield, signedDistance, blur } from './heightfield.js';
 import { buildTerrainMesh, contourChains, resampleChain } from './mesh-builder.js';
 import { scatterPlants, canopyCover } from '../veg/scatter.js';
 import { buildTrailGeometry } from '../trail/geometry.js';
 
-self.onmessage = (e) => {
-  const { id, layout, N, M } = e.data;
+export function generateAll({ id, layout, N, M }) {
   const hf = generateHeightfield(layout, N);
   const mesh = buildTerrainMesh(hf, layout, M);
   const normals = normalMap(hf.heights, N, hf.cell);
@@ -17,11 +20,17 @@ self.onmessage = (e) => {
   const coast = coastData(hf, mesh, layout, N);
   const breakers = breakerLines(hf, N);
   const trail = trailData(hf, layout);
-  self.postMessage({ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms, breakers, rockSites: coast.sites,
+  return [{ id, N, cell: hf.cell, extent: hf.extent, ms: hf.ms, heights: hf.heights, normals, water, shoreDir, coast: coast.data, coastMs: coast.ms, breakers, rockSites: coast.sites,
     plants: { data: plants.data, count: plants.count, shrubs: plants.shrubs, ms: plants.ms }, trail: trail?.data,
     mesh: { positions: mesh.positions, normals: mesh.normals, index: mesh.index, rock: mesh.rock, horizon: mesh.horizon, M, moved: mesh.moved, gridTris: mesh.gridTris, ms: mesh.ms } },
-    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, ...(trail?.transfer ?? []), mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]);
-};
+    [hf.heights.buffer, normals.buffer, water.buffer, shoreDir.buffer, coast.data.buffer, breakers.buffer, coast.sites.buffer, plants.data.buffer, ...(trail?.transfer ?? []), mesh.positions.buffer, mesh.normals.buffer, mesh.index.buffer, mesh.rock.buffer, mesh.horizon.buffer]];
+}
+
+// In a worker: generate on request. (Anywhere else, as in the standalone page, leave the page's
+// own onmessage alone.)
+if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
+  self.onmessage = (e) => self.postMessage(...generateAll(e.data));
+}
 
 // Half-float RGBA texture for the water shader:
 //   R terrain height, G distance offshore from the waterline (m), B beach weight,

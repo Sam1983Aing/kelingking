@@ -14,6 +14,9 @@ class NoStaleHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Revalidate every time: unchanged files still come back as 304, so this costs little.
         self.send_header("Cache-Control", "no-cache")
+        # (So a page opened from file:// can read the assets from here: the standalone build's
+        # --local test, v11.)
+        self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
 

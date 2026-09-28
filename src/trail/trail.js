@@ -328,7 +328,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     uTrScans: { value: 0 },
   };
   // The scans (surfaces.js), a small texture array of their own.
-  const ready = loadSurfaceTextures('assets/textures/', TRAIL_SURFACES, 2048).then((t) => {
+  const ready = loadSurfaceTextures(globalThis.__klAssets?.textures ?? 'assets/textures/', TRAIL_SURFACES, 2048).then((t) => {
     uniforms.uTrColor.value = t.color; uniforms.uTrNormal.value = t.normal; uniforms.uTrMask.value = t.mask;
     uniforms.uTrScans.value = 1;
   }).catch((e) => console.error('trail textures failed', e));

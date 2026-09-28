@@ -52,10 +52,8 @@ if (check) {
 }
 
 const t0 = performance.now();
-let msg = null;
-globalThis.self = { postMessage: (m) => { msg = m; } };
-await import(join(root, 'src/terrain/worker.js'));
-self.onmessage({ data: { id: 1, layout, N: 1024, M: 1025 } });
+const { generateAll } = await import(join(root, 'src/terrain/worker.js'));
+const [msg] = generateAll({ id: 1, layout, N: 1024, M: 1025 });
 const genMs = performance.now() - t0;
 msg.bake = { sourceHash, layoutHash, sources: files, made: new Date().toISOString().slice(0, 10) };
 const { encodeBake, decodeBake } = await import(join(root, 'src/terrain/bake-format.js'));

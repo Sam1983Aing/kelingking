@@ -48,6 +48,11 @@ import { loadSurfaceTextures } from './terrain/surface-textures.js';
 import { createVegetation } from './veg/plants.js';
 import { SPECIES } from './veg/scatter.js';
 import { createTrail } from './trail/trail.js';
+import { decodeBake } from './terrain/bake-format.js';
+
+// Where the assets are (v11): next to the page, or, in the standalone build, on the CDN it sets
+// in globalThis.__klAssets ({ textures, bake }).
+export const ASSETS = globalThis.__klAssets ?? { textures: 'assets/textures/', bake: 'assets/terrain/terrain-1024.bin' };
 
 // capture: a still for the tools (pixel ratio 1, 2048 terrain, the drawing buffer kept for
 // screenshots). keepBuffer: keep the drawing buffer without the rest (recording the scroll).
@@ -210,7 +215,7 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
       checkLoaded();
     })
     .catch((e) => { console.error('plants failed', e); plantsReady = true; checkLoaded(); });
-  loadSurfaceTextures().then((t) => { terrain.setSurfaces(t); texturesReady = true; emit('textures'); checkLoaded(); })
+  loadSurfaceTextures(ASSETS.textures).then((t) => { terrain.setSurfaces(t); texturesReady = true; emit('textures'); checkLoaded(); })
     // (Without the scans the ground's own noise stands in; the page still has to go on, or the
     // loader waits for this step forever, v10.)
     .catch((e) => { console.error('surface textures failed', e); texturesReady = true; emit('textures'); checkLoaded(); });
@@ -251,6 +256,13 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   let worker = null;
   function startWorker() {
     if (worker) return;
+    // The standalone build cannot start a worker from file://: it sets globalThis.__klGenerate
+    // (the worker's generateAll) and the terrain is generated on the page, which freezes it for
+    // several seconds. Only when the bake cannot be downloaded (offline).
+    if (globalThis.__klGenerate) {
+      worker = { postMessage: (m) => setTimeout(() => receive(globalThis.__klGenerate(m)[0]), 50) };
+      return;
+    }
     worker = new Worker(new URL('./terrain/worker.js', import.meta.url), { type: 'module' });
     // Errors in the worker do not reach the page's console on their own.
     worker.onerror = (e) => console.error('terrain worker failed:', e.message, e.filename, e.lineno);
@@ -259,12 +271,11 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   const canBake = !capture && state.quality === 1024 && params.get('bake') !== '0'
     && !['faceStep', 'trail', 'lab'].some((k) => params.has(k));
   async function loadBake() {
-    const res = await fetch(new URL('../assets/terrain/terrain-1024.bin', import.meta.url));
+    const res = await fetch(ASSETS.bake);
     if (!res.ok) throw new Error(`${res.status}`);
     let buf = new Uint8Array(await res.arrayBuffer());
     // (Gzipped by the bake tool; a server that sent it with Content-Encoding has undone that.)
     if (buf[0] === 0x1f && buf[1] === 0x8b) buf = new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
-    const { decodeBake } = await import('./terrain/bake-format.js');
     const data = decodeBake(buf);
     // Out of date? The layout always; the generator's sources when they can be read (the page
     // served from a working copy). Either way the worker makes it instead.
@@ -272,7 +283,7 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     if (crypto?.subtle) {
       if (data.bake.layoutHash !== await hex(JSON.stringify(layout))) throw new Error('the layout has changed since the bake');
       if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
-        const texts = await Promise.all(data.bake.sources.map((f) => fetch(new URL('../' + f, import.meta.url)).then((r) => r.text())));
+        const texts = await Promise.all(data.bake.sources.map((f) => fetch(f).then((r) => r.text())));
         if (data.bake.sourceHash !== await hex(data.bake.sources.map((f, i) => f + '\n' + texts[i]).join('\n'))) throw new Error('the terrain code has changed since the bake (node tools/bake-terrain.mjs)');
       }
     }

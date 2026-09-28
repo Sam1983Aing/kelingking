@@ -1,0 +1,2 @@
+GSAP 3.15.0 (gsap.min.js, SplitText.min.js), GreenSock / Webflow.
+Licence, from the package's package.json: Standard 'no charge' license: https://gsap.com/standard-license.
