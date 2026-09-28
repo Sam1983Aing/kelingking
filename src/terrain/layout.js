@@ -31,10 +31,12 @@ export function defaultLayout() {
       { at: [109, 70], h: 94, w: 46, p: 1.4 },
       { at: [70, 38], h: 92, w: 50, p: 1.5 },
       { at: [25, 11], h: 105, w: 62, p: 1.7 },
-      { at: [0, 0], h: 111, w: 70, p: 1.9 },
-      { at: [-40, -22], h: 107, w: 74, p: 2.0 },
-      { at: [-100, -28], h: 94, w: 76, p: 2.1 },
-      { at: [-150, -30], h: 78, w: 76, p: 2.0 },
+      // The crown peaks just behind the head, then holds a high, sharper ridge to its blunt
+      // ocean-facing brow. The old rounded dome fell away too early toward the tip.
+      { at: [0, 0], h: 112, w: 68, p: 1.45 },
+      { at: [-40, -22], h: 105, w: 69, p: 1.45 },
+      { at: [-100, -28], h: 96, w: 70, p: 1.55 },
+      { at: [-150, -30], h: 82, w: 70, p: 1.6 },
     ],
 
     // Where the finger leaves the plateau (top of the unpaved ridge steps).
@@ -43,7 +45,7 @@ export function defaultLayout() {
     // Side ridges off the main spine, merged with it by taking the higher surface.
     spurs: [
       // The jaw: the lip of the head that curls over the south end of the beach.
-      { path: [[0, 0], [12, 48], [16, 96]], h: [111, 92, 76], w: 48, p: 2.2 },
+      { path: [[0, 0], [17, 48], [28, 93]], h: [110, 84, 58], w: 38, p: 1.45 },
     ],
 
     // Local lowering of the plateau. The corner where the paved steps run down to the
@@ -93,7 +95,9 @@ export function defaultLayout() {
       // The wall at the south end of the beach drops sheer from its rim; the mesh builder
       // then cuts it back underneath into the overhang (overhangs, below).
       { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
-      { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
+      // The jaw slopes from its narrow green ridge into the projecting beak. A near-vertical
+      // five-metre drop made it read as part of the head's flat limestone face.
+      { name: 'jaw', at: [30, 80], r: 35, face: 30, pf: 1.15 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
       { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },

@@ -2212,3 +2212,41 @@ table in the gallery, which times the two builds minutes apart, said trailTop +7
 - The lower rail's lashing at a post where the lanes swap: the cord of the outer lane is
   only the spiral on its own rail.
 - The bamboo's nodes are shaded, not modelled: seen edge on, a pole is a clean cylinder.
+
+## v14: the T-Rex head silhouette (2026-09-28)
+
+Sam's landing-page screenshot showed the head as a rounded block from the clifftop. His
+reference screenshots show a pointed crown, a brow that holds its height before the vertical
+sea face, and a lower, separate beak over the beach arch. This pass changed shape only.
+
+### What changed
+
+- The distal spine in `layout.js` has a sharper cross-section. Its crown peaks just behind
+  the sea face and the outer ridge falls away less abruptly. A first pass held the outer brow
+  too high; the viewpoint outline caught it, so its last two heights came back down.
+- The jaw spur is narrower and tapers toward the beach. The old five-metre face width made
+  its green ridge drop almost vertically into the same pale wall as the head. A 30 m local
+  face profile lets that ridge descend into a distinct triangular beak while leaving the
+  main head's sea face sheer.
+- The revised layout is included in the 1024 terrain bake.
+
+### How it was judged
+
+`viewpoint` was rendered beside and outlined over `viewpoint-midday-a.jpg`. The top-down
+`overview` outline checks the land and beach footprint, while `stairs` and `sideFromSea`
+check that the edit still reads from the other cameras. The reference photographs stayed
+local and are not part of the gallery or the commit.
+
+### Speed
+
+`hero.mjs v14` gave beach +30% and shoreBreak +16% against v13 using the best of three
+separate timed rounds, but the machine's background GPU load swung those rounds in both
+directions. In the paired `ab.mjs` run (eight alternating rounds with both pages open),
+beach was -3%, shoreBreak +1%, viewpoint +8%, and sideFromSea +6%. The shape pass stays
+within the project's 10% frame budget on that more reliable comparison.
+
+### Still weak
+
+The photographed head has much denser fine vegetation on its sloping jaw than this render.
+The material and vegetation were intentionally outside this shape pass. The background
+sea-facing wall also remains paler and flatter than the reference at the stairs camera.

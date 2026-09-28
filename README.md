@@ -41,6 +41,7 @@ moving on. The plan, the rules and a brief per version are in
 | v11 | Speed and the shareable build | done |
 | v12 | The breaking wave, and the clouds | done |
 | v13 | The dirt steps and the bamboo handrail | done |
+| v14 | The T-Rex head silhouette | in progress |
 
 ## Run it
 

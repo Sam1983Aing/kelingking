@@ -19,6 +19,7 @@ version. A session works on its element only, and goes deep on it.
 | v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | done, tag `v11` |
 | v12 | The breaking wave, and the clouds (Sam's notes after v11) | [v12-surf.md](v12-surf.md) | done, tag `v12` |
 | v13 | The dirt steps and the bamboo handrail (Sam's notes after v12) | [v13-stairs.md](v13-stairs.md) | done, tag `v13` |
+| v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | in progress |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -35,8 +36,8 @@ Open a new chat in this folder and paste (with the version you want):
 
 > Read docs/versions/README.md and docs/versions/v11-speed.md, then start v11.
 
-v11 was the last version planned. A v12 needs a brief first: copy the shape of the others
-(the goal, what to judge it against, and a "Found by other versions" section).
+For any new version, write a brief first: copy the shape of the others (the goal, what to
+judge it against, and a "Found by other versions" section).
 
 ## Rules for every version
 
