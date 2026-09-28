@@ -1,8 +1,19 @@
 # Kelingking, in three.js
 
 A real place rebuilt in the browser: Kelingking Beach on Nusa Penida, the T-Rex headland.
-The plan is a scroll piece that starts with the whole bay from the air, walks down the
-trail on the ridge, and ends standing on the sand with the waves coming in.
+It is a scroll piece that starts with the whole bay from the air, walks down the trail on
+the ridge, and ends standing on the sand with the waves coming in. The water, sand and rock
+are physically based and matched against photos of the place, and the plants are grown in
+code as the page loads. Nothing is sculpted in a 3D tool: the shape comes from OpenStreetMap
+and a few numbers tuned against photos.
+
+**To see it**, download `kelingking.html` and open it (a double-click is enough, it needs no
+server). It fetches about 35 MB of textures and terrain from a CDN the first time. Or run the
+source, below.
+
+![The clifftop viewpoint, v11](docs/gallery/v11/viewpoint.jpg)
+
+Every version's frames are in [docs/gallery](docs/gallery/README.md). How it started:
 
 ![How v1 was built, stage by stage](docs/gallery/history/progression.jpg)
 
@@ -27,7 +38,7 @@ moving on. The plan, the rules and a brief per version are in
 | v8 | The scroll descent | done |
 | v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | done |
 | v10 | Polish pass over v1 to v9 | done |
-| v11 | Speed and the shareable build | next |
+| v11 | Speed and the shareable build | done |
 
 ## Run it
 
@@ -36,8 +47,10 @@ python3 tools/serve.py
 ```
 
 Then open http://localhost:5178: the landing page, the scroll from high over the bay down
-to the water's edge (v8). It needs a local server (module workers do not run from `file://`).
-A standalone single-file build comes later (v10).
+to the water's edge (v8). The source needs a local server (a browser will not load ES modules
+or start a module worker from `file://`). `kelingking.html` is the same page built to run
+without one. Nothing to install: the source page loads three.js, GSAP and Lenis from jsDelivr
+and the fonts from Google Fonts, and the standalone file carries its own copies (`vendor/`).
 
 The tools that match the scene to photos are the same page with a shot in the URL:
 http://localhost:5178/?shot=viewpoint. There, keys `1` to `9` switch shots, `O` photo overlay,
@@ -74,6 +87,13 @@ the tools (`src/debug.js`), which `src/main.js` picks from the URL.
   growing the plants, the path), then draws a frame at fifteen points down the path behind
   it, so no shader compiles and no texture uploads the first time the camera gets somewhere,
   and times a few of them to pick the pixel ratio (aiming for 13 ms a frame).
+- **The terrain is baked** (v11). Generating it (heightfield, mesh, plants' places, the water's
+  maps) takes 3 to 8 s in a worker, so the page downloads it instead: 12 MB packed and gzipped
+  (`assets/terrain/terrain-1024.bin`, `src/terrain/bake-format.js`), decoded in about 0.3 s.
+  The file carries a hash of the layout and of the generator's source files. When the page is
+  served from localhost and either has changed, it says so in the console and generates the
+  terrain as before. After changing anything the terrain worker imports, run
+  `node tools/bake-terrain.mjs` (`--check` only says whether it is stale).
 - **Phones.** The lens widens on a tall screen, the flight starts higher so the frame stays on
   the modelled ground, the words sit at the bottom and a line across the top replaces the rule.
 
@@ -87,6 +107,60 @@ node tools/path-bench.mjs --pace       # real frame pacing while the page scroll
 
 Landing page switches: `debug`, `at=2.5` (start at that `tau`), `notext`, `record` (for
 `scroll-clip.mjs`), and every scene switch (`pr=`, `q=`, `hour=`, ...).
+
+## The standalone file
+
+`kelingking.html` is the whole page in one file you can double-click. Browsers refuse ES
+modules and module workers from `file://`, so `tools/build-standalone.mjs` rewrites every
+module (the page's and three.js's) as a function that returns its exports and joins them into
+one classic script. GSAP, SplitText and Lenis go in as their browser builds, the stylesheet
+and the three font files as data inside the file (3.1 MB in all). The tools (`debug.js`) are
+left out. The build refuses code it cannot rewrite (`export default`, `export *`, `import()`,
+top-level `await`) and compiles every script in the page as a classic script before it
+writes the file.
+
+The textures and the baked terrain are not inside it. They are on the CDN, from the assets
+repo `Sam1983Aing/aura-assets`, folder `kelingking/`, pinned to a tag so a copy of the file
+already out there never changes:
+
+```
+https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/terrain/terrain-1024.bin
+https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/textures/<surface>_<color|normal|mask>.jpg
+```
+
+(33 JPEGs: the eleven surfaces in `src/terrain/surfaces.js` and `src/trail/surfaces.js`, each
+with a colour, normal and mask map, plus `textures/CREDITS.md`. The tag `kelingking-v1` points
+at the same commit.)
+
+Without a network it still runs. The textures come out flat, each in its surface's own average
+colour, and the terrain is generated on the page itself, which freezes it for 5 to 8 s before
+the loader lifts.
+
+```bash
+node tools/build-standalone.mjs                 # kelingking.html, assets from the CDN
+node tools/build-standalone.mjs --local         # kelingking-local.html, assets from localhost:5178
+node tools/test-standalone.mjs                  # open kelingking.html from file:// and photograph 4 stops
+node tools/test-standalone.mjs --offline        # the same with the network cut
+```
+
+**New assets** (a rebaked terrain, a changed texture):
+
+1. Copy `assets/textures/*.jpg`, `assets/textures/CREDITS.md` and
+   `assets/terrain/terrain-1024.bin` into `kelingking/textures/` and `kelingking/terrain/` of a
+   clone of `aura-assets`. Never the reference photos. Commit and push `main`.
+2. Tag it twice and push both tags: the next number in the shared series (after `1.10.0`
+   comes `1.11.0`, unless another project took it) and `kelingking-v2`, `-v3` ...
+3. Set `TAG` at the top of `tools/build-standalone.mjs` to the new number and rebuild.
+4. Rebuild. The build fetches every asset from the CDN at `TAG` and stops unless each is the
+   same bytes as the local copy, and stops if the bake is older than the code (jsDelivr can
+   take a minute to see a new tag). Then run `node tools/test-standalone.mjs`.
+
+A change to the code alone (a shader, the page, the camera) needs only step 4: the assets on
+the CDN stay as they are. Anything that changes the terrain, the path, the plants' places or
+the layout changes the bake, and a new texture changes `assets/textures/`: those need all four
+steps.
+
+The page on localhost goes on reading its own `assets/`. Only the standalone file uses the CDN.
 
 ## How the terrain is made
 
@@ -313,10 +387,11 @@ caught.
 
 ## Known limits
 
-- **Speed.** With nothing else on the GPU, every hero frame renders in well under 30 ms at
-  1400 px on an M1 Max. Earlier figures in `PROCESS.md` (10 to 30 fps) were measured while
-  the browser pane was rendering the page at the same time, and were 5 to 8 times too slow.
-  See `docs/gallery/v1` for the baseline.
+- **Speed.** On an M1 Max the page holds 60 fps scrolling top to bottom at 1920 x 1080, and
+  at a 14-inch MacBook Pro's screen at pixel ratio 1.5 (v11). It loads in about 7 s. Nothing
+  slower has been tried, and phones have not run it: the scene is the desktop's (3.4 M terrain
+  triangles, 205,000 plants). Timings on one Mac swing 2x to 8x with whatever else is using the
+  GPU, so compare builds side by side (`tools/ab.mjs`, `tools/path-bench.mjs`).
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
 - **Materials after v2.** Every material was retuned under v2's physical light: the rock in
   v3, the water in v4, the sand in v5, the plants in v7 (to measured leaf reflectance).
@@ -335,5 +410,12 @@ caught.
   `node tools/prepare-assets.mjs` makes the 24 MB of textures in `assets/textures/`. See
   `assets/textures/CREDITS.md`. The plants are not scans: they are grown in code at load
   (`src/veg/grow/`, v7). v1 to v6 used three Poly Haven tree scans.
-- three.js, lil-gui, GSAP and Lenis load from jsDelivr, the fonts (Instrument Serif, Inter)
-  from Google Fonts.
+- three.js 0.186 (MIT), GSAP 3.15 with SplitText (GreenSock's no-charge standard licence) and
+  Lenis 1.3.26 (MIT) are in `vendor/`, with the fonts Instrument Serif and Inter (SIL Open
+  Font License), each next to its licence. The tools' panel (lil-gui) loads from jsDelivr.
+
+## Licence
+
+The code is MIT (`LICENSE`). The map data and everything derived from it (`data/osm.json`,
+`src/terrain/geo.js`, `assets/terrain/terrain-1024.bin`) stay under the ODbL, and `vendor/`
+and `assets/textures/` under their own licences, as above.

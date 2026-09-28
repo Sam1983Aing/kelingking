@@ -1890,3 +1890,125 @@ switches defines in one page, disagreed with itself from run to run with the Mac
   smooth pale sand with tone, as it is in the photos from up there, but the hand-over could show
   in motion.
 - The budget is spent again: trailLow, beach and swash at +8% against v9.
+
+## v11: speed and the shareable build (2026-09-27)
+
+Sam merged v10 after the Safari fix and started v11 in the same session. His answers to the
+brief's questions: MIT for the code, the repo stays private (he makes it public himself), and
+yes to the downloads (three.js 0.186, GSAP 3.15 with SplitText, Lenis 1.3.26, Instrument Serif
+and Inter).
+
+### Loading
+
+The landing page took 12.4 s from opening to the loader lifting (median of three warm loads in
+headless Chrome, `tools/load-time.mjs`, new). The page's own marks (`kl:*`, one per loader step)
+showed where: 3.2 s before anything started, most of it growing the plants on the main thread,
+then 7.7 s of terrain in the worker, then the warm-up.
+
+- **The terrain is baked.** `tools/bake-terrain.mjs` runs the terrain worker in node and packs
+  what it sends the page (`src/terrain/bake-format.js`): mesh positions to 16 bits in
+  delta-coded planes (24 mm across, 4 mm up), normals in two bytes (octahedral), the index delta
+  coded (14 MB down to 70 kB), the plants to 16 bits with species and variant exact. 92 MB
+  raw, 11.9 MB gzipped. The page downloads and unpacks it alongside the textures.
+- **A stale bake cannot slip through unnoticed.** The file carries a hash of the layout and one
+  of the nine source files the worker imports. The page always checks the layout, and on
+  localhost the sources too. A stale bake is a console warning and the worker generates the
+  terrain as before. Checked with a one-line change to `strata.js`: the page went back to
+  11.5 s and said why.
+- **The plants grow after the downloads have started**, one variant at a time with a pause
+  between, so the loader's counter moves instead of freezing.
+- Result: 6.7 s (median, with the loader's steps all done at 3.9 s). The rest is the warm-up,
+  1.5 to 6 s depending on what else uses the GPU: drawing the first frames makes Chrome's
+  Metal backend build its pipelines, not JavaScript. `compileAsync` before the warm-up made no
+  difference and was taken out.
+
+### The standalone file
+
+`kelingking.html`, 3.1 MB, runs from a double-click (`tools/build-standalone.mjs`, after Sam's
+notes on standalone builds in the folder above). A browser will not load ES modules or start a
+module worker from `file://`, so:
+
+- Every module, the page's 49 and three.js's two, becomes a function returning its exports,
+  registered by path, and each import a lookup in that registry: one classic script. GSAP,
+  SplitText and Lenis go in as their browser builds, `debug.js` (the tools) as an empty stub.
+  The code already had the simple module surface this needs (no default exports, `export *`,
+  `import()` or top-level await), and the build stops if that changes.
+- The worker's generator is a plain export now (`generateAll`), so a page with no worker can
+  run it itself: the standalone file does when the bake cannot be downloaded.
+- The stylesheet and the three font files are inside the file. The textures and the bake are
+  on jsDelivr from `aura-assets`, folder `kelingking/`, tags `1.10.0` and `kelingking-v1`
+  (35 files, each checked for status 200 and its exact byte count, and for CORS open to
+  `file://` pages). The earlier tags of that repo (1.4.0 to 1.9.0) answer jsDelivr's listing
+  with "package size exceeded the configured limit of 50 MB", yet single files at 1.9.0 and all
+  of 1.10.0 are served. The README has the swap procedure.
+- **Offline** the page still runs: the terrain is generated on the page (it freezes for about 8
+  s behind the loader) and the scans are flat. At first flat meant grey 128 in every layer,
+  which the shader's gain (target over the scan's average) turned into white sand and white
+  steps. Each flat layer is now its scan's own average colour, so the island keeps its colours.
+- `node --check` would not have caught a stray `import` in the bundle: node 23 takes a `.js`
+  file with module syntax for a module and passes it. The build compiles every inline script
+  with `vm.Script` instead, which fails on `import`, `export` and top-level `await` (tried).
+- **Polishing after v11.** Sam asked what happens to the file when there is more polishing
+  later. The page from `file://` only checks the bake against the layout, not against the
+  code, so a later change to the plants' scatter would have shipped the old plants without a
+  word. The build now refuses: it runs the bake check, then fetches every asset from the CDN at
+  `TAG` and compares its bytes with `assets/` (tried against tag 1.9.0, which has none: it
+  stopped before writing anything). A change to code alone needs only a rebuild.
+- `tools/test-standalone.mjs` opens the file from `file://` in headless Chrome, with the
+  network cut if asked, and photographs four stops: from the CDN it loads in 10.7 s with the
+  terrain from the bake, and with no errors in the console.
+
+### Going public
+
+- `LICENSE`: MIT for the code, with what it does not cover (the OpenStreetMap data and what is
+  derived from it, under the ODbL, then `vendor/` and the CC0 textures).
+- The README opens for a stranger now: what the piece is, how to see it, how to run it.
+- The history: one author and email, no reference photo ever committed, no keys or tokens,
+  every gallery image a render. One private detail: the first copy of the v9 brief (commit
+  `03e2253`) named the full path `/Users/sam/Projects/Claude Code/CLAUDE.md`, and `b5b9d32` made
+  it relative. Removing it from the history means rewriting every commit since, so that is
+  left for Sam to decide before the repo goes public.
+
+### Speed
+
+- **The first timings were four to five times too slow, and it was the tools' own fault.**
+  Along the path at 1080p the page came out at 35 to 53 ms a frame, and v10 side by side just
+  as slow, where v8 had measured 5 to 13 ms. The GPU read 100% busy with nothing of this
+  session running: four headless Chromes from earlier tool runs (an hour old) were still open,
+  each drawing the scene. `tools/cdp.mjs` only closed Chrome when a tool reached its own
+  `close()`, so a tool that threw or was interrupted left it running. It now kills every Chrome
+  it started when node exits, however it exits (tried with a throw and with SIGTERM). The same
+  leak had left 45 profile folders, 3.6 GB, in the temp directory.
+- With those closed (Sam's own browsers were still drawing), the page scrolling itself top to
+  bottom (`path-bench.mjs --pace`): at 1920 x 1080, pixel ratio 1 all the way, median 16.7 ms,
+  none of 2,486 frames over 25 ms. At a 14-inch MacBook Pro's 1512 x 945 at 2x, the governor
+  held pixel ratio 1.5 (2268 x 1417), one frame of 2,485 at 25.1 ms. The brief's 60 fps at
+  1080p on the M1 Max holds along the whole path. A mid-range laptop was not tried.
+- Side by side with v10 at the 21 cameras (`path-bench.mjs`, 6 rounds, while the leaked
+  Chromes were still running): median +3% still and +1% moving. Nothing that draws changed in
+  v11, so this is the noise (the bake's 16-bit positions and 8-bit normals draw the same mesh).
+- The hero frames: `hero.mjs v11` put three over budget (overview +29%, viewpoint +16%,
+  trailTop +84%) and swash at -45%, for two builds that draw the same thing (the hero shots
+  do not even use the bake). Side by side in one browser (`ab.mjs --hero --a=v10`): overview
+  +1%, viewpoint +1%, stairs -3%, trailTop -1%, trailLow -10%, beach +2%, swash -3%, shoreBreak
+  +3%, sideFromSea -1%. The outline check on `viewpoint` and `overview` still sits on the
+  photos.
+
+### Tools
+
+- `tools/load-time.mjs`: fresh loads of the landing page, the time of each loader step from the
+  page's own marks, median of the runs.
+- `tools/bake-terrain.mjs` (`--check`), `tools/build-standalone.mjs` (`--local`),
+  `tools/test-standalone.mjs` (`--offline`).
+- `tools/cdp.mjs` cleans up after itself on any exit.
+
+### Still weak
+
+- The warm-up is now most of the load: 1.5 to 6 s of the first frames being drawn behind the
+  loader, while Chrome builds its GPU pipelines. Fewer shader variants would shorten it.
+- Offline, the standalone file freezes for about 8 s while it generates the terrain, and the
+  loader's counter stops during it.
+- The bake is 12 MB of the 37 MB the page downloads. Heights and the plants could go to fewer
+  bits, but the mesh already lands within 24 mm.
+- Phones and slower laptops are untried. A phone would need a lighter scene chosen before
+  loading (q=512, fewer plants).

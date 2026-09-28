@@ -20,9 +20,11 @@
 // The assets repo: see README.md, "The standalone file".
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCAL = process.argv.includes('--local');
@@ -36,6 +38,33 @@ const ASSETS = { textures: `${BASE}textures/`, bake: `${BASE}terrain/terrain-102
 const OUT = join(root, LOCAL ? 'kelingking-local.html' : 'kelingking.html');
 
 const read = (p) => readFileSync(join(root, p), 'utf8');
+
+// ---------------------------------------------------------------- are the assets current?
+
+// The page from file:// cannot check the bake against the code (it only checks the layout), and
+// a copy of the file already out there reads whatever TAG pointed at. So before building against
+// the CDN: the bake must match the code, and every asset on the CDN at TAG must be the same bytes
+// as the local copy. If not, push the local assets under a new tag (README.md, "The standalone
+// file") and bump TAG. (--no-cdn-check skips the second part, to build with no network.)
+if (!LOCAL) {
+  try { execSync('node tools/bake-terrain.mjs --check', { cwd: root, stdio: 'pipe' }); } catch (e) {
+    throw new Error(`the terrain bake is out of date (${String(e.stdout).trim()}). Run node tools/bake-terrain.mjs, push the assets under a new tag and set TAG.`);
+  }
+  if (!process.argv.includes('--no-cdn-check')) {
+    const files = [
+      ...readdirSync(join(root, 'assets/textures')).filter((f) => /\.(jpg|md)$/.test(f)).map((f) => `textures/${f}`),
+      'terrain/terrain-1024.bin',
+    ];
+    const sha = (buf) => createHash('sha256').update(buf).digest('hex');
+    const stale = (await Promise.all(files.map(async (f) => {
+      const res = await fetch(CDN + f);
+      if (!res.ok) return `${f} (${res.status})`;
+      return sha(Buffer.from(await res.arrayBuffer())) === sha(readFileSync(join(root, 'assets', f))) ? null : `${f} (changed)`;
+    }))).filter(Boolean);
+    if (stale.length) throw new Error(`the CDN at ${TAG} does not have the local assets: ${stale.join(', ')}. Push them under a new tag and set TAG.`);
+    console.log(`${files.length} assets on the CDN at ${TAG} match the local copies`);
+  }
+}
 
 // ---------------------------------------------------------------- the module graph
 
@@ -153,4 +182,11 @@ swap('<script type="module" src="src/main.js"></script>',
   `<script>\n${libs.join('\n')}\n</script>\n<script>\nwindow.__klAssets = ${JSON.stringify(ASSETS)};\n${code}\n</script>`);
 swap('<head>', `<head>\n  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit ${commit}. Assets: ${BASE} -->`);
 writeFileSync(OUT, html);
-console.log(`${relative(root, OUT)}: ${(statSync(OUT).size / 1e6).toFixed(2)} MB, ${order.length} modules, assets from ${BASE}`);
+
+// Each inline script must parse as a classic script, as a browser reads it from file://. (Not
+// `node --check` on a .js file: node 22 and later take one with an import in it for a module and
+// pass it.) vm.Script compiles as a classic script and does not run it.
+[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].forEach((m, i) => {
+  try { new vm.Script(m[1], { filename: `inline script ${i}` }); } catch (e) { throw new Error(`inline script ${i} is not a classic script: ${e.message}`); }
+});
+console.log(`${relative(root, OUT)}: ${(statSync(OUT).size / 1e6).toFixed(2)} MB, ${order.length} modules, scripts parse, assets from ${BASE}`);

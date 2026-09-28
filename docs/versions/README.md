@@ -16,7 +16,7 @@ version. A session works on its element only, and goes deep on it.
 | v8 | The scroll descent | [v8-scroll.md](v8-scroll.md) | done, tag `v8` |
 | v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | [v9-final.md](v9-final.md) | done, tag `v9` |
 | v10 | Polish pass over v1 to v9, from Sam's notes on the v9 page | [v10-polish.md](v10-polish.md) | done, tag `v10` |
-| v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | next |
+| v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | done |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -29,9 +29,12 @@ so the older sections of `PROCESS.md` call its brief the v9 brief.
 
 ## Starting a session
 
-Open a new chat in this folder and paste:
+Open a new chat in this folder and paste (with the version you want):
 
 > Read docs/versions/README.md and docs/versions/v11-speed.md, then start v11.
+
+v11 was the last version planned. A v12 needs a brief first: copy the shape of the others
+(the goal, what to judge it against, and a "Found by other versions" section).
 
 ## Rules for every version
 
@@ -67,7 +70,13 @@ Open a new chat in this folder and paste:
 2. Add a section to `PROCESS.md`: what changed, what went wrong and how it was fixed, what
    is still weak. This log is the raw material for the public write-up.
 3. Update the status table above, and the README if the way something works changed.
-4. Commit. When Sam approves, merge into `main` and tag the version.
+4. From v11 on, keep the bake and the standalone file current (README, "The standalone
+   file"). If `node tools/bake-terrain.mjs --check` says the bake is stale, rebake. Then
+   `node tools/build-standalone.mjs`: it stops if the bake is stale or the CDN at its `TAG`
+   does not have the same bytes as `assets/`. In that case push the assets under a new tag,
+   set `TAG` and build again. A change to code only (shaders, the page, the camera) needs a
+   rebuild and nothing pushed. Test with `node tools/test-standalone.mjs`.
+5. Commit. When Sam approves, merge into `main` and tag the version.
 
 ## Hero frames
 
@@ -122,6 +131,8 @@ node tools/cloud-bench.mjs eastCove viewpoint                # what the cloud ma
 node tools/ab.mjs stairs --a=v8 --b=b55d70f                  # two commits against each other (v9)
 node tools/bake-terrain.mjs                                  # bake the terrain the page loads (v11; --check)
 node tools/load-time.mjs                                     # how long the page takes to load, step by step (v11)
+node tools/build-standalone.mjs                              # kelingking.html, the single file (v11, --local for localhost assets)
+node tools/test-standalone.mjs --offline                     # open it from file://, network cut, and photograph 4 stops (v11)
 ```
 
 Page switches: `?shot=`, `t=` (freeze the sea), `debug=`, `hide=terrain,water,plants,sky`,
