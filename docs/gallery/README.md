@@ -14,4 +14,5 @@ The same hero frames for every version, so they can be compared side by side.
 - [v10](v10/README.md)
 - [v11](v11/README.md)
 - [v12](v12/README.md)
+- [v13](v13/README.md)
 - [How v1 was built, stage by stage](history/README.md)
