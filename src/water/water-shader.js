@@ -156,7 +156,11 @@ Surf surfAt(vec2 p, vec4 d) {
   float offshoreFade = (1.0 - smoothstep(110.0, 200.0, s)) * beachy;
   float grow = 0.2 + 2.0 * smoothstep(br + 70.0, br, s);
   float broken = smoothstep(br + 1.0, br - 5.0, s);
-  float shrink = mix(1.0, 0.18 + 0.3 * clamp(s / max(br, 1.0), 0.0, 1.0), broken);
+  // (v12) The wave keeps its height while it throws its lip, and only settles into the bore
+  // once the lip has landed (about 1.5 m past the break point, breaker.js's stage 0.8). It
+  // shrank from the break point on, so each wave was losing height while its lip was still in
+  // the air, and broke at 0.4 to 1.3 m.
+  float shrink = mix(1.0, 0.18 + 0.3 * clamp(s / max(br, 1.0), 0.0, 1.0), smoothstep(br - 1.0, br - 7.0, s));
   float A = uSwell * grow * big * offshoreFade * shrink;
   float Ak = uSwell * grow * bigK * offshoreFade * shrink;
   // A wave cannot be much taller than the water is deep (it breaks at about 0.8 of the
@@ -849,7 +853,10 @@ void main() {
   float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
   // The front of an uprush is a band of foam and bubbles.
   float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
-  float fresh = max(sf.fresh, smoothstep(0.45, 0.95, sim.r) * simW);
+  // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
+  // patches with holes long before it is lace; it went from a white heap to a net of polygon
+  // cells within a second of the bore passing.)
+  float fresh = max(sf.fresh, smoothstep(0.25, 0.95, sim.r) * simW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
@@ -862,7 +869,9 @@ void main() {
   if (amount > 0.002 || (caps > 0.002 && fp < 0.6)) {
     // On a steep face the ground position barely changes going up, so fold the height in.
     vec2 lp = swFoam < 0.999 ? lacePattern(p - travel + vec2(1.7, -1.3) * wLoc.y, fp) : vec2(0.0);
-    pattern = lp.x; ridge = lp.y;
+    // (v12) Thicker foam is patches of bubbles with holes, the cell walls only faint in it:
+    // the walls are what thin foam is left with.
+    pattern = clamp(lp.x - lp.y * 0.4 * smoothstep(0.3, 0.75, amount), 0.0, 1.0); ridge = lp.y;
   }
   float soft = clamp(fwidth(pattern) * 1.5, 0.045, 0.15);
   float lace = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, pattern);

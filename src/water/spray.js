@@ -62,7 +62,7 @@ void main() {
     float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.72, 0.92, aSeed.x);
     float speed = bc.L / uPeriod;                  // the crest's speed (m/s)
     float age = (bc.tau - tauE) * 8.0 / speed;
-    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(0.8, 1.5, aSeed.y);
+    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(1.0, 2.2, aSeed.y);
     if (age < 0.0 || age > life) { kill(); return; }
     // Where the lip was then: the crest stood further out by what it has travelled since.
     vec2 pcE = bc.pc + bc.n * (bc.tau - tauE) * 8.0;
@@ -88,9 +88,14 @@ void main() {
       size = mix(0.15, 0.4, aSeed.w);
       alpha = 0.7; mist = 0.35;
     } else {                  // thrown up where the lip lands
-      vel = fwd * speed * mix(0.7, 1.2, aSeed.w) + vec3(0.0, mix(2.0, 5.5, aSeed.z) * clamp(bc.H / 1.5, 0.5, 1.4), 0.0) + side * (aSeed.x - 0.5) * 2.0;
-      size = mix(0.5, 1.3, aSeed.w);
-      alpha = 0.8; mist = 0.4;
+      // (v12) The lip landing on the trough throws spray higher than the wave itself: up to
+      // 8 m/s, which lifts it about 3 m, a few puffs half again. It went up at 2 to 5.5 m/s
+      // and stayed a low fringe, so the impact had no burst to it.
+      float kick = aSeed.z * aSeed.z;
+      vel = fwd * speed * mix(0.5, 1.2, aSeed.w) + vec3(0.0, mix(2.5, 8.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.4;
+      g = mix(G, 6.0, step(0.6, aSeed.y));     // the finer part of it hangs in the air
+      size = mix(0.6, 1.6, aSeed.w);
+      alpha = 0.85; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
     }
     vec2 wind = uWindDrift * mix(0.3, 1.0, mist);
     pos = p0 + vel * age + vec3(wind.x, 0.0, -wind.y) * age - vec3(0.0, 0.5 * g * age * age, 0.0);
@@ -180,13 +185,17 @@ void main() {
   vec2 pc = gl_PointCoord;
   float torn = vnoise(pc * 3.1 + seed) * 0.6 + vnoise(pc * 7.3 - seed * 0.37) * 0.4;
   float body = exp(-r * 2.6) * smoothstep(1.0, 0.55, r) * smoothstep(0.25, 0.75, torn + 0.35 - 0.3 * vColor.w);
+  // (v12) Only in puffs a few dozen pixels across, and sparse. Close to the camera a puff is a
+  // hundred pixels and more, and a grid of specks through it covered the face of the wave
+  // behind in even white dots, like snow: there a puff is mist.
   float drops = 0.0;
-  if (mist < 0.95 && vPx > 12.0) {
-    float n = clamp(vPx / 3.0, 6.0, 48.0);
+  float dropsOn = smoothstep(12.0, 18.0, vPx) * (1.0 - smoothstep(45.0, 80.0, vPx));
+  if (mist < 0.95 && dropsOn > 0.0) {
+    float n = clamp(vPx / 3.0, 6.0, 20.0);
     vec2 g = pc * n, cell = floor(g), f = fract(g);
     vec2 h = vec2(fract(sin(dot(cell + seed, vec2(12.9898, 78.233))) * 43758.5453), fract(sin(dot(cell + seed, vec2(39.3468, 11.135))) * 24634.6345));
-    float keep = step(h.y, (0.35 - 0.25 * vColor.w) * smoothstep(0.9, 0.2, r));
-    drops = keep * smoothstep(0.34, 0.12, length(f - 0.25 - 0.5 * h));
+    float keep = step(h.y, (0.2 - 0.14 * vColor.w) * smoothstep(0.9, 0.2, r));
+    drops = keep * smoothstep(0.34, 0.12, length(f - 0.25 - 0.5 * h)) * dropsOn;
   }
   float a = vColor.y * (body * mix(0.45, 0.3, mist) + drops * (1.0 - mist) * 0.85);
   if (a < 0.003) discard;
@@ -226,7 +235,7 @@ export function createSpray(waterUniforms) {
     const rows = [];
     // Beach: per column of the breaker (every other one, 1 m apart), a few of each kind.
     if (beach) for (let c = 0; c < beach.length / 4; c += 2) {
-      for (const [kind, n] of [[0, 16], [1, 8], [2, 10]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
+      for (const [kind, n] of [[0, 16], [1, 8], [2, 16]]) for (let i = 0; i < n; i++) rows.push([beach[c * 4], beach[c * 4 + 1], beach[c * 4 + 2], beach[c * 4 + 3], kind, c]);
     }
     // Rock: sites every 2.5 m of coast, a dozen particles each.
     if (rock) for (let k = 0; k < rock.length; k += 5) for (let i = 0; i < 14; i++) rows.push([rock[k], rock[k + 1], rock[k + 2], rock[k + 3], 3, rock[k + 4]]);

@@ -76,6 +76,7 @@ function valueNoise2(rand, n) {
 
 function makeWeather(p) {
   const N = WEATHER_SIZE, km = p.period / N;
+  const layerKm = p.top - p.base;
   const R = new Float32Array(N * N), G = new Float32Array(N * N), B = new Float32Array(N * N);
   const rand = mulberry32(p.seed * 9973 + 1);
   // Clusters: a slow field (a lattice every 8 km) that says where the sky is busy.
@@ -98,9 +99,18 @@ function makeWeather(p) {
     }
   };
   // A cloud: a body and turrets around it; the big ones are heaps of turrets.
-  const cloud = (cx, cy, r, h) => {
-    blob(cx, cy, r, h);
+  const cloud = (cx, cy, r, h, rMin = 0) => {
+    // (v12) A small puff is at most half as tall as it is wide (r in km: 0.2 at most 200 m
+    // tall, 0.3 at most 300 m). Without it a puff 250 m across could stand 500 m tall, and the
+    // small ones floated as pills. From 0.5 km up the heaps tower as they did (congestus,
+    // over the island). (Its turrets scale with it.)
+    // (The turret count from the radius as drawn, so the random sequence, and with it every
+    // other cloud in the sky, stays where it was.)
     const n = 2 + Math.floor(rand() * 3) + Math.floor(r * 5);
+    r = Math.max(r, rMin);
+    const k = Math.min(Math.max((r - 0.3) / 0.2, 0), 1);
+    h = Math.min(h, r * (1.0 + 5.0 * k * k * (3 - 2 * k)) / layerKm);
+    blob(cx, cy, r, h);
     for (let t = 0; t < n; t++) {
       const a = rand() * Math.PI * 2, d = r * (0.3 + 0.55 * rand());
       blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * (0.3 + 0.35 * rand()), h * (0.45 + 0.5 * rand()));
@@ -119,7 +129,8 @@ function makeWeather(p) {
       // couple of kilometres across and high.
       const size = Math.pow(r3, 2.6) * (0.5 + 0.8 * b);
       const r = 0.1 + 1.1 * size * (0.7 + 0.6 * r4), h = Math.min(1, 0.12 + 0.55 * size + 0.35 * r4 * size + 0.1 * r4);
-      cloud(cx, cy, r, h);
+      // (v12: at least 200 m in radius, where it was 100: the smallest only showed as balls.)
+      cloud(cx, cy, r, h, 0.2);
     }
   }
   // The cumulus of the photo day: a tall heap about 3 km east of the viewpoint (where the
@@ -278,7 +289,7 @@ uniform vec2 uCloudBank;      // how much of the far sea the bank covers, the hi
 #define DETAIL_KM 0.19
 #endif
 #ifndef EDGE
-#define EDGE 0.12
+#define EDGE 0.065   // (v12: 0.12 left every cloud with a soft, fuzzy rim, like cotton wool)
 #endif
 #ifndef ERODE
 #define ERODE 0.72
@@ -317,8 +328,9 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
   // The base is flat under the middle of a cloud and curves up toward its edge, and it sits a
   // little higher or lower from one cloud to the next (by up to 120 m), so the bases do not
   // line up across the sky.
-  float lift = 0.12 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 19.0, 3.0).r - 0.5)
-             + 0.1 * (1.0 - w.r) * (1.0 - w.r);
+  // (v12: flat right to the edge. It curled up by 100 m toward the edge of each cloud, which
+  // rounded every underside like a ball.)
+  float lift = 0.12 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 19.0, 3.0).r - 0.5);
   float hn = (h - uCloudLayer.x - lift) / (uCloudLayer.y - uCloudLayer.x);
   if (hn <= 0.0) return 0.0;
   // Cumulus: a flat base (about 60 m of fade) and the weather map's domes over it, rounded
@@ -330,7 +342,8 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
   float dc = 0.0;
   if (hn < top && w.r > 0.01) {
     float rel = hn / top;
-    float prof = smoothstep(0.0, 0.025, hn) * (1.0 - smoothstep(0.35, 1.0, rel));
+    // (v12: the base fades in over 30 m, where it was 60: a cumulus has a flat, crisp base.)
+    float prof = smoothstep(0.0, 0.012, hn) * (1.0 - smoothstep(0.35, 1.0, rel));
     vec3 q = vec3(p.x - uCloudWind.x, h, p.z - uCloudWind.y) / SHAPE_KM;
     float shape = textureLod(uCloudShape, q, lodFor(SHAPE_KM / 64.0)).r;
     // Full density a short way inside the surface: a cumulus has an edge, not a fade.

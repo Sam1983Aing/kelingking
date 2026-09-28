@@ -208,6 +208,9 @@ void main() {
   // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
   // flat pane over a sea that is still half tucked.
   y -= 0.4 * smoothstep(0.84, 0.96, tau) * (1.0 - smoothstep(0.35, 0.5, v));
+  // (v12) And the white heap too, at the very end: lying on the sea's own bore it showed as
+  // flat white panes with straight edges once the impact's white water covered it.
+  y -= 0.3 * smoothstep(0.95, 1.06, tau) * smoothstep(0.35, 0.5, v);
   // And in space: on its back, beyond where the sea tucks its crest away (a third of a
   // wavelength behind the crest, surfAt's window), the ribbon lies 10 cm under the sea too.
   y -= 0.1 * smoothstep(0.25, 0.34, -pr.x / L);
@@ -276,10 +279,12 @@ void main() {
   // sea draw it, so there is no seam where the ribbon ends.
   if (vInfo.x > 0.86) discard;
   // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
-  if (vInfo.y > 0.2 && vInfo.x > 0.38 && vInfo.x < 0.52) {
-    float rim = 1.0 - abs(vInfo.x - 0.455) / 0.07;
-    float holes = vnoise(vec2(vAlong * 2.3, vInfo.x * 40.0 + vInfo.y * 5.0)) * 0.65 + vnoise(vec2(vAlong * 7.9, vInfo.x * 110.0)) * 0.35;
-    if (holes < rim * 0.75 * smoothstep(0.2, 0.45, vInfo.y)) discard;
+  // (v12: fingers a decimetre or two wide, drawn out along the throw, only over the last few
+  // centimetres of the lip. The holes were blobs half a metre across, cut out like paper.)
+  if (vInfo.y > 0.2 && vInfo.x > 0.41 && vInfo.x < 0.5) {
+    float rim = 1.0 - abs(vInfo.x - 0.455) / 0.045;
+    float holes = vnoise(vec2(vAlong * 6.5, vInfo.x * 14.0 + vInfo.y * 3.0)) * 0.7 + vnoise(vec2(vAlong * 19.0, vInfo.x * 30.0)) * 0.3;
+    if (holes < rim * 0.62 * smoothstep(0.25, 0.5, vInfo.y)) discard;
   }
 #ifdef BFLAT
   gl_FragColor = vec4(0.1, 0.4, 0.5, 1.0); return;
@@ -298,7 +303,11 @@ void main() {
   vec4 d = dataAt(vMap);
   vec4 oc = oceanSurface(vMap, seaWeights(vMap, d));
   vec3 tA = normalize(cross(N, vec3(0.0, 0.0, 1.0)) + 1e-4), tB = cross(N, tA);
-  N = normalize(N + tA * oc.x + tB * oc.y);
+  // (v12) Water drawn up the face and thrown in the lip is stretched smooth: the ripples there
+  // at half their slope, their sub-pixel spread a little more (below). At full slope the sun
+  // caught them in chrome flakes all along the lip.
+  float stretched = smoothstep(0.2, 0.3, v) * smoothstep(0.02, 0.2, tau);
+  N = normalize(N + (tA * oc.x + tB * oc.y) * mix(1.0, 0.45, stretched));
   vec3 L = uSunDir;
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -339,7 +348,7 @@ void main() {
   // in front, not at the dark horizon the sea's model assumes for other waves.
   float downR = smoothstep(0.0, -0.25, reflect(-V, N).y);
   refl = mix(refl, under * 1.6 + uSkyIrr / PI * 0.15, downR);
-  float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, 0.05, 0.6);
+  float rough = clamp(sqrt(0.0025 + oc.z) + fp * 0.002, mix(0.05, 0.11, stretched), 0.6);
   float a2 = rough * rough;
   vec3 Hh = normalize(V + L);
   float NoH = max(dot(N, Hh), 0.0), NoL = max(dot(N, L), 0.0);
@@ -365,13 +374,26 @@ void main() {
   float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
-  float impact = smoothstep(0.62, 0.8, tau) * smoothstep(0.2, 0.4, v);
+  // (v12) It starts where the lip lands, at the foot of the tube, and boils up the face over
+  // the next few tenths of a second, its top edge a row of billows: it was the whole face
+  // turning white at once, drawn with the face's streaks, which read as a grey comb.
+  float rise = smoothstep(0.6, 0.92, tau);
+  float billow = fbm3(vec2(vAlong * 0.45, v * max(H, 0.5) * 1.3) + vec2(tau * 0.6, -tau * 2.2)) * 0.7
+               + vnoise(vec2(vAlong * 1.6, v * max(H, 0.5) * 4.0) + vec2(0.0, -tau * 4.0)) * 0.3;
+  float impactTop = mix(0.72, 0.27, rise) - (billow - 0.5) * 0.12;
+  float impact = smoothstep(0.6, 0.7, tau) * smoothstep(impactTop - 0.05, impactTop + 0.05, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
   float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
-  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount), smoothstep(0.92, 1.0, amount));
+  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount * (1.0 - impact)), smoothstep(0.92, 1.0, amount * (1.0 - impact)));
+  // (v12) The impact's white water: dense in the middle of each billow, thinning at its edges
+  // (it was cut out of the water with hard edges).
+  if (impact > 0.002) {
+    float soft = clamp(fwidth(billow) * 2.0, 0.04, 0.2);
+    foam = max(foam, smoothstep(0.35 - soft, 0.62 + soft, billow + impact * 0.55 - 0.1) * uFoam);
+  }
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
   // Only on the back and the floor: the lip and the face are the breaker's own.
@@ -392,7 +414,9 @@ void main() {
   vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max((dot(Nf, L) + 0.7) / 1.7, 0.15) * shadow + uSkyIrr);
   // In the crevices: no sun, only sky and light scattered through the foam (as the sea's).
   vec3 crevice = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
-  foamRad = mix(mix(col, crevice, 0.6), foamRad, mix(1.0, rel.x, relW));
+  // (v12: the crevices a third as deep, and lit by the sky and by light scattered through the
+  // foam. At full depth a third of the white water went grey in the noon sun.)
+  foamRad = mix(mix(col, crevice, 0.85), foamRad, mix(1.0, mix(0.78, 1.0, rel.x), relW));
   // Thin white water shows the water through it.
   col = mix(col, foamRad, foam * mix(0.7, 1.0, smoothstep(0.3, 0.9, amount)));
 
@@ -504,6 +528,15 @@ export function createBreaker(renderer, waterUniforms) {
     mesh,
     material,
     get columns() { return nCols; },
+    // (v12, for the tools) Each column's crest x, y and stage, on, wavelength, height, as the
+    // column pass last worked them out.
+    readColumns() {
+      if (!target) return null;
+      const a = new Float32Array(nCols * 4), b = new Float32Array(nCols * 4);
+      renderer.readRenderTargetPixels(target, 0, 0, nCols, 1, a, undefined, 0);
+      renderer.readRenderTargetPixels(target, 0, 0, nCols, 1, b, undefined, 1);
+      return { crest: a, stage: b };
+    },
     // Order the chunks near to far from the camera.
     sortChunks(camera) {
       if (!chunks.length) return;
