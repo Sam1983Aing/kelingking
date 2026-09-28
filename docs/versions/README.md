@@ -21,6 +21,7 @@ version. A session works on its element only, and goes deep on it.
 | v13 | The dirt steps and the bamboo handrail (Sam's notes after v12) | [v13-stairs.md](v13-stairs.md) | done, tag `v13` |
 | v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | in progress |
 | v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | in progress |
+| v16 | Batu Satu shape and greenery | [v16-islet-shape-greenery.md](v16-islet-shape-greenery.md) | in progress |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

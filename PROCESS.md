@@ -2306,3 +2306,44 @@ has less fine spray than the photograph. A bright boundary is still visible wher
 returns to the sea at some stages. The sharp tan triangle visible through the shallows
 is a terrain or sand material feature: hiding water leaves it in place. It is recorded in the
 v5 sand brief and remains outside this wave pass.
+
+## v16: Batu Satu shape and greenery (2026-09-28)
+
+Sam's close screenshot showed the little offshore rock as a peaked, uneven mass with green
+running down its left shoulder and a layered pale face on its right. In v15 it read as a
+mostly level green cap over a bare cylinder.
+
+### What changed
+
+- The first islet alone has a less sheer south-east shoulder, a more sheer north-west face,
+  and an off-centre crest. Its summit is slightly higher to better meet the viewpoint
+  photo's outline; its mapped shoreline stays fixed.
+- A restrained, irregular ground-cover layer continues down that shoulder between the
+  existing face shrubs. It fades before the wave-cut foot and does not paint over the pale
+  limestone wall. The 1024 terrain bake includes the new shape.
+
+### How it was judged
+
+The clifftop and overview shots were checked with `--outline` against the local reference
+photos, and the clifftop was compared with Sam's tighter islet screenshot. The new peak
+lands close to the photo's summit height, although the model's footprint is slightly
+narrower in the clifftop photo. An early attempt to scatter extra face shrubs changed the
+shared random stream and placed unrelated plants elsewhere in the scene; that attempt was
+removed. The final cover uses the existing vegetation material and local islet coordinates.
+`hero.mjs v16` rendered all nine frames and local photo comparisons. The bake check passed;
+the rebuilt standalone generated terrain offline and loaded without console errors.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=f64598a --rounds=8` run was within the 10% budget on
+overview (-2%), viewpoint (-1%), stairs (-13%), trailLow (+4%), beach (+3%), swash (+2%)
+and sideFromSea (-8%). TrailTop first rounded to +10% and a steadier 18-round repeat read
++1%. ShoreBreak first read +31% with a wide spread even though this islet is out of frame;
+a 24-round repeat read 0%. These paired checks are more useful than separate absolute
+`hero.mjs` frame times while background GPU load changes.
+
+### Still weak
+
+The source image has a more continuous mix of low foliage and limestone across the small
+rock's face than the distant procedural scrub can fully reproduce. The islet's plan-view
+outline comes from OSM and remains a little narrow in the clifftop photo.

@@ -17,4 +17,5 @@ The same hero frames for every version, so they can be compared side by side.
 - [v13](v13/README.md)
 - [v14](v14/README.md)
 - [v15](v15/README.md)
+- [v16](v16/README.md)
 - [How v1 was built, stage by stage](history/README.md)

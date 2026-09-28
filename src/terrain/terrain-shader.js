@@ -381,6 +381,17 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // (A narrow band: where it is part rock and part cover both are worked out, the dearest
   // thing this shader does.)
   float veg = smoothstep(0.41, 0.47, up + (n1 - 0.5) * 0.25);
+  // On Batu Satu the wooded shoulder carries a thin, patchy understory down between
+  // the rooted face shrubs. Fade it into the beds before the pale north-west wall and
+  // leave the wave-cut foot as limestone.
+  if (g.x > 35.0 && g.x < 125.0 && g.y > -155.0 && g.y < -50.0 && h < 68.0) {
+    vec2 delta = g - vec2(80.0, -100.0);
+    float island = 1.0 - smoothstep(0.77, 1.03, length(delta / vec2(48.0, 57.0)));
+    float flank = smoothstep(-18.0, 18.0, delta.x - 0.2 * delta.y);
+    float lower = smoothstep(16.0, 28.0, h) * (1.0 - smoothstep(55.0, 68.0, h));
+    float coverPatch = 0.3 + 0.7 * smoothstep(0.38, 0.65, n1 * 0.65 + n2 * 0.35);
+    veg = max(veg, 0.72 * island * flank * lower * coverPatch);
+  }
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare

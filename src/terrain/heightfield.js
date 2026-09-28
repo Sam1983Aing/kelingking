@@ -207,7 +207,12 @@ export function makeHeightAt(f, layout, noise) {
       // steepest at the bottom), so the top edge is rounded, not a rim.
       const rise = 1 - (1 - Math.min(dc / 14, 1)) ** 2;
       const h = islet.h * (sheer * rise + (1 - sheer) * crown);
-      return h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
+      // The small islet has a high, uneven crest instead of a level green lid. Keep the
+      // shoreline fixed and ease the shoulder down toward the far exposed face.
+      const shoulder = islet.summit
+        ? 1 - islet.crownDrop * smooth(11, 44, Math.hypot(x - islet.summit[0], y - islet.summit[1])) * smooth(7, 23, dc)
+        : 1;
+      return h * shoulder + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
     }
 
     const top = at(f.TOP);

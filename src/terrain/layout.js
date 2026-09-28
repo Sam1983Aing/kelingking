@@ -65,7 +65,10 @@ export function defaultLayout() {
     // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
     // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 68, sheer: 0.62, sheerVar: 0.12, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
+      // Batu Satu: a wooded south-east shoulder falls away from an off-centre crest;
+      // the north-west face keeps its exposed, bedded limestone wall.
+      { near: [80, -100], h: 72, sheer: 0.52, sheerVar: 0.34, sheerAz: 115, R: 38,
+        summit: [94, -112], crownDrop: 0.17 },
       { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 
