@@ -279,13 +279,9 @@ void main() {
   // sea draw it, so there is no seam where the ribbon ends.
   if (vInfo.x > 0.86) discard;
   // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
-  // (v12: fingers a decimetre or two wide, drawn out along the throw, only over the last few
-  // centimetres of the lip. The holes were blobs half a metre across, cut out like paper.)
-  if (vInfo.y > 0.2 && vInfo.x > 0.41 && vInfo.x < 0.5) {
-    float rim = 1.0 - abs(vInfo.x - 0.455) / 0.045;
-    float holes = vnoise(vec2(vAlong * 6.5, vInfo.x * 14.0 + vInfo.y * 3.0)) * 0.7 + vnoise(vec2(vAlong * 19.0, vInfo.x * 30.0)) * 0.3;
-    if (holes < rim * 0.62 * smoothstep(0.25, 0.5, vInfo.y)) discard;
-  }
+  // (v12) The lip's tip is no longer cut into holes: seen from the front the cut edges read
+  // as a row of spikes (and in v11, at half a metre, as paper cut-outs). It tears into foam
+  // instead (edge, below).
 #ifdef BFLAT
   gl_FragColor = vec4(0.1, 0.4, 0.5, 1.0); return;
 #endif
@@ -412,6 +408,12 @@ void main() {
   // (v9) Light goes a long way through white water before it comes back out, so a side turned
   // from the sun is still lit (wrapped): it was grey-lavender, lit by the sky alone.
   vec3 foamRad = vec3(0.78) / PI * (uSunIrr * max((dot(Nf, L) + 0.7) / 1.7, 0.15) * shadow + uSkyIrr);
+  // (v12) In the thrown lip and the curl the white water is a volume of bubbles and water with
+  // the sun on it from above: lit by the way up, not by the surface's own normal, which points
+  // down under the curl. By its normal it was lit by the sky alone, and came out lavender.
+  float volW = smoothstep(0.3, 0.4, v) * smoothstep(0.12, 0.3, tau);
+  vec3 volRad = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.8 + uSkyIrr);
+  foamRad = mix(foamRad, max(foamRad, volRad), volW);
   // In the crevices: no sun, only sky and light scattered through the foam (as the sea's).
   vec3 crevice = vec3(0.78) / PI * (uSunIrr * max(L.y, 0.0) * shadow * 0.2 + uSkyIrr * 0.6);
   // (v12: the crevices a third as deep, and lit by the sky and by light scattered through the
