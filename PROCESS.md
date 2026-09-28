@@ -2253,3 +2253,56 @@ uses its one complete timed round for absolute milliseconds and the paired run f
 The photographed head has much denser fine vegetation on its sloping jaw than this render.
 The material and vegetation were intentionally outside this shape pass. The background
 sea-facing wall also remains paler and flatter than the reference at the stairs camera.
+
+## v15: continuous breaking wave and shore foam (2026-09-28)
+
+Sam asked for a smoother, more convincing shore break after the head pass. The opening of his
+linked demo supplied the motion cue: a broad crest runs toward reflective shallow sand and
+leaves an uneven lacy edge. The local Kelingking beach photographs remain the place and scale
+reference.
+
+### What changed
+
+- The breaker keeps its open incoming face longer and pitches its lip through a smaller arc.
+  Broad variation along the cove makes different parts of the lip spill at slightly different
+  stages, and small changes along its foot soften the previously straight mesh intersection.
+- The broad white strip on the early crest came from the breaker's lip rim, as a temporary
+  foam-mask diagnostic showed. Narrowing that rim revealed the translucent face before the
+  lip lands. Its whitewater now grows from broken billows as the lip falls, leaving pockets
+  of water between them instead of covering the face as one slab.
+- The breaker's foot and visible edge now share an irregular profile, so the edge follows
+  the same place where the mesh submerges into the sea. Extending the sea's lace pattern up
+  the face produced large cell outlines in the close camera and was discarded.
+- The uprush receives a softer, scalloped foam front. Bubble cover thins into patches on the
+  sand, with the simulation leaving less opaque foam at the leading edge. The wave then
+  retreats and the next crest follows in the same cycle.
+- `ab.mjs` and `hero.mjs` accept `--url` so a managed worktree preview can be measured and
+  rendered from its own server.
+
+### How it was judged
+
+The `shoreBreak` and `swash` cameras were captured before and after the change. A ten-second
+`swash` clip from 18 s shows the breaker arriving, spreading up the sand, draining away and
+the next crest forming; the later preview used a 1280 px, 15 fps capture after a 2048-quality
+Chrome preview timed out. An eight-second `shoreBreak` clip checks the steepening face, the
+lip landing, and the handoff to the sea. The `viewpoint` and `overview` outline captures keep
+the v14 headland silhouette. The terrain bake is up to date. The standalone HTML was rebuilt
+without fetching assets and loaded with the network disabled, with no console errors.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=735a8a6 --rounds=8` comparison against the v14 head
+checkpoint reports overview +2%, stairs +4%, trailTop +2%, trailLow -1%, beach 0%, swash
+-5%, shoreBreak -10%, and sideFromSea 0%. The viewpoint first read +21% with a wide spread;
+24 alternating rounds put it at +2%. All nine views are within the 10% frame budget.
+`hero.mjs v15 --prev=v14 --url=http://localhost:5180/` rendered all nine final frames and
+the local photo comparisons. v14 has no tag yet, so the gallery shows absolute timings; the
+paired check above supplies the before-and-after budget measurement.
+
+### Still weak
+
+From the close `shoreBreak` camera, the clear face remains unusually smooth and the splash
+has less fine spray than the photograph. A bright boundary is still visible where the breaker
+returns to the sea at some stages. The sharp tan triangle visible through the shallows
+is a terrain or sand material feature: hiding water leaves it in place. It is recorded in the
+v5 sand brief and remains outside this wave pass.

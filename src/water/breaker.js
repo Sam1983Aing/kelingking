@@ -39,10 +39,14 @@ vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax)
   float a = H * (0.2 + 0.4 * smoothstep(0.1, 0.7, tau));      // how far forward the lip reaches
   float b = H * 0.5, yc = H * 0.5;
   float xc = H * (0.02 + 0.3 * tau);                           // the crest moves forward as it throws
-  float sweep = 160.0 * smoothstep(0.05, 0.75, tau);           // degrees the lip has curled through
+  // A shore break pitches and spills rather than holding a round, identical tube all the
+  // way along the cove. The tip still reaches the trough, but the face stays more open.
+  float sweep = 146.0 * smoothstep(0.04, 0.82, tau);           // degrees the lip has curled through
   float thTip = radians(90.0 - sweep);
   float t0 = H * 0.28 * smoothstep(0.0, 60.0, sweep);          // lip thickness at its root
-  float m = smoothstep(0.08, 0.45, tau);                       // how far the face has become a tube
+  // The face keeps the incoming wave's convex shoulder until the lip is well underway.
+  // Forming the full hollow too early made every incoming crest a clean blue cylinder.
+  float m = smoothstep(0.22, 0.72, tau);                       // how far the face has become a tube
   float ai = max(a - t0, 0.08 * H), bi = max(b - t0, 0.08 * H);
   float xF = min(max(Lf, xc + a + 0.7 * H), xMax);
   float faceEnd = min(mix(xc + Lf, xc - ai + yc, m), xF - 0.1);
@@ -146,6 +150,7 @@ varying vec2 vMap;
 varying vec4 vInfo;        // v, stage, water thickness behind, wave height
 varying float vAlong;      // distance along the beach (m)
 varying float vTear;
+varying float vFoot;       // where the ribbon returns under the sea
 
 void main() {
   float v = aProf.x;
@@ -157,6 +162,7 @@ void main() {
     vec3 w0 = vec3(aLine.x, -1.0, -aLine.y);
     vWorld = w0; vNormal = vec3(0.0, 1.0, 0.0); vMap = aLine.xy; vInfo = vec4(aProf.x, 0.0, 0.0, 0.0);
     vAlong = aProf.y; vTear = 1.0;
+    vFoot = aProf.x;
     gl_Position = projectionMatrix * (viewMatrix * vec4(w0, 1.0));
     vApT = vec3(1.0); vApIns = vec3(0.0);
     return;
@@ -175,8 +181,11 @@ void main() {
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
   Surf c;
   // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
+  // Slow, broad changes in the peel precede the little tears along the lip. A single
+  // uniform stage across the beach made the crest read as one extruded cylinder.
+  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.45;
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
-  float st = mix(0.0, clamp(tau + jit * 0.12 * smoothstep(0.1, 0.3, tau), 0.0, 1.2), on);
+  float st = mix(0.0, clamp(tau + (peel + jit * 0.025) * smoothstep(0.08, 0.32, tau), 0.0, 1.2), on);
   float tauC = max(tau, 0.0);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float xF = min(max(Lf, H * (0.02 + 0.3 * st) + H * (0.2 + 0.4 * smoothstep(0.1, 0.7, st)) + 0.7 * H), xMax);
@@ -201,7 +210,8 @@ void main() {
   // it has put it back by 1.06). While the two have the same shape the ribbon stays 10 cm
   // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
   // bore at different points, and 3 cm was not enough).
-  float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.78, 0.85, v))
+  float footV = v + jit * 0.12 + peel * 0.12;
+  float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.77, 0.86, footV))
                * smoothstep(-0.08, -0.02, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
   y -= 0.1 * (1.0 - smoothstep(0.02, 0.1, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
   // As the sea puts its crest back after the collapse, everything of the ribbon behind the
@@ -230,8 +240,9 @@ void main() {
   vWorld = w;
   vNormal = nrm;
   vMap = pm;
-  vInfo = vec4(v, tau * on, pr.z, H);
+  vInfo = vec4(v, st * on, pr.z, H);
   vAlong = aProf.y;
+  vFoot = footV;
   vec4 mv = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * mv;
   vApT = vec3(1.0); vApIns = vec3(0.0);
@@ -260,6 +271,7 @@ varying vec2 vMap;
 varying vec4 vInfo;
 varying float vAlong;
 varying float vTear;
+varying float vFoot;
 
 // Whitewater on the breaking wave itself (v9): the lip tearing into white water, and foam
 // running down the face in streaks. rp: metres along the beach and down the cross-section.
@@ -277,7 +289,7 @@ void main() {
   if (vTear > 0.001) discard;
   // The floor in front of the tube lies on the sea's own trough (tucked under it): let the
   // sea draw it, so there is no seam where the ribbon ends.
-  if (vInfo.x > 0.86) discard;
+  if (vFoot > 0.86) discard;
   // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
   // (v12) The lip's tip is no longer cut into holes: seen from the front the cut edges read
   // as a row of spikes (and in v11, at half a metre, as paper cut-outs). It tears into foam
@@ -365,7 +377,11 @@ void main() {
   // stretches with the water instead of smearing down a steep face.
   vec2 rp = vec2(vAlong, v * max(H, 0.5) * 6.0);
   float tear = vnoise(vec2(vAlong * 1.7, tau * 6.0)) * 0.5 + vnoise(vec2(vAlong * 5.3, v * 30.0)) * 0.5;
-  float edge = smoothstep(0.36, 0.45, v + tear * 0.05) * (1.0 - smoothstep(0.5, 0.58, v - tear * 0.06)) * smoothstep(0.12, 0.45, tau);
+  // The white rim belongs to the lip's last few centimetres. A broad band over both sides
+  // of the lip hid the clear face and looked like a white strip before it even landed.
+  float edge = smoothstep(0.415, 0.445, v + tear * 0.018)
+             * (1.0 - smoothstep(0.465, 0.495, v - tear * 0.02))
+             * smoothstep(0.12, 0.45, tau);
   // Feathering: a thin broken fringe along the very top as the crest starts to spill.
   float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
@@ -373,22 +389,26 @@ void main() {
   // (v12) It starts where the lip lands, at the foot of the tube, and boils up the face over
   // the next few tenths of a second, its top edge a row of billows: it was the whole face
   // turning white at once, drawn with the face's streaks, which read as a grey comb.
-  float rise = smoothstep(0.6, 0.92, tau);
+  float rise = smoothstep(0.58, 1.0, tau);
   float billow = fbm3(vec2(vAlong * 0.45, v * max(H, 0.5) * 1.3) + vec2(tau * 0.6, -tau * 2.2)) * 0.7
                + vnoise(vec2(vAlong * 1.6, v * max(H, 0.5) * 4.0) + vec2(0.0, -tau * 4.0)) * 0.3;
-  float impactTop = mix(0.72, 0.27, rise) - (billow - 0.5) * 0.12;
-  float impact = smoothstep(0.6, 0.7, tau) * smoothstep(impactTop - 0.05, impactTop + 0.05, v);
+  float impactTop = mix(0.73, 0.28, rise) - (billow - 0.5) * 0.18;
+  float impact = smoothstep(0.60, 0.82, tau) * smoothstep(impactTop - 0.085, impactTop + 0.085, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
-  float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
+  float amount = clamp(max(max(edge * (0.5 + 0.4 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
   if (amount > 0.002) foam = max(faceFoam(rp, tau, amount * (1.0 - impact)), smoothstep(0.92, 1.0, amount * (1.0 - impact)));
   // (v12) The impact's white water: dense in the middle of each billow, thinning at its edges
   // (it was cut out of the water with hard edges).
   if (impact > 0.002) {
-    float soft = clamp(fwidth(billow) * 2.0, 0.04, 0.2);
-    foam = max(foam, smoothstep(0.35 - soft, 0.62 + soft, billow + impact * 0.55 - 0.1) * uFoam);
+    float soft = clamp(fwidth(billow) * 2.0, 0.05, 0.2);
+    float brokenUp = smoothstep(0.5 - soft, 0.78 + soft, billow + impact * 0.15 - 0.08);
+    // Keep water visible between the billows, especially at the lower edge where the
+    // ribbon hands the white water to the sea's bore. A solid white strip exposed the seam.
+    float lowerFade = 1.0 - smoothstep(0.72, 0.82, v);
+    foam = max(foam, brokenUp * impact * uFoam * lowerFade);
   }
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).

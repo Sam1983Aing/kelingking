@@ -35,6 +35,7 @@ if (flag('hero') || !shots.length) shots = HERO;
 const ROUNDS = +flag('rounds', 12);
 const FRAMES = +flag('frames', 8);
 const WIDTH = 1400;
+const BASE = String(flag('url', 'http://localhost:5178/')).replace(/\/?$/, '/');
 
 // The other build: a tag checked out under captures/.
 const num = (v) => +v.slice(1);
@@ -100,7 +101,7 @@ try {
     // One at a time: a page that is not in front gets no animation frames, and its ready flag
     // is set from the animation loop.
     const side = (k) => { const v = flag('set' + k); return v ? String(v).split(';').join('&') + '&' : ''; };
-    for (const [k, base] of [['a', SELF ? 'http://localhost:5178/' : `http://localhost:5178/${dir}/`], ['b', tagB ? `http://localhost:5178/${dirB}/` : 'http://localhost:5178/']]) {
+    for (const [k, base] of [['a', SELF ? BASE : new URL(`${dir}/`, BASE).href], ['b', tagB ? new URL(`${dirB}/`, BASE).href : BASE]]) {
       pages[k] = await b.open(base + '?' + side(k) + q, { width: WIDTH, height: h });
       await pages[k].waitFor('window.__ready === true');
     }

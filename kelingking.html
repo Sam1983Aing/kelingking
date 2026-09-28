@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 77b499a. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
+  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 735a8a6. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kelingking</title>
@@ -80662,10 +80662,12 @@ function defaultLayout() {
       { at: [109, 70], h: 94, w: 46, p: 1.4 },
       { at: [70, 38], h: 92, w: 50, p: 1.5 },
       { at: [25, 11], h: 105, w: 62, p: 1.7 },
-      { at: [0, 0], h: 111, w: 70, p: 1.9 },
-      { at: [-40, -22], h: 107, w: 74, p: 2.0 },
-      { at: [-100, -28], h: 94, w: 76, p: 2.1 },
-      { at: [-150, -30], h: 78, w: 76, p: 2.0 },
+      // The crown peaks just behind the head, then holds a high, sharper ridge to its blunt
+      // ocean-facing brow. The old rounded dome fell away too early toward the tip.
+      { at: [0, 0], h: 112, w: 68, p: 1.45 },
+      { at: [-40, -22], h: 105, w: 69, p: 1.45 },
+      { at: [-100, -28], h: 96, w: 70, p: 1.55 },
+      { at: [-150, -30], h: 82, w: 70, p: 1.6 },
     ],
 
     // Where the finger leaves the plateau (top of the unpaved ridge steps).
@@ -80674,7 +80676,7 @@ function defaultLayout() {
     // Side ridges off the main spine, merged with it by taking the higher surface.
     spurs: [
       // The jaw: the lip of the head that curls over the south end of the beach.
-      { path: [[0, 0], [12, 48], [16, 96]], h: [111, 92, 76], w: 48, p: 2.2 },
+      { path: [[0, 0], [17, 48], [28, 93]], h: [110, 84, 58], w: 38, p: 1.45 },
     ],
 
     // Local lowering of the plateau. The corner where the paved steps run down to the
@@ -80724,7 +80726,9 @@ function defaultLayout() {
       // The wall at the south end of the beach drops sheer from its rim; the mesh builder
       // then cuts it back underneath into the overhang (overhangs, below).
       { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
-      { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
+      // Keep the sloping beak local to the jaw tip. Spreading this gentler face toward the
+      // beach-wall overhang pulled its cave into a blocky cone at sand level.
+      { name: 'jaw', at: [14, 89], r: 20, face: 24, pf: 1.15 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
       { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },
@@ -81278,7 +81282,7 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
     o.vel = clamp(dZ / 0.14 * (rising ? 0.85 : 1.0), -3.5, 5.0);
     o.up = rising ? 1.0 : 0.0;
   }
-  if (rising && zeta > 0.0) o.front = max(o.front, smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)) * (1.0 - smoothstep(0.7, 1.0, tau / tu) * 0.6));
+  if (rising && zeta > 0.0) o.front = max(o.front, smoothstep(0.0, 0.008, zeta) * (1.0 - smoothstep(0.025, 0.19, zeta)) * (1.0 - smoothstep(0.7, 1.0, tau / tu) * 0.6));
 }
 
 // The swash at map position p (x east, y north), with bed height z (m), at time t. back: how
@@ -81313,7 +81317,7 @@ Swash swashAt(vec2 p, float z, float t, float period, int back) {
 }
 
 // The foamy front of an uprush, from how far its edge is above this spot (frontZ).
-float swashFront(float zeta) { return smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)); }
+float swashFront(float zeta) { return smoothstep(0.0, 0.008, zeta) * (1.0 - smoothstep(0.025, 0.19, zeta)); }
 
 // The swash as worked out for this frame over the beach (swash-map.js): edge, front edge,
 // thickness or minus the seconds since it was dry, speed up the beach. Outside the map, dry.
@@ -84062,7 +84066,7 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   float soft = clamp(fwidth(base) * 1.5, 0.03, 0.12);
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
-  float thin = cover * (1.0 - smoothstep(0.6, 0.97, amount));
+  float thin = cover * (1.0 - smoothstep(0.32, 0.55, amount));
   if (thin > 0.01 && fp < 0.08) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
@@ -84509,8 +84513,16 @@ void main() {
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
   // (The band at the rock only where the simulation does not reach, and there is rock.)
   float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
-  // The front of an uprush is a band of foam and bubbles.
-  float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
+  vec2 travel = sim.ba * simW;
+  // The uprush has one continuous leading edge, but its bubbles gather into scallops and
+  // little fingers. Break up the cover along that edge before it settles into older lace.
+  float frontCover = 1.0;
+  if (sf.front > 0.002) {
+    vec2 qf = p - travel;
+    frontCover = 0.38 + 0.86 * (vnoise(qf * 0.42 + 6.1) * 0.65
+                            + vnoise(qf * 1.8 + 17.3) * 0.35);
+  }
+  float amount = clamp(max(max(sf.fresh, older), sf.front * frontCover * 0.8) * uFoam, 0.0, 1.0);
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
@@ -84520,7 +84532,6 @@ void main() {
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
   // warped so no two cells match, and a slower variation in how dense it is.
   float pattern = 0.0, ridge = 0.0;
-  vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
   float swFoam = smoothstep(1.0, 0.3, wLoc.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
   // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
@@ -84540,7 +84551,7 @@ void main() {
   // showing between its clumps: it never closes up into a white carpet.
   float onSheet = swFoam * sf.sheet;
   if (swFoam > 0.001 && amount > 0.002)
-    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.84, onSheet), fp), swFoam);
+    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.68, onSheet), fp), swFoam);
   fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
   float lumps = 0.5, lumpsMid = 0.5;
@@ -85297,7 +85308,7 @@ function createSurfSim(renderer, waterUniforms, opts = {}) {
     make = max(make, max(hit, wash));
     // The front of each uprush is a band of foam and bubbles, which it leaves behind as it
     // slows; foam left on bare sand drains into it and is gone within a few seconds.
-    make = max(make, sw.front * 0.75 * nearBeach);
+    make = max(make, sw.front * 0.58 * nearBeach);
     float bare = onSand * (1.0 - smoothstep(0.0, 0.003, sw.film));
     foam *= exp(-uDt * bare / 2.5);
     // New foam starts its own pattern where it is made.
@@ -85567,10 +85578,14 @@ vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax)
   float a = H * (0.2 + 0.4 * smoothstep(0.1, 0.7, tau));      // how far forward the lip reaches
   float b = H * 0.5, yc = H * 0.5;
   float xc = H * (0.02 + 0.3 * tau);                           // the crest moves forward as it throws
-  float sweep = 160.0 * smoothstep(0.05, 0.75, tau);           // degrees the lip has curled through
+  // A shore break pitches and spills rather than holding a round, identical tube all the
+  // way along the cove. The tip still reaches the trough, but the face stays more open.
+  float sweep = 146.0 * smoothstep(0.04, 0.82, tau);           // degrees the lip has curled through
   float thTip = radians(90.0 - sweep);
   float t0 = H * 0.28 * smoothstep(0.0, 60.0, sweep);          // lip thickness at its root
-  float m = smoothstep(0.08, 0.45, tau);                       // how far the face has become a tube
+  // The face keeps the incoming wave's convex shoulder until the lip is well underway.
+  // Forming the full hollow too early made every incoming crest a clean blue cylinder.
+  float m = smoothstep(0.22, 0.72, tau);                       // how far the face has become a tube
   float ai = max(a - t0, 0.08 * H), bi = max(b - t0, 0.08 * H);
   float xF = min(max(Lf, xc + a + 0.7 * H), xMax);
   float faceEnd = min(mix(xc + Lf, xc - ai + yc, m), xF - 0.1);
@@ -85674,6 +85689,7 @@ varying vec2 vMap;
 varying vec4 vInfo;        // v, stage, water thickness behind, wave height
 varying float vAlong;      // distance along the beach (m)
 varying float vTear;
+varying float vFoot;       // where the ribbon returns under the sea
 
 void main() {
   float v = aProf.x;
@@ -85685,6 +85701,7 @@ void main() {
     vec3 w0 = vec3(aLine.x, -1.0, -aLine.y);
     vWorld = w0; vNormal = vec3(0.0, 1.0, 0.0); vMap = aLine.xy; vInfo = vec4(aProf.x, 0.0, 0.0, 0.0);
     vAlong = aProf.y; vTear = 1.0;
+    vFoot = aProf.x;
     gl_Position = projectionMatrix * (viewMatrix * vec4(w0, 1.0));
     vApT = vec3(1.0); vApIns = vec3(0.0);
     return;
@@ -85703,8 +85720,11 @@ void main() {
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
   Surf c;
   // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
+  // Slow, broad changes in the peel precede the little tears along the lip. A single
+  // uniform stage across the beach made the crest read as one extruded cylinder.
+  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.45;
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
-  float st = mix(0.0, clamp(tau + jit * 0.12 * smoothstep(0.1, 0.3, tau), 0.0, 1.2), on);
+  float st = mix(0.0, clamp(tau + (peel + jit * 0.025) * smoothstep(0.08, 0.32, tau), 0.0, 1.2), on);
   float tauC = max(tau, 0.0);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float xF = min(max(Lf, H * (0.02 + 0.3 * st) + H * (0.2 + 0.4 * smoothstep(0.1, 0.7, st)) + 0.7 * H), xMax);
@@ -85729,7 +85749,8 @@ void main() {
   // it has put it back by 1.06). While the two have the same shape the ribbon stays 10 cm
   // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
   // bore at different points, and 3 cm was not enough).
-  float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.78, 0.85, v))
+  float footV = v + jit * 0.12 + peel * 0.12;
+  float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.77, 0.86, footV))
                * smoothstep(-0.08, -0.02, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
   y -= 0.1 * (1.0 - smoothstep(0.02, 0.1, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
   // As the sea puts its crest back after the collapse, everything of the ribbon behind the
@@ -85758,8 +85779,9 @@ void main() {
   vWorld = w;
   vNormal = nrm;
   vMap = pm;
-  vInfo = vec4(v, tau * on, pr.z, H);
+  vInfo = vec4(v, st * on, pr.z, H);
   vAlong = aProf.y;
+  vFoot = footV;
   vec4 mv = viewMatrix * vec4(w, 1.0);
   gl_Position = projectionMatrix * mv;
   vApT = vec3(1.0); vApIns = vec3(0.0);
@@ -85788,6 +85810,7 @@ varying vec2 vMap;
 varying vec4 vInfo;
 varying float vAlong;
 varying float vTear;
+varying float vFoot;
 
 // Whitewater on the breaking wave itself (v9): the lip tearing into white water, and foam
 // running down the face in streaks. rp: metres along the beach and down the cross-section.
@@ -85805,7 +85828,7 @@ void main() {
   if (vTear > 0.001) discard;
   // The floor in front of the tube lies on the sea's own trough (tucked under it): let the
   // sea draw it, so there is no seam where the ribbon ends.
-  if (vInfo.x > 0.86) discard;
+  if (vFoot > 0.86) discard;
   // The lip tears apart at its edge: holes and a ragged rim over the last part of it.
   // (v12) The lip's tip is no longer cut into holes: seen from the front the cut edges read
   // as a row of spikes (and in v11, at half a metre, as paper cut-outs). It tears into foam
@@ -85893,7 +85916,11 @@ void main() {
   // stretches with the water instead of smearing down a steep face.
   vec2 rp = vec2(vAlong, v * max(H, 0.5) * 6.0);
   float tear = vnoise(vec2(vAlong * 1.7, tau * 6.0)) * 0.5 + vnoise(vec2(vAlong * 5.3, v * 30.0)) * 0.5;
-  float edge = smoothstep(0.36, 0.45, v + tear * 0.05) * (1.0 - smoothstep(0.5, 0.58, v - tear * 0.06)) * smoothstep(0.12, 0.45, tau);
+  // The white rim belongs to the lip's last few centimetres. A broad band over both sides
+  // of the lip hid the clear face and looked like a white strip before it even landed.
+  float edge = smoothstep(0.415, 0.445, v + tear * 0.018)
+             * (1.0 - smoothstep(0.465, 0.495, v - tear * 0.02))
+             * smoothstep(0.12, 0.45, tau);
   // Feathering: a thin broken fringe along the very top as the crest starts to spill.
   float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
@@ -85901,22 +85928,26 @@ void main() {
   // (v12) It starts where the lip lands, at the foot of the tube, and boils up the face over
   // the next few tenths of a second, its top edge a row of billows: it was the whole face
   // turning white at once, drawn with the face's streaks, which read as a grey comb.
-  float rise = smoothstep(0.6, 0.92, tau);
+  float rise = smoothstep(0.58, 1.0, tau);
   float billow = fbm3(vec2(vAlong * 0.45, v * max(H, 0.5) * 1.3) + vec2(tau * 0.6, -tau * 2.2)) * 0.7
                + vnoise(vec2(vAlong * 1.6, v * max(H, 0.5) * 4.0) + vec2(0.0, -tau * 4.0)) * 0.3;
-  float impactTop = mix(0.72, 0.27, rise) - (billow - 0.5) * 0.12;
-  float impact = smoothstep(0.6, 0.7, tau) * smoothstep(impactTop - 0.05, impactTop + 0.05, v);
+  float impactTop = mix(0.73, 0.28, rise) - (billow - 0.5) * 0.18;
+  float impact = smoothstep(0.60, 0.82, tau) * smoothstep(impactTop - 0.085, impactTop + 0.085, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
-  float amount = clamp(max(max(edge * (0.55 + 0.6 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
+  float amount = clamp(max(max(edge * (0.5 + 0.4 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
   if (amount > 0.002) foam = max(faceFoam(rp, tau, amount * (1.0 - impact)), smoothstep(0.92, 1.0, amount * (1.0 - impact)));
   // (v12) The impact's white water: dense in the middle of each billow, thinning at its edges
   // (it was cut out of the water with hard edges).
   if (impact > 0.002) {
-    float soft = clamp(fwidth(billow) * 2.0, 0.04, 0.2);
-    foam = max(foam, smoothstep(0.35 - soft, 0.62 + soft, billow + impact * 0.55 - 0.1) * uFoam);
+    float soft = clamp(fwidth(billow) * 2.0, 0.05, 0.2);
+    float brokenUp = smoothstep(0.5 - soft, 0.78 + soft, billow + impact * 0.15 - 0.08);
+    // Keep water visible between the billows, especially at the lower edge where the
+    // ribbon hands the white water to the sea's bore. A solid white strip exposed the seam.
+    float lowerFade = 1.0 - smoothstep(0.72, 0.82, v);
+    foam = max(foam, brokenUp * impact * uFoam * lowerFade);
   }
   // The foam already on the water here (the simulation's, drawn as the sea draws it, in map
   // coordinates, so the lace lines up where the ribbon meets the sea).
@@ -91385,6 +91416,104 @@ const { loadSurfaceTextures } = __m["src/terrain/surface-textures.js"];
 
 const srgbGain = (s) => s.target.map((t, i) => Math.pow(t, 2.2) / Math.pow(s.avg[i], 2.2));
 
+// A cord lashing (v13): what one joint of a bamboo rail is tied with, in two parts (geometry.js has
+// the frames). The cord is thin, a 5 mm nylon line, where v6 to v12 had a smooth blue collar 7 cm
+// tall. aTrail carries the angle round the cord and the metres along it, for the twist in the
+// shader.
+//   'post'  turns round the post just above and below the rail (post radius about 0.04, the
+//           rail's axis 0.055 out from the post's), and a knot on the inside of the path with two
+//           loose ends hanging from it,
+//   'rail'  a spiral of turns round the rail on each side of the post, wound at the cord's own
+//           pitch, so they read on the front of the rail, where the post's turns are hidden.
+// Each in three variants, a turn or two different.
+function lashingGeometry(kind, variant) {
+  let seed = 9173 + variant * 4409 + (kind === 'rail' ? 77 : 0);
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const pos = [], nrm = [], tr = [], idx = [];
+  const tube = (path, radius, radial) => {
+    const n = path.length, base = pos.length / 3;
+    // Frames along the path by parallel transport.
+    const tan = path.map((p, i) => {
+      const a = path[Math.max(0, i - 1)], b = path[Math.min(n - 1, i + 1)];
+      const t = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...t) || 1;
+      return t.map((v) => v / l);
+    });
+    let N = Math.abs(tan[0][1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let along = 0;
+    for (let i = 0; i < n; i++) {
+      const t = tan[i];
+      const d = N[0] * t[0] + N[1] * t[1] + N[2] * t[2];
+      N = [N[0] - t[0] * d, N[1] - t[1] * d, N[2] - t[2] * d];
+      const nl = Math.hypot(...N) || 1; N = N.map((v) => v / nl);
+      const B = [t[1] * N[2] - t[2] * N[1], t[2] * N[0] - t[0] * N[2], t[0] * N[1] - t[1] * N[0]];
+      if (i > 0) along += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1], path[i][2] - path[i - 1][2]);
+      for (let j = 0; j < radial; j++) {
+        const a = (j / radial) * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+        const nx = N[0] * c + B[0] * s2, ny = N[1] * c + B[1] * s2, nz = N[2] * c + B[2] * s2;
+        pos.push(path[i][0] + nx * radius, path[i][1] + ny * radius, path[i][2] + nz * radius);
+        nrm.push(nx, ny, nz);
+        tr.push(a, along, 0, 9);
+      }
+    }
+    for (let i = 0; i + 1 < n; i++) {
+      for (let j = 0; j < radial; j++) {
+        const a = base + i * radial + j, b = base + i * radial + (j + 1) % radial;
+        const c = base + (i + 1) * radial + (j + 1) % radial, d = base + (i + 1) * radial + j;
+        idx.push(a, d, c, a, c, b);
+      }
+    }
+  };
+  const cord = 0.0028, TAU = Math.PI * 2;
+  if (kind === 'post') {
+    // Rings round the post, three above the rail and two or three below, each a little tilted,
+    // a little bigger or smaller, and not quite closed: the end runs on past the start.
+    const nAbove = [2, 3, 2][variant], nBelow = [2, 2, 3][variant];
+    const ring = (y0, k) => {
+      const R = 0.0432 + (rnd() - 0.5) * 0.0026, ph = rnd() * TAU, tilt = (rnd() - 0.5) * 0.007;
+      const path = [];
+      for (let j = 0; j <= 11; j++) {
+        const th = ph + (j / 10) * TAU;
+        path.push([R * Math.cos(th), y0 + tilt * Math.sin(th) + 0.0011 * Math.sin(3 * th + k), R * Math.sin(th)]);
+      }
+      tube(path, cord * (0.92 + 0.16 * rnd()), 3);
+    };
+    for (let i = 0; i < nAbove; i++) ring(0.0335 + i * 0.0058 + (rnd() - 0.5) * 0.0012, i);
+    for (let i = 0; i < nBelow; i++) ring(-(0.0335 + i * 0.0058) + (rnd() - 0.5) * 0.0012, i + 5);
+    // The knot on the inside face of the top turn, and the two ends.
+    const ka = Math.PI / 2 + (variant - 1) * 0.5 + (rnd() - 0.5) * 0.3, R = 0.0475;
+    const kx = R * Math.cos(ka), kz = R * Math.sin(ka), ky = 0.0335 + (nAbove - 1) * 0.0058;
+    tube([[kx - 0.006, ky, kz - 0.001], [kx, ky + 0.0015, kz + 0.002], [kx + 0.006, ky, kz - 0.001]], 0.0052, 5);
+    tube([[kx - 0.003, ky - 0.004, kz + 0.002], [kx + 0.002, ky + 0.003, kz + 0.003], [kx + 0.004, ky - 0.002, kz]], 0.0042, 5);
+    for (let e = 0; e < 2; e++) {
+      const L = (e === 0 ? 0.075 : 0.038) * (0.7 + 0.6 * rnd()), side = e === 0 ? 1 : -1;
+      const path = [];
+      for (let j = 0; j <= 5; j++) {
+        const t = j / 5;
+        path.push([kx + side * (0.003 + 0.012 * t * t) + (rnd() - 0.5) * 0.0015, ky - 0.004 - L * t, kz + 0.004 + 0.045 * Math.sin(t * 2.0) * (0.75 + 0.25 * e)]);
+      }
+      tube(path, 0.0023, 3);
+    }
+  } else {
+    // A spiral round the rail, from just clear of the post outward, on each side.
+    const nA = [2, 3, 2][variant], nB = [2, 2, 3][variant], pitch = 0.0057;
+    for (const [sgn, n] of [[1, nA], [-1, nB]]) {
+      const path = [], seg = 10, R0 = 0.0287, ph = rnd() * TAU;
+      for (let j = 0; j <= n * seg; j++) {
+        const th = ph + (j / seg) * TAU;
+        const R = R0 + 0.0007 * Math.sin(2.1 * th + variant);
+        path.push([sgn * (0.052 + pitch * (j / seg)), R * Math.sin(th), R * Math.cos(th)]);
+      }
+      tube(path, cord * (0.94 + 0.12 * rnd()), 3);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aTrail', new THREE.Float32BufferAttribute(tr, 4));
+  g.setIndex(idx);
+  return g;
+}
+
 function patch(src, find, repl) {
   const n = src.split(find).length - 1;
   if (n !== 1) throw new Error(`trail shader patch matched ${n} times: ${find.slice(0, 60)}`);
@@ -91413,6 +91542,24 @@ vLocalN = normal;
   vScale = sc;
   vRot = mat3(instanceMatrix[0].xyz / sc.x, instanceMatrix[1].xyz / sc.y, instanceMatrix[2].xyz / sc.z);
   vRand = aRand;
+#ifdef TR_BAMBOO
+  {
+    // (v13) A bamboo pole is not a ruler: fatter at the foot and thinner at the top, bowed a
+    // centimetre or two whichever way it grew, and cut on a slant where it was sawn.
+    float hy = position.y + 0.5;
+#ifdef BAMBOO_POST
+    float taper = mix(1.1, 0.9, hy);
+#else
+    float taper = mix(1.03, 0.97, hy);
+#endif
+    float ang = aRand * 37.0;
+    vec2 bow = vec2(cos(ang), sin(ang)) * (0.012 + 0.014 * fract(aRand * 7.3)) * sin(3.14159 * hy) / max(sc.x, 1e-3);
+    transformed.xz = transformed.xz * taper + bow;
+    // The cut: the top face tilted about 25 degrees, toward a direction of its own.
+    float cutA = aRand * 91.0;
+    transformed.y += step(0.499, position.y) * 0.47 * sc.x / max(sc.y, 1e-3) * (cos(cutA) * position.x + sin(cutA) * position.z);
+  }
+#endif
 #else
   vLocal = position;
   vScale = vec3(1.0);
@@ -91615,7 +91762,9 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   // (v10) Loose soil at the back of each tread, darker and browner.
   if (vTrail.z < 0.5) {
     col *= mix(vec3(0.7, 0.62, 0.52), vec3(1.0), smoothstep(0.03, 0.16, vTrail.w + 0.05 * (n1 - 0.5)));
-    trSelf = smoothstep(0.05, 0.08, vTrail.w + 0.03 * (n1 - 0.5));
+    // (v13: a floor of 0.3. The nosing shades the foot of the riser, but the sun has a width and the
+    // soil there is lit by the sky and by light off the risers: it was a pure black strip.)
+    trSelf = mix(0.3, 1.0, smoothstep(0.035, 0.09, vTrail.w + 0.03 * (n1 - 0.5)));
   }
 #elif defined(TR_WOOD)
 #ifdef LOG
@@ -91642,16 +91791,25 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
 #endif
 #elif defined(TR_BAMBOO)
   // Bamboo poles: straw to grey-green, glossy between the nodes, a ring every 25 to 40 cm.
+  // (v13: the rings stand up, dark, with the pole a shade paler above each; fine fibres run along it,
+  // and here and there a split.)
   float along = vLocal.y + vRand * 3.0;
   float seg = 0.25 + 0.15 * vRand;
-  float node = 1.0 - smoothstep(0.004, 0.02, abs(fract(along / seg) - 0.5) * seg);   // metres to the ring
-  float streak = tn(vec2(along * 3.0, atan(vLocal.x, vLocal.z) * 6.0));
+  float ang = atan(vLocal.x, vLocal.z);
+  float sd = (fract(along / seg) - 0.5) * seg;                       // metres to the ring, signed
+  float node = 1.0 - smoothstep(0.003, 0.016, abs(sd));
+  float streak = tn(vec2(along * 3.0, ang * 6.0));
+  float fib = tn(vec2(along * 1.6, ang * 11.0)) * 0.6 + tn(vec2(along * 5.0 + 3.0, ang * 27.0)) * 0.4;
   // Mostly weathered to grey-tan; the odd newer pole still straw coloured.
   vec3 fresh = lin(vec3(0.66, 0.57, 0.36)), old = lin(vec3(0.5, 0.48, 0.41));
-  col = mix(fresh, old, smoothstep(0.15, 0.45, vRand)) * (0.8 + 0.3 * streak);
+  col = mix(fresh, old, smoothstep(0.15, 0.45, vRand)) * (0.78 + 0.28 * streak) * (0.86 + 0.28 * fib);
   col *= mix(vec3(1.0), vec3(0.7, 0.68, 0.62), smoothstep(0.55, 0.8, tn(vec2(along * 1.7, vRand * 30.0))) * 0.6);   // grime
-  col *= 1.0 - 0.35 * node;
-  trRough = mix(0.45, 0.8, vRand);
+  col *= 1.0 - 0.5 * node;
+  col *= mix(1.0, 1.08, smoothstep(0.0, 0.05, sd) * (1.0 - smoothstep(0.05, 0.13, sd)));
+  float split = smoothstep(0.9, 0.96, tn(vec2(along * 0.8 + 5.0, ang * 2.5 + vRand * 40.0)));
+  col *= 1.0 - 0.45 * split * smoothstep(0.35, 0.0, abs(fract(along * 0.5) - 0.5));
+  trNormal = normalize(N + vRot * vec3(0.0, sign(sd) * node * 0.5 * smoothstep(0.0, 0.004, abs(sd)) + (fib - 0.5) * 0.0, 0.0));
+  trRough = mix(0.45, 0.8, vRand) + 0.15 * node;
 #elif defined(TR_STONE)
   // (v10) Loose limestone: pale and dusty grey, pitted, each stone its own shade, stained with
   // soil where it sits in the ground.
@@ -91664,10 +91822,16 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   col = mix(col, col * vec3(0.66, 0.56, 0.44), soil * 0.8);
   trRough = 0.85;
 #elif defined(TR_ROPE)
-  // Blue rope, the nylon kind, faded by the sun, wound round in strands.
-  float tw = sin((vLocal.y * 60.0 + atan(vLocal.x, vLocal.z) * 2.0) * 1.0);
-  col = lin(mix(vec3(0.12, 0.32, 0.72), vec3(0.3, 0.48, 0.72), vRand)) * (0.8 + 0.2 * tw);
-  trRough = 0.7;
+  // (v13) The blue nylon cord of trail-mid-descent-b.jpg: a saturated cyan-blue, the sun-faded
+  // ones paler and greyer, three strands twisted (diagonal stripes along it: a turn every 8 mm),
+  // dusty where it lies against the post. vTrail: the angle round the cord and metres along it.
+  float ph = vTrail.y * 785.0 + vTrail.x * 2.0;
+  float tw = sin(ph);
+  tw = mix(tw, 0.0, smoothstep(1.0, 3.0, fwidth(ph)));
+  vec3 fresh = lin(vec3(0.03, 0.46, 0.70)), faded = lin(vec3(0.24, 0.52, 0.62));
+  col = mix(fresh, faded, smoothstep(0.25, 0.9, vRand)) * (0.86 + 0.16 * tw);
+  col *= mix(vec3(1.0), vec3(0.72, 0.68, 0.62), 0.5 * tn(vLocal.xy * 90.0 + vRand * 20.0));
+  trRough = 0.62;
 #endif
   if (uClayT > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); trNormal = N; trRough = 0.93; }
   return col;
@@ -91735,14 +91899,15 @@ function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {}) {
 
   const mats = {
     concrete: material('concrete'), dirt: material('dirt'), timber: material('wood'), log: material('wood', { LOG: 1 }),
-    bamboo: material('bamboo'), rope: material('rope'), stone: material('stone'),
+    bamboo: material('bamboo'), bambooPost: material('bamboo', { BAMBOO_POST: 1 }), rope: material('rope'), stone: material('stone'),
   };
   const group = new THREE.Group();
   group.name = 'trail';
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
-  const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 1, false);
-  const unitRope = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+  const unitCylRail = new THREE.CylinderGeometry(1, 1, 1, 10, 6, false);   // (bamboo rails: bowed in the vertex shader)
+  const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 10, false);
+  const lashPostGeo = [0, 1, 2].map((v) => lashingGeometry('post', v)), lashRailGeo = [0, 1, 2].map((v) => lashingGeometry('rail', v));
   // (v10) A stone: a faceted, lumpy ball, flat underneath, about 1 across. Limestone breaks
   // into angular pieces, so its facets stay (no smoothing across them).
   const unitStone = (() => {
@@ -91769,8 +91934,41 @@ function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {}) {
     group.add(p);
   };
 
+  // (v13) The cord lashings, of which only those near the camera are given to the GPU. A lashing is
+  // a few hundred tiny triangles (a 5 mm cord in turns and a knot), and 756 of them stand along
+  // the descent: from the beach, with all of it in view, they cost 2 ms a frame, and past 40 m the
+  // cord is a tenth of a pixel. (Culling in the vertex shader saved nothing, it still ran for every
+  // vertex.) Each mesh keeps all its matrices and copies the near ones in when the camera has
+  // moved 3 m.
+  const lashing = [];
+  const LASH_FAR = 40, LASH_STEP = 3;
+  let lashAt = null;
+  function cullLashings(camera, force = false) {
+    if (!lashing.length) return;
+    const p = camera.position;
+    if (!force && lashAt && Math.hypot(p.x - lashAt.x, p.y - lashAt.y, p.z - lashAt.z) < LASH_STEP) return;
+    lashAt = p.clone();
+    const far2 = (LASH_FAR + LASH_STEP) * (LASH_FAR + LASH_STEP);
+    for (const L of lashing) {
+      const src = L.all, dst = L.mesh.instanceMatrix.array, rnd = L.mesh.geometry.getAttribute('aRand').array;
+      let n = 0;
+      for (let i = 0; i < L.count; i++) {
+        const o = i * 16, dx = src[o + 12] - p.x, dy = src[o + 13] - p.y, dz = src[o + 14] - p.z;
+        if (dx * dx + dy * dy + dz * dz > far2) continue;
+        dst.set(src.subarray(o, o + 16), n * 16);
+        rnd[n] = L.rand[i];
+        n++;
+      }
+      L.mesh.count = n;
+      L.mesh.instanceMatrix.needsUpdate = true;
+      L.mesh.geometry.getAttribute('aRand').needsUpdate = true;
+    }
+  }
+
   function update(data) {
-    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitRope && c.geometry !== unitStone && c.geometry.dispose(); }
+    lashing.length = 0;
+    lashAt = null;
+    for (const c of [...group.children]) { group.remove(c); c.geometry !== unitBox && c.geometry !== unitCyl && c.geometry !== unitCylFine && c.geometry !== unitCylRail && c.geometry !== unitStone && c.geometry.dispose(); }
     if (!data) return;
     for (const k of ['concrete', 'dirt']) {
       const d = data.meshes[k];
@@ -91796,19 +91994,26 @@ function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {}) {
       m.name = 'trail-' + k;
       group.add(m);
       if (prepass) withPrepass(m);
+      if (k.startsWith('lash')) lashing.push({ mesh: m, all: d.matrices.slice(), rand: d.rand.slice(), count: d.count });   // (copies: the mesh's own buffers are d.matrices and d.rand)
     };
     inst('logs', unitCyl, mats.log);
     // (No depth pass for the stones: they are small, and cover little of anything.)
     if (data.inst.stones) inst('stones', unitStone, mats.stone, false);
     inst('timberPosts', unitBox, mats.timber);
     inst('timberRails', unitBox, mats.timber);
-    inst('bambooPosts', unitCylFine, mats.bamboo);
-    inst('bambooRails', unitCyl, mats.bamboo);
-    inst('rope', unitRope, mats.rope);
+    // (v13: no depth pass for the bamboo. The poles are bowed and tapered in the vertex shader, and
+    // the pass draws them straight: where the real pole was behind that depth, nothing was drawn.)
+    inst('bambooPosts', unitCylFine, mats.bambooPost, false);
+    inst('bambooRails', unitCylRail, mats.bamboo, false);
+    // (Three variants of each part of the lashing, no depth pass: a few millimetres of cord.)
+    for (let v = 0; v < 3; v++) {
+      if (data.inst['lashPost' + v]) inst('lashPost' + v, lashPostGeo[v], mats.rope, false);
+      if (data.inst['lashRail' + v]) inst('lashRail' + v, lashRailGeo[v], mats.rope, false);
+    }
     // Where the sections change, for the dirt's colour (metres along).
     uniforms.uSections.value.set(...data.sectionEnds);
   }
-  return { group, update, uniforms, materials: mats, ready };
+  return { group, update, cullLashings, uniforms, materials: mats, ready };
 }
 
 return { "createTrail": createTrail };
@@ -92412,6 +92617,7 @@ function createApp({ params, capture = false, keepBuffer = false, maxPixelRatio 
   function renderFrame() {
     // The plants near the camera are picked for where it is now (near.js).
     if (plants) plants.update(hf?.extent, camera, simTime);
+    trail.cullLashings(camera);
     atmosphere.update(camera);
     if (sky.visible && skyDome.material.uniforms.uHasClouds.value && skyInView()) clouds.render(simTime, camera);
     renderer.render(scene, camera);
@@ -94372,7 +94578,7 @@ __m["src/trail/geometry.js"] = (function () {
 //   logs     a log laid across each dirt riser, the top of it at the upper tread,
 //   posts and rails  the handrail on both sides: sawn timber (square posts, two plank rails)
 //            on the concrete steps and the ridge, bamboo lashed with blue rope lower down,
-//   rope     the lashings,
+//   lashings the cord lashings at every joint of the bamboo rails (v13),
 //   stones   loose limestone on the treads and the verges (v10).
 //
 // (v10) Nothing laid by hand on a cliff path stays ruler straight: each tread sits a little
@@ -94411,7 +94617,8 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   }
 
   // ---------------------------------------------------------------- treads
-  const concrete = mesh(), dirt = mesh();
+  // (v13: the dirt is smooth-shaded across its shared positions, see mesh().)
+  const concrete = mesh(), dirt = mesh(true);
   const noise = makeNoise(seed + 3);
   // Where to sample a tread: its ends and every route sample between.
   const samplesIn = (a, b) => {
@@ -94486,18 +94693,85 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     if (k < NT - 1 && bnd[k].upper === k && bnd[k].rise > 0.03) d = Math.min(d, tr.s1 - q);
     return d;
   };
+  // ---- (v13) The dirt treads, finer. Each was five or six big flat quads with a razor edge and a
+  // flat riser, which read as polygons (Sam: "too polygon"). Now rows every few centimetres
+  // toward each edge and columns 6 cm apart; the front edge rolled over (the nosing), soil
+  // heaped against the foot of each riser, the riser itself hollowed and lumpy, and the side
+  // banks easing into the ground instead of running down in one plane.
+  const ACROSS_D = Array.from({ length: 11 }, (_, i) => -1 + (2 * i) / 10);
+  const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+  const hasLog = new Array(NT).fill(false);
+  const bevel = (b, a, d) => {
+    const rise = bnd[b].rise;
+    if (rise < 0.05) return 0;
+    // (Where a log lies along the edge the soil comes up to it, and there is little to round.)
+    const rb = Math.min(0.052, rise * 0.32) * (hasLog[b] ? 0.25 : 1) * (0.75 + 0.25 * noise(b * 3.1 + 5, a * 2.3));
+    if (d >= rb) return 0;
+    const u = Math.min(Math.max((rb - d) / rb, 0), 1);
+    return rb * (1 - Math.sqrt(1 - u * u));
+  };
+  const fillet = (b, a, d) => {
+    const rise = bnd[b].rise;
+    if (rise < 0.05 || d >= 0.13) return 0;
+    const hMax = Math.min(0.036, rise * 0.15) * (0.7 + 0.3 * noise(b * 2.7 + 8, a * 1.9)) * (hasLog[b] ? 1.3 : 1);
+    const u = 1 - d / 0.13;
+    return hMax * u * u;
+  };
+  const vertAtDirt = (k, q, a) => {
+    const tr = TR[k], f = frame(q), hw = f.w / 2;
+    const dF = q - tr.s0, dL = tr.s1 - q;
+    // (Only the nearer boundary counts, so a short tread's two ends never meet in its middle.)
+    const b = dF <= dL ? k - 1 : k, d = Math.min(dF, dL);
+    let along = 0, drop = 0, heap = 0;
+    if (b >= 0 && b < NT - 1) {
+      const w = 1 - smooth(0, 0.14, d);
+      along = edgeOff(b, a) * w;
+      if (bnd[b].upper === k) drop = edgeDrop(b, a) * w + bevel(b, a, d);
+      else heap = fillet(b, a, d);
+    }
+    const px = f.x + f.nx * a * hw + f.tx * along, py = f.y + f.ny * a * hw + f.ty * along;
+    const dh = jit[k].tilt * a - 0.035 * (1 - a * a) + 0.02 * noise(px * 2.1, py * 2.1) + 0.01 * noise(px * 7.3 + 5, py * 7.3)
+      + 0.007 * noise(px * 11 + 3, py * 11 + 9);
+    return [px, levelAt(k, q) + dh - drop + heap, py, a];
+  };
+  // Rows of a dirt tread: the route's samples, and closer together toward both ends.
+  const denseRows = (a, b) => {
+    // (The route's samples are 25 cm apart: kept only every second one in the middle of a tread.)
+    const all = samplesIn(a, b), keep = all.filter((v, i) => i === 0 || i === all.length - 1 || i % 2 === 0);
+    const set = new Set(keep.map((v) => +v.toFixed(5)));
+    for (const d of [0.03, 0.075, 0.14]) {
+      if (d < (b - a) / 2 - 0.01) { set.add(+(a + d).toFixed(5)); set.add(+(b - d).toFixed(5)); }
+    }
+    return [...set].sort((x, y) => x - y);
+  };
+  // From a tread's edge vertex V out to the ground, in two steps that roll off the edge and
+  // then run with the ground (it was a straight ramp).
+  const skirtPts = (V, f, side) => {
+    const out = [V];
+    for (const t of [0.4, 1]) {
+      const ox = V[0] + f.nx * side * SKIRT * t, oy = V[2] + f.ny * side * SKIRT * t;
+      const g = Math.min(heightAt(ox, oy), V[1]) - 0.07 * t;
+      const e = t * t * (3 - 2 * t);
+      out.push([ox, V[1] + (g - V[1]) * (0.35 * t + 0.65 * e) + 0.012 * noise(ox * 3.1 + 3, oy * 3.1) * 4 * t * (1 - t), oy, side * (1 + 0.3 * t)]);
+    }
+    return out;
+  };
   const logs = instances();
   for (let k = 0; k < NT; k++) {
     const tr = TR[k];
     if (tr.s1 - tr.s0 < 1e-4) continue;
     const isC = isConcrete(k);
+    // (v13) Whether a log lies along the riser at the end of this tread, worked out first (the
+    // nosing depends on it): the same draw, at the same place in the sequence, as before.
+    const logHere = !isC && k < NT - 1 && bnd[k].rise >= 0.12 && rand() < 0.55;
+    hasLog[k] = logHere;
     const M = isC ? concrete : dirt;
-    const qs = samplesIn(tr.s0, tr.s1);
+    const qs = isC ? samplesIn(tr.s0, tr.s1) : denseRows(tr.s0, tr.s1);
     // Across the tread: concrete flat, dirt a little dished where feet wear it, and lumpy.
-    const across = isC ? [-1, -0.5, 0, 0.5, 1] : [-1, -0.6, -0.2, 0.2, 0.6, 1];
+    const across = isC ? [-1, -0.5, 0, 0.5, 1] : ACROSS_D;
     const rows = qs.map((q, qi) => {
       const f = frame(q), role = qi === 0 ? 'first' : qi === qs.length - 1 ? 'last' : 'mid';
-      return { q, f, back: backDist(k, q), front: frontDist(k, q), verts: across.map((a) => vertAt(k, q, a, role)) };
+      return { q, f, back: backDist(k, q), front: frontDist(k, q), verts: across.map((a) => (isC ? vertAt(k, q, a, role) : vertAtDirt(k, q, a))) };
     });
     // Top surface.
     for (let r = 0; r + 1 < rows.length; r++) {
@@ -94519,13 +94793,11 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
           if (side > 0) M.quad(ea, eb, [...wall[1], 1], [...wall[0], 1], [1, A.q, 9], [1, B.q, 9]);
           else M.quad(ea, [...wall[0], -1], [...wall[1], -1], eb, [1, A.q, 9], [1, B.q, 9]);
         } else {
-          const out = (V, row) => {
-            const ox = V[0] + row.f.nx * side * SKIRT, oy = V[2] + row.f.ny * side * SKIRT;
-            return [ox, Math.min(heightAt(ox, oy), V[1]) - 0.07, oy, side * 1.3];
-          };
-          const oa = out(ea, A), ob = out(eb, B);
-          if (side > 0) M.quad(ea, eb, ob, oa, [2, A.q, 9], [2, B.q, 9]);
-          else M.quad(ea, oa, ob, eb, [2, A.q, 9], [2, B.q, 9]);
+          const sa = skirtPts(ea, A.f, side), sb = skirtPts(eb, B.f, side);
+          for (let j = 0; j + 1 < sa.length; j++) {
+            if (side > 0) M.quad(sa[j], sb[j], sb[j + 1], sa[j + 1], [2, A.q, 9], [2, B.q, 9]);
+            else M.quad(sa[j], sa[j + 1], sb[j + 1], sb[j], [2, A.q, 9], [2, B.q, 9]);
+          }
         }
       }
     }
@@ -94535,28 +94807,61 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       const f = frame(tr.s1);
       const up = bnd[k].upper, lo = up === k ? k + 1 : k;
       const dir = up === k ? 1 : -1;   // which way the riser faces along the line
-      const tops = across.map((a) => vertAt(up, tr.s1, a, up === k ? 'last' : 'first'));
-      const bots = across.map((a) => { const v = vertAt(lo, tr.s1, a, lo === k ? 'last' : 'first'); return [v[0], v[1] - (isC ? 0 : 0.03), v[2], a]; });
-      for (let c = 0; c + 1 < across.length; c++) {
-        const va = tops[c], vb = tops[c + 1], vc = bots[c + 1], vd = bots[c];
-        if (dir > 0) M.quad(va, vd, vc, vb, [3, tr.s1, 9], [3, tr.s1, 9]);
-        else M.quad(va, vb, vc, vd, [3, tr.s1, 9], [3, tr.s1, 9]);
-      }
-      // The dirt skirts of the two treads meet the riser at different heights: close the gap.
-      if (!isC) {
+      const tops = across.map((a) => (isC ? vertAt(up, tr.s1, a, up === k ? 'last' : 'first') : vertAtDirt(up, tr.s1, a)));
+      const bots = across.map((a) => { const v = isC ? vertAt(lo, tr.s1, a, lo === k ? 'last' : 'first') : vertAtDirt(lo, tr.s1, a); return [v[0], v[1] - (isC ? 0 : 0), v[2], a]; });   // (v13: the dirt riser's foot is the tread's own edge exactly, it was 1 cm under, and the bank's seam showed as a hairline)
+      if (isC) {
+        for (let c = 0; c + 1 < across.length; c++) {
+          const va = tops[c], vb = tops[c + 1], vc = bots[c + 1], vd = bots[c];
+          if (dir > 0) M.quad(va, vd, vc, vb, [3, tr.s1, 9], [3, tr.s1, 9]);
+          else M.quad(va, vb, vc, vd, [3, tr.s1, 9], [3, tr.s1, 9]);
+        }
+      } else {
+        // The dirt riser: six rows down, hollowed a little under the nosing and lumpy, from the
+        // rolled edge to the heaped foot.
+        const RR = 4, rr = [];
+        for (let i = 0; i <= RR; i++) {
+          const t = i / RR, w = Math.sin(Math.PI * t);
+          rr.push(tops.map((tp, c) => {
+            const bt = bots[c], a = across[c];
+            const off = dir * (-0.016 * w + 0.016 * w * noise(a * 4.3 + k * 9.1, t * 2.7 + 3));
+            return [tp[0] + (bt[0] - tp[0]) * t + f.tx * off, tp[1] + (bt[1] - tp[1]) * t, tp[2] + (bt[2] - tp[2]) * t + f.ty * off, a];
+          }));
+        }
+        for (let i = 0; i < RR; i++) {
+          for (let c = 0; c + 1 < across.length; c++) {
+            const va = rr[i][c], vb = rr[i][c + 1], vc = rr[i + 1][c + 1], vd = rr[i + 1][c];
+            if (dir > 0) M.quad(va, vd, vc, vb, [3, tr.s1, 9], [3, tr.s1, 9]);
+            else M.quad(va, vb, vc, vd, [3, tr.s1, 9], [3, tr.s1, 9]);
+          }
+        }
+        // The dirt skirts of the two treads meet the riser at different heights: close the gap,
+        // along the same four steps as the skirts, from every row of the riser's own edge (which
+        // bows in and out, so a fill hung from its two ends left a hairline).
         for (const side of [-1, 1]) {
           const ci = side < 0 ? 0 : across.length - 1;
-          const t1 = tops[ci], t2 = bots[ci];
-          const ox = t1[0] + f.nx * side * SKIRT, oy = t1[2] + f.ny * side * SKIRT;
-          const og = Math.min(heightAt(ox, oy), t2[1]) - 0.07;
-          M.tri(t1, t2, [ox, og, oy, side * 1.3], [2, tr.s1, 9]);
+          for (let i = 0; i < RR; i++) {
+            const sa = skirtPts(rr[i][ci], f, side), sb = skirtPts(rr[i + 1][ci], f, side);
+            for (let j = 0; j + 1 < sa.length; j++) {
+              // (Facing out of the bank, whichever way round the two treads are.)
+              const q4 = [sa[j], sa[j + 1], sb[j + 1], sb[j]];
+              const A0 = q4[0], A1 = q4[1], B0 = q4[3];
+              const u = [A1[0] - A0[0], A1[1] - A0[1], -(A1[2] - A0[2])], v = [B0[0] - A0[0], B0[1] - A0[1], -(B0[2] - A0[2])];
+              const cr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+              const outward = cr[0] * f.nx * side + cr[2] * -f.ny * side + cr[1] * 0.3;
+              if (outward > 0) M.quad(q4[0], q4[1], q4[2], q4[3], [2, tr.s1, 9], [2, tr.s1, 9]);
+              else M.quad(q4[0], q4[3], q4[2], q4[1], [2, tr.s1, 9], [2, tr.s1, 9]);
+            }
+          }
         }
       }
       // A log holds about half of the dirt risers: knocked askew, broken or rotted now and then,
       // some pegged at the ends.
       const rise = bnd[k].rise;
-      if (!isC && rise >= 0.12 && rand() < 0.55) {
-        const hi = tops[Math.floor(across.length / 2)][1] + 0.012;
+      if (logHere) {
+        // (v13) It rests on the highest point of the edge across the tread: the tread is dished, so
+        // its edges stand a few centimetres above the middle, and a log set to the middle was buried
+        // at both ends and came out a wedge.
+        const hi = Math.max(...tops.map((t) => t[1])) + 0.006;
         const along0 = edgeOff(k, 0);
         const r = 0.045 + 0.03 * rand();
         const kind = rand();
@@ -94623,7 +94928,11 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   const onPad = (x, y, m) => (spec.pads ?? []).some((q) => padDistance(q, x, y) < m);
 
   // ---------------------------------------------------------------- handrails
-  const timberPosts = instances(), timberRails = instances(), bambooPosts = instances(), bambooRails = instances(), rope = instances();
+  const timberPosts = instances(), timberRails = instances(), bambooPosts = instances(), bambooRails = instances();
+  // (v13) The cord lashings, in two parts (trail.js): turns round the post, above and below the
+  // rail, with the knot and the loose ends, and turns round the rail either side of the post.
+  // Three variants of each, so they are not all the same.
+  const lashPost = [instances(), instances(), instances()], lashRail = [instances(), instances(), instances()];
   // Is (px, py) on or right beside another stretch of the path (a hairpin's other leg)?
   const clashes = (px, py, q) => {
     let hit = false;
@@ -94631,7 +94940,7 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     return hit;
   };
   for (const side of [-1, 1]) {
-    let q = 0.4 + rand() * 0.5, prev = null;
+    let q = 0.4 + rand() * 0.5, prev = null, span = 0;
     while (q < R.length - 1.2) {
       const sec = kindAt(q), bamboo = sec.rails === 'bamboo';
       const f = frame(q);
@@ -94647,7 +94956,7 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       const broken = rand() < (bamboo ? 0.03 : 0.04);
       const height = broken ? 0.45 + 0.25 * rand() : (bamboo ? 0.95 + 0.12 * (rand() - 0.5) : 1.02 + 0.06 * (rand() - 0.5));
       const topH = f.hd + height;
-      const post = { q, x: px, y: py, top: topH, hd: f.hd, bamboo, broken, height, lean: bamboo ? [(rand() - 0.5) * 0.09, (rand() - 0.5) * 0.09] : [(rand() - 0.5) * 0.05, (rand() - 0.5) * 0.05], f };
+      const post = { span: span++, q, x: px, y: py, base, top: topH, hd: f.hd, bamboo, broken, height, lean: bamboo ? [(rand() - 0.5) * 0.09, (rand() - 0.5) * 0.09] : [(rand() - 0.5) * 0.05, (rand() - 0.5) * 0.05], f };
       if (bamboo) {
         const r = 0.032 + 0.01 * rand();
         const bx = px + post.lean[0] * (topH - base), by = py + post.lean[1] * (topH - base);
@@ -94669,17 +94978,29 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
           // (v10) Timber rails sag a little and sit unevenly; the odd one hangs from one end.
           const hang = rand() < 0.03 ? -(0.25 + 0.2 * rand()) : 0;
           const endA = bamboo ? 0 : (rand() - 0.5) * 0.04, endB = bamboo ? 0 : (rand() - 0.5) * 0.04 + (rand() < 0.5 ? hang : 0);
-          const inset = bamboo ? 0.055 : 0.065;
+          // (v13) Where two rails meet at a post they run on past it side by side (they were on the
+          // same line, one through the other): alternate spans lie a rail's width further in.
+          const lane = bamboo ? post.span % 2 : 0;
+          const inset = bamboo ? 0.055 + 0.054 * lane : 0.065;
           const sag = bamboo ? (rand() - 0.5) * 0.08 : 0;
+          // (v13: drawn here, at the same place in the sequence, so the lashings can be sized to it.)
+          const railR = bamboo ? 0.022 + 0.006 * rand() : 0;
           const a = [prev.x + prev.lean[0] * (hr + 0.35) + inX * inset, prev.hd + hr + sag + endA, prev.y + prev.lean[1] * (hr + 0.35) + inY * inset];
           const b = [px + post.lean[0] * (hr + 0.35) + inX * inset, f.hd + hr + sag + endB, py + post.lean[1] * (hr + 0.35) + inY * inset];
           if (bamboo) {
             // Bamboo runs on a little past each post.
             const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d);
             const ext = 0.12 / L;
-            bambooRails.push(cylinderBetween([a[0] - d[0] * ext, a[1] - d[1] * ext, a[2] - d[2] * ext], [b[0] + d[0] * ext, b[1] + d[1] * ext, b[2] + d[2] * ext], 0.022 + 0.006 * rand()), rand());
-            // Blue rope lashing it to the posts.
-            for (const [p, pr] of [[a, prev], [b, post]]) rope.push(cylinderBetween([p[0] - inX * 0.03, p[1] - 0.035, p[2] - inY * 0.03], [p[0] - inX * 0.03, p[1] + 0.035, p[2] - inY * 0.03], (pr.r ?? 0.035) + 0.012), rand());
+            bambooRails.push(cylinderBetween([a[0] - d[0] * ext, a[1] - d[1] * ext, a[2] - d[2] * ext], [b[0] + d[0] * ext, b[1] + d[1] * ext, b[2] + d[2] * ext], railR), rand());
+            // Blue cord lashing it to the posts (v13: turns of thin cord round the joint, a knot and
+            // two loose ends, as in trail-mid-descent-b.jpg. It was a smooth blue collar).
+            for (const [p, pr] of [[a, prev], [b, post]]) {
+              const rr = rand(), variant = Math.min(2, Math.floor(rr * 3));
+              const [mp, mr] = lashingMatrices(p, [inX, inY], pr, [b[0] - a[0], b[1] - a[1], b[2] - a[2]], inset, railR);
+              // (The turns round the post only for the rail next to it.)
+              if (lane === 0) lashPost[variant].push(mp, rr * 3 - variant);
+              lashRail[variant].push(mr, rr * 3 - variant);
+            }
           } else {
             const mid = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1]), 0.5 * (a[2] + b[2])];
             const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -94717,7 +95038,9 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   return {
     concrete: concrete.done(), dirt: dirt.done(),
     logs: logs.done(), stones: stones.done(), timberPosts: timberPosts.done(), timberRails: timberRails.done(),
-    bambooPosts: bambooPosts.done(), bambooRails: bambooRails.done(), rope: rope.done(),
+    bambooPosts: bambooPosts.done(), bambooRails: bambooRails.done(),
+    lashPost0: lashPost[0].done(), lashPost1: lashPost[1].done(), lashPost2: lashPost[2].done(),
+    lashRail0: lashRail[0].done(), lashRail1: lashRail[1].done(), lashRail2: lashRail[2].done(),
     ms: Math.round(performance.now() - t0),
   };
 }
@@ -94728,7 +95051,7 @@ function buildTrailGeometry(route, heightAt, spec, seed = 5) {
 // tread (beyond on a skirt), metres along the line, what the face is (0 tread, 1 concrete
 // side, 2 dirt skirt, 3 riser), and on a tread how far it is from the foot of the riser behind
 // it (v10; 9 for none). Normals are worked out from the faces around each vertex.
-function mesh() {
+function mesh(smooth = false) {
   const pos = [], trail = [], idx = [];
   const add = (v, t) => { pos.push(v[0], v[1], -v[2]); trail.push(v[3] ?? 0, t[1], t[0], t[2] ?? 9); return pos.length / 3 - 1; };
   return {
@@ -94747,13 +95070,48 @@ function mesh() {
         const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
         for (const o of [a, b, c]) { N[o] += nx; N[o + 1] += ny; N[o + 2] += nz; }
       }
+      // (v13) Smooth: every vertex at the same place (to 2 mm) takes the normal of all the faces
+      // there, whatever piece they belong to, so a rounded nosing shades round, and the tread
+      // runs into its riser and its bank without a crease. Every quad has its own vertices, so
+      // without this each is flat shaded. (The concrete keeps its crisp edges.)
+      if (smooth) {
+        const sum = new Map(), key = (o) => Math.round(P[o] * 500) + ',' + Math.round(P[o + 1] * 500) + ',' + Math.round(P[o + 2] * 500);
+        for (let o = 0; o < N.length; o += 3) {
+          const k = key(o);
+          let e = sum.get(k);
+          if (!e) sum.set(k, e = [0, 0, 0]);
+          e[0] += N[o]; e[1] += N[o + 1]; e[2] += N[o + 2];
+        }
+        for (let o = 0; o < N.length; o += 3) { const e = sum.get(key(o)); N[o] = e[0]; N[o + 1] = e[1]; N[o + 2] = e[2]; }
+      }
       for (let o = 0; o < N.length; o += 3) {
         const l = Math.hypot(N[o], N[o + 1], N[o + 2]);
         // (A vertex of degenerate triangles only, at a tight hairpin: straight up.)
         if (l < 1e-9) { N[o] = 0; N[o + 1] = 1; N[o + 2] = 0; continue; }
         N[o] /= l; N[o + 1] /= l; N[o + 2] /= l;
       }
-      return { position: P, normal: N, trail: new Float32Array(trail), index: I };
+      const T = new Float32Array(trail);
+      if (!smooth) return { position: P, normal: N, trail: T, index: I };
+      // (v13) Weld: every quad was given four vertices of its own, so a tread of 11 by 20 quads
+      // sent four times as many vertices through the vertex shader (with its haze lookup) as it
+      // has corners. Corners with the same position, normal and attributes are one vertex.
+      const remap = new Uint32Array(P.length / 3), seen = new Map();
+      const outP = [], outN = [], outT = [];
+      const r5 = (v) => Math.round(v * 1e5);
+      for (let i = 0; i < remap.length; i++) {
+        const key = `${r5(P[i * 3])},${r5(P[i * 3 + 1])},${r5(P[i * 3 + 2])},${r5(T[i * 4])},${r5(T[i * 4 + 1])},${r5(T[i * 4 + 2])},${r5(T[i * 4 + 3])},${r5(N[i * 3])},${r5(N[i * 3 + 1])},${r5(N[i * 3 + 2])}`;
+        let j = seen.get(key);
+        if (j === undefined) {
+          j = outP.length / 3;
+          seen.set(key, j);
+          outP.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+          outN.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
+          outT.push(T[i * 4], T[i * 4 + 1], T[i * 4 + 2], T[i * 4 + 3]);
+        }
+        remap[i] = j;
+      }
+      for (let t = 0; t < I.length; t++) I[t] = remap[I[t]];
+      return { position: new Float32Array(outP), normal: new Float32Array(outN), trail: new Float32Array(outT), index: I };
     },
   };
 }
@@ -94795,6 +95153,43 @@ function boxBetween(a, b, t, sx, sz) {
   ex = ex.map((v) => v / xl);
   const ez = [ex[1] * ey[2] - ex[2] * ey[1], ex[2] * ey[0] - ex[0] * ey[2], ex[0] * ey[1] - ex[1] * ey[0]];
   return compose(ex, ey, ez, [sx, L, sz], [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2]);
+}
+// The two frames of a cord lashing (v13, the shapes are in trail.js). p is where the rail meets the
+// post (map x, h, y), inn the way in (map x, y), d the rail's direction, inset how far the rail's
+// axis is off the post's.
+//   post: origin on the post's axis at the rail's height, y up the post (stretched by 1 / cos of
+//         the rail's slope, so the turns above and below the rail clear it on a steep flight),
+//         x horizontal along the rail, z out toward the inside of the path.
+//   rail: origin on the rail's axis at the post, x along the rail, y across it (up), z toward
+//         the inside of the path.
+function lashingMatrices(p, inn, post, d, inset, railR) {
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+  const inward = [inn[0], 0, -inn[1]];
+  const facing = (ez) => ez[0] * inward[0] + ez[2] * inward[2] >= 0;
+  const ey = norm([post.lean[0], 1, -post.lean[1]]);
+  const dir = norm([d[0], d[1], -d[2]]);
+  // Post frame.
+  const dp = dir[0] * ey[0] + dir[1] * ey[1] + dir[2] * ey[2];
+  let ex = norm([dir[0] - ey[0] * dp, dir[1] - ey[1] * dp, dir[2] - ey[2] * dp]);
+  let ez = cross(ex, ey);
+  if (!facing(ez)) { ex = ex.map((v) => -v); ez = cross(ex, ey); }
+  const cosA = Math.max(Math.sqrt(1 - dp * dp), 0.55);
+  // Sized to this post at this height (the pole tapers, trail.js) and to this rail.
+  const hy = Math.min(Math.max((p[1] - post.base) / (post.top - post.base), 0), 1);
+  const sp = ((post.r ?? 0.036) * (1.1 - 0.2 * hy) + 0.0045) / 0.0435;
+  const sy = (railR + 0.0055) / (0.0335 * cosA);
+  const c = [p[0] - inn[0] * inset, p[1], -(p[2] - inn[1] * inset)];
+  const matP = compose(ex, ey, ez, [sp, sy, sp], c);
+  // Rail frame.
+  let rx = dir;
+  const ry0 = [ey[0] - rx[0] * dp, ey[1] - rx[1] * dp, ey[2] - rx[2] * dp];
+  const ry = norm(ry0);
+  let rz = cross(rx, ry);
+  if (!facing(rz)) { rx = rx.map((v) => -v); rz = cross(rx, ry); }
+  const sr = (railR + 0.0038) / 0.0287;
+  const matR = compose(rx, ry, rz, [sr, sr, sr], [p[0], p[1], -p[2]]);
+  return [matP, matR];
 }
 // A stone at c (map x, h, y): turned by yaw about the vertical, tipped by tilt, sized s.
 function stoneMatrix(c, yaw, tilt, s) {
@@ -95145,7 +95540,7 @@ function trailData(hf, layout) {
   const meshes = {};
   for (const k of ['concrete', 'dirt']) meshes[k] = { position: take(geo[k].position), normal: take(geo[k].normal), trail: take(geo[k].trail), index: take(geo[k].index) };
   const inst = {};
-  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'rope']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
+  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'lashPost0', 'lashPost1', 'lashPost2', 'lashRail0', 'lashRail1', 'lashRail2']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
   const line = {};
   for (const k of ['x', 'y', 's', 'hd', 'ht', 'w']) line[k] = Float32Array.from(r[k]);
   for (const k in line) take(line[k]);

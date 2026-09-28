@@ -24,9 +24,12 @@ const num = (v) => +v.slice(1);
 const gallery = join(root, 'docs/gallery');
 const out = join(gallery, version);
 const T = '17';   // the sea is frozen at the same moment in every version
+const baseFlag = args.find((a) => a.startsWith('--url='));
+const BASE = (baseFlag ? baseFlag.slice(6) : 'http://localhost:5178/').replace(/\/?$/, '/');
 
 const run = (...a) => {
-  const r = spawnSync('node', [join(root, 'tools/capture.mjs'), ...a], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const urlOpt = a.some((arg) => arg.startsWith('--url=')) ? [] : [`--url=${BASE}`];
+  const r = spawnSync('node', [join(root, 'tools/capture.mjs'), ...a, ...urlOpt], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const lines = (r.stdout + r.stderr).split('\n').filter((l) => l && !l.includes('UNSUPPORTED'));
   lines.forEach((l) => console.log('  ' + l));
   if (r.status !== 0) process.exit(r.status);
@@ -55,7 +58,7 @@ const prevShots = prevDir ? (await import(join(root, prevDir, 'src/shots.js'))).
 const rounds = { cur: [], prev: [] };
 for (let r = 0; r < 3; r++) {
   if (prevDir) {
-    run('--hero', '--bench', `--out=captures/bench-runs/${prev}-${r}`, `--url=http://localhost:5178/${prevDir}/`);
+    run('--hero', '--bench', `--out=captures/bench-runs/${prev}-${r}`, `--url=${new URL(`${prevDir}/`, BASE).href}`);
     rounds.prev.push(JSON.parse(readFileSync(join(root, `captures/bench-runs/${prev}-${r}/bench.json`), 'utf8')));
   }
   run('--hero', '--bench', `--out=captures/bench-runs/${version}-${r}`);

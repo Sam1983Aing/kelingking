@@ -407,7 +407,7 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   float soft = clamp(fwidth(base) * 1.5, 0.03, 0.12);
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
-  float thin = cover * (1.0 - smoothstep(0.6, 0.97, amount));
+  float thin = cover * (1.0 - smoothstep(0.32, 0.55, amount));
   if (thin > 0.01 && fp < 0.08) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
@@ -854,8 +854,16 @@ void main() {
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
   // (The band at the rock only where the simulation does not reach, and there is rock.)
   float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
-  // The front of an uprush is a band of foam and bubbles.
-  float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
+  vec2 travel = sim.ba * simW;
+  // The uprush has one continuous leading edge, but its bubbles gather into scallops and
+  // little fingers. Break up the cover along that edge before it settles into older lace.
+  float frontCover = 1.0;
+  if (sf.front > 0.002) {
+    vec2 qf = p - travel;
+    frontCover = 0.38 + 0.86 * (vnoise(qf * 0.42 + 6.1) * 0.65
+                            + vnoise(qf * 1.8 + 17.3) * 0.35);
+  }
+  float amount = clamp(max(max(sf.fresh, older), sf.front * frontCover * 0.8) * uFoam, 0.0, 1.0);
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
@@ -865,7 +873,6 @@ void main() {
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
   // warped so no two cells match, and a slower variation in how dense it is.
   float pattern = 0.0, ridge = 0.0;
-  vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
   float swFoam = smoothstep(1.0, 0.3, wLoc.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
   // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
@@ -885,7 +892,7 @@ void main() {
   // showing between its clumps: it never closes up into a white carpet.
   float onSheet = swFoam * sf.sheet;
   if (swFoam > 0.001 && amount > 0.002)
-    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.84, onSheet), fp), swFoam);
+    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.68, onSheet), fp), swFoam);
   fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
   float lumps = 0.5, lumpsMid = 0.5;

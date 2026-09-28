@@ -20,6 +20,7 @@ version. A session works on its element only, and goes deep on it.
 | v12 | The breaking wave, and the clouds (Sam's notes after v11) | [v12-surf.md](v12-surf.md) | done, tag `v12` |
 | v13 | The dirt steps and the bamboo handrail (Sam's notes after v12) | [v13-stairs.md](v13-stairs.md) | done, tag `v13` |
 | v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | in progress |
+| v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | in progress |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -116,6 +117,8 @@ node tools/capture.mjs viewpoint --set="hour=17"     # any page switch, ; betwee
 node tools/capture.mjs viewpoint --eval="expr"       # read from the page (a PNG data URL is saved)
 node tools/hero.mjs v2                               # finish a version
 node tools/ab.mjs beach --rounds=16                  # this build against the previous tag, side by side
+node tools/hero.mjs v15 --url=http://localhost:5180/ # target a separate worktree preview
+node tools/ab.mjs --hero --url=http://localhost:5180/ # pair that preview with an older build
 node tools/parts.mjs beach --parts=none,SKIP_SANDNEAR,WSKIP_SWASH   # what parts of a frame cost
 node tools/capture.mjs cove --console                # print the page's shader errors and warnings
 node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings

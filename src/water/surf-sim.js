@@ -152,7 +152,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     make = max(make, max(hit, wash));
     // The front of each uprush is a band of foam and bubbles, which it leaves behind as it
     // slows; foam left on bare sand drains into it and is gone within a few seconds.
-    make = max(make, sw.front * 0.75 * nearBeach);
+    make = max(make, sw.front * 0.58 * nearBeach);
     float bare = onSand * (1.0 - smoothstep(0.0, 0.003, sw.film));
     foam *= exp(-uDt * bare / 2.5);
     // New foam starts its own pattern where it is made.
