@@ -2347,3 +2347,49 @@ a 24-round repeat read 0%. These paired checks are more useful than separate abs
 The source image has a more continuous mix of low foliage and limestone across the small
 rock's face than the distant procedural scrub can fully reproduce. The islet's plan-view
 outline comes from OSM and remains a little narrow in the clifftop photo.
+
+## v17: more natural clouds (2026-09-28)
+
+The v16 sky had a large, slab-like cloud near the east-cove lens and white flecks along the
+clifftop horizon. The reference photos have broad clear intervals, a partial cumulus at the
+edge of the east view, and subdued distant clouds. The first still-image pass fixed the east
+view but missed two oversized clouds directly over the ridge path; watching the scroll exposed
+them. The trail photo is mostly clear, with cloud only at the far left edge.
+
+### What changed
+
+- The weather field is sparser and uses a seed that leaves a clear band over the sea. The
+  authored cumulus east of the island has a narrower footprint and stays near the photo's
+  left edge. A southwest clearing is shaped in the weather texture itself, so the sky and
+  the cloud shadows use the same field as the camera travels down the trail.
+- The cloud base varies across broad billows rather than sitting on a uniformly straight
+  slab. Medium-distance edge detail survives farther from the camera; tiny puffs fade before
+  becoming hard white pixels. Distant coverage tapers into haze.
+- The high veil has less directional stretch and a softer, more visible broken pattern.
+
+### How it was judged
+
+The `eastCove`, `sideFromSea`, `viewpoint`, and `trailTop` cameras were rendered beside their
+local reference photos. The scrolling page was also walked from the aerial opening to the
+ridge. The first seed and coverage alone still produced a pair of cotton-like clouds over
+the path; putting the southwest clear interval into the weather map removed them without
+changing the east-cove cloud or separating cloud shadows from visible clouds.
+
+`hero.mjs v17` refreshed all nine hero frames and local photo comparisons. The final bake
+check passed, and the rebuilt standalone loaded offline without console errors. The cloud
+pass alone measured 1.17 ms in `eastCove` and 0.86 ms in `viewpoint` in a short local run;
+whole-frame times vary substantially with other GPU work.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=b74593f --rounds=8` run had three noisy readings:
+overview +10%, stairs +12%, and sideFromSea +14%. A 20-round repeat of those cameras
+settled at +1%, +3%, and -1%. The other hero frames were within the 10% budget; trailTop
+and trailLow, the views most affected by the southwest clearing, read -3% each in the
+eight-round run.
+
+### Still weak
+
+The partial cloud in the east view remains more rounded and shaded than the wind-sheared
+white edge in the photo. The thin high veil is procedural and can read as streaks at certain
+angles. Cloud movement remains slow, matching the trade-wind speed set by the scene.

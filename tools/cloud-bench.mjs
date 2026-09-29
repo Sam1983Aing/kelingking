@@ -21,6 +21,7 @@ const flag = (name, dflt) => {
 const { SHOTS } = await import(join(root, 'src/shots.js'));
 const shots = args.filter((a) => !a.startsWith('--'));
 const ROUNDS = +flag('rounds', 9), FRAMES = +flag('frames', 20), WIDTH = +flag('width', 1400);
+const BASE = String(flag('url', 'http://localhost:5178/')).replace(/\/?$/, '/');
 function refAspect(rel) {
   try {
     const buf = readFileSync(join(root, rel));
@@ -38,7 +39,7 @@ const b = await launch();
 try {
   for (const name of shots) {
     const h = Math.round(WIDTH / (SHOTS[name].ref ? refAspect(SHOTS[name].ref) : 16 / 9));
-    const page = await b.open(`http://localhost:5178/?shot=${name}&q=1024&pr=1&t=17${extra}`, { width: WIDTH, height: h });
+    const page = await b.open(`${BASE}?shot=${name}&q=1024&pr=1&t=17${extra}`, { width: WIDTH, height: h });
     await page.waitFor('window.__ready === true');
     // The cloud passes alone, back to back: N marches, then a pixel read back from the clouds'
     // texture, which waits for all of them (each march reads the one before). Per march: the
