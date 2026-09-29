@@ -22,6 +22,16 @@ one continuous loss of energy. Sam's 2026-09-28 screenshots show the hard-edged 
 line from the air. The motion notes in the referenced Hajime Tsui post call out jitter
 and whitewater that keeps its shape as it slides onto sand.
 
+On 2026-09-29 Sam said the forming crest's center and motion were getting close, while
+the left and right sections lost believability as the break spread. Check the sand
+chapter at about 4 m above the beach through a full wave cycle, especially whether the
+lip, impact spray and foam land together on both sides.
+
+The follow-up keeps the center's timing, guides the offshore phase past the south
+headland so the wavefront does not double back, grows the lip over several metres at
+the start of its peel, and removes old simulated foam stretched into tall streaks on
+the rising face. The nine-second sand-camera motion check is described in `PROCESS.md`.
+
 ## Scope
 
 The near-shore wave geometry and the transition into existing surf foam and swash.

@@ -99,7 +99,10 @@ BreakCol findBreak(vec2 p0, vec2 n0) {
   BreakCol b;
   b.pc = q;
   c = surfAt(q, dataAt(q));
-  b.n = offshoreAt(q);            // the cross-section runs square to the crest
+  // The distance field's gradient fans around the headland. Blend it with the
+  // waterline's wider, tangent-smoothed normal so adjacent cross-sections turn
+  // together instead of pinching the lip at the sides of the cove.
+  b.n = normalize(mix(offshoreAt(q), n0, 0.35));
   b.tau = c.tau;
   b.on = step(-0.08, c.tau) * step(c.tau, 1.14) * step(0.001, c.L * step(0.0, c.hRaw + 5.0));
   b.L = c.L;
@@ -168,15 +171,17 @@ void main() {
   float nbOn = texelFetch(uBreakCol1, ivec2(int(max(aProf.z - 1.0, 0.0) + 0.5), 0), 0).y
              * texelFetch(uBreakCol1, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).y;
   vec2 pc = bc.pc, n = bc.n;
-  float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
+  float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF;
+  // At the peeling end, the first fold starts small and grows along the crest.
+  // A full-height profile appeared abruptly even while most of it was under the sea.
+  float H = bc.H * smoothstep(0.0, 0.4, tau);
   Surf c;
-  // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
-  // Slow, broad changes in the peel precede the little tears along the lip. A single
-  // uniform stage across the beach made the crest read as one extruded cylinder.
-  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.6;
+  // surfAt has already varied the crest and its break point alongshore. Use that same
+  // stage for the lip, sea foam, spray and the mesh's handoff back into the heightfield.
+  // An extra independent peel here used to move the lip as much as 0.75 s ahead of the
+  // foam at one side of the wave, making the breaking motion split apart.
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
-  float st = mix(0.0, clamp(tau + (peel + jit * 0.025) * smoothstep(0.08, 0.32, tau), 0.0, 1.2), on);
-  float tauC = max(tau, 0.0);
+  float st = clamp(tau + jit * 0.012 * smoothstep(0.08, 0.32, tau), 0.0, 1.2);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float shaped = smoothstep(-0.03, 0.55, st);
   float landed = smoothstep(0.55, 0.86, st);
@@ -200,14 +205,14 @@ void main() {
   // the start and end of each break: where the two are nearly the same shape, whichever is
   // higher shows, and the depth test draws the seam. (A blend or a dither there showed as a
   // band, because the two are never shaded exactly alike.)
-  // In time: up from -0.08 (before the sea starts tucking its crest at 0.02) to 1.12 (after
-  // it has put it back by 1.06). While the two have the same shape the ribbon stays 10 cm
+  // In time: rise gradually just ahead of the sea's crest tuck, then stay until
+  // 1.12 (after the sea has put its crest back by 0.98). At the start the ribbon stays 10 cm
   // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
   // bore at different points, and 3 cm was not enough).
-  float footV = v + jit * 0.12 + peel * 0.12;
+  float footV = v + jit * 0.12;
   float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.77, 0.86, footV))
-               * smoothstep(-0.08, -0.02, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
-  y -= 0.1 * (1.0 - smoothstep(0.02, 0.1, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
+               * smoothstep(-0.08, 0.2, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
+  y -= 0.1 * (1.0 - smoothstep(-0.08, 0.2, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
   // As the sea puts its crest back after the collapse, everything of the ribbon behind the
   // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
   // flat pane over a sea that is still half tucked.
@@ -229,6 +234,12 @@ void main() {
   vec2 n2 = normalize(vec2(-d2.y, d2.x) + vec2(0.0, 1e-6));
   vec3 fwd = vec3(-n.x, 0.0, n.y);            // toward the beach, in world space
   vec3 nrm = normalize(fwd * n2.x + vec3(0.0, n2.y, 0.0));
+  // Before the thrown face is shaped, shade the ribbon like the neighboring sea.
+  // Otherwise its profile normal makes the first few columns catch a bright,
+  // vertical reflection even while their geometry is almost the heightfield's.
+  float seaSlope = (hF - hB) / max(Lb + xF, 1.0);
+  vec3 seaN = normalize(vec3(0.0, 1.0, 0.0) - fwd * seaSlope);
+  nrm = normalize(mix(seaN, nrm, smoothstep(0.02, 0.35, tau)));
 
   vec3 w = vec3(pm.x, y, -pm.y);
   vWorld = w;

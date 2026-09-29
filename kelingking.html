@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 80b450a. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
+  <!-- Kelingking, the standalone build (tools/build-standalone.mjs), from commit 1092e1a. Assets: https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/ -->
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Kelingking</title>
@@ -83820,7 +83820,16 @@ Surf surfAt(vec2 p, vec4 d) {
   if (beachy <= 0.0) return o;
   float jag = vnoise(p * 0.012) * 0.45 + vnoise(p * 0.035) * 0.16 + vnoise(p * 0.11) * 0.03;
   float clock = waveClock(uTime) / uPeriod;
-  float phase0 = shorePhase(s) + clock + jag;
+  // At the cove's south end the nearest-coast distance turns around the rock before
+  // the beach wave has died out. Let just the incoming phase continue the last part
+  // of the sandy waterline, tapering the correction away at the actual shore. Depth,
+  // break strength and swash still use the physical shore distance.
+  float endMask = smoothstep(55.0, 85.0, p.y) * (1.0 - smoothstep(145.0, 185.0, p.y))
+                * (1.0 - smoothstep(145.0, 175.0, p.x));
+  float phaseBand = smoothstep(5.0, 12.0, s) * (1.0 - smoothstep(45.0, 65.0, s));
+  float guideS = dot(p - vec2(95.0, 200.0), vec2(-0.98, 0.21));
+  float phaseS = mix(s, guideS, endMask * phaseBand);
+  float phase0 = shorePhase(phaseS) + clock + jag;
   // Index the nearest crest, so a wave's own size never changes across its crest. The
   // size hands over to the next wave in the trough, blended, so the surface stays
   // continuous (a jump there is a vertical step that the grid draws as a row of teeth).
@@ -83865,11 +83874,15 @@ Surf surfAt(vec2 p, vec4 d) {
   // own crest is tucked under it.
   float brK = uBreakAt * (0.7 + 0.35 * bigK);
   float sCrest = s - v * Lhere;
-  float tau = (brK + 5.0 - sCrest) / 8.0;
+  // A broad, wave-specific peel moves the landing point along the crest. It must live
+  // in surfAt: the ribbon, spray, sea-foam source and heightfield handoff all read tau.
+  // Using the crest's existing low-frequency wobble also avoids an unrelated, faster
+  // noise pattern appearing only on the lip at the two sides of the break.
+  float tau = (brK + 5.0 - sCrest) / 8.0 + wob * 0.28;
   float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.25, 0.34, v));
-  // (Inside the stretch where the ribbon is fully up, so the sea never shows a half-tucked,
-  // flattened crest: breaker.js rises from -0.08 and stays until 1.12.)
-  float sink = win * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
+  // The sea lowers its crest at the same gradual rate the ribbon emerges from it.
+  // A short handoff made the spreading break appear to start at a vertical cut.
+  float sink = win * smoothstep(0.15, 0.4, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
   float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
   float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
@@ -84545,7 +84558,12 @@ void main() {
 
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
   // (The band at the rock only where the simulation does not reach, and there is rock.)
-  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
+  // Old foam rides in the trough, then thins on a newly steepening face. Drawing its
+  // advected cell pattern at full strength on the rising face stretched a few
+  // bubble rims into tall white hooks at the sides of the advancing break.
+  float faceFoamW = 1.0 - smoothstep(0.12, 0.42, length(vSurfSlope));
+  float simFoam = sim.r * faceFoamW;
+  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), simFoam, simW) : simFoam;
   vec2 travel = sim.ba * simW;
   // The uprush has one continuous leading edge, but its bubbles gather into scallops and
   // little fingers. Break up the cover along that edge before it settles into older lace.
@@ -84559,7 +84577,7 @@ void main() {
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
-  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW);
+  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW * faceFoamW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
@@ -85672,7 +85690,10 @@ BreakCol findBreak(vec2 p0, vec2 n0) {
   BreakCol b;
   b.pc = q;
   c = surfAt(q, dataAt(q));
-  b.n = offshoreAt(q);            // the cross-section runs square to the crest
+  // The distance field's gradient fans around the headland. Blend it with the
+  // waterline's wider, tangent-smoothed normal so adjacent cross-sections turn
+  // together instead of pinching the lip at the sides of the cove.
+  b.n = normalize(mix(offshoreAt(q), n0, 0.35));
   b.tau = c.tau;
   b.on = step(-0.08, c.tau) * step(c.tau, 1.14) * step(0.001, c.L * step(0.0, c.hRaw + 5.0));
   b.L = c.L;
@@ -85741,15 +85762,17 @@ void main() {
   float nbOn = texelFetch(uBreakCol1, ivec2(int(max(aProf.z - 1.0, 0.0) + 0.5), 0), 0).y
              * texelFetch(uBreakCol1, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).y;
   vec2 pc = bc.pc, n = bc.n;
-  float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF, H = bc.H;
+  float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF;
+  // At the peeling end, the first fold starts small and grows along the crest.
+  // A full-height profile appeared abruptly even while most of it was under the sea.
+  float H = bc.H * smoothstep(0.0, 0.4, tau);
   Surf c;
-  // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
-  // Slow, broad changes in the peel precede the little tears along the lip. A single
-  // uniform stage across the beach made the crest read as one extruded cylinder.
-  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.6;
+  // surfAt has already varied the crest and its break point alongshore. Use that same
+  // stage for the lip, sea foam, spray and the mesh's handoff back into the heightfield.
+  // An extra independent peel here used to move the lip as much as 0.75 s ahead of the
+  // foam at one side of the wave, making the breaking motion split apart.
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
-  float st = mix(0.0, clamp(tau + (peel + jit * 0.025) * smoothstep(0.08, 0.32, tau), 0.0, 1.2), on);
-  float tauC = max(tau, 0.0);
+  float st = clamp(tau + jit * 0.012 * smoothstep(0.08, 0.32, tau), 0.0, 1.2);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
   float shaped = smoothstep(-0.03, 0.55, st);
   float landed = smoothstep(0.55, 0.86, st);
@@ -85773,14 +85796,14 @@ void main() {
   // the start and end of each break: where the two are nearly the same shape, whichever is
   // higher shows, and the depth test draws the seam. (A blend or a dither there showed as a
   // band, because the two are never shaded exactly alike.)
-  // In time: up from -0.08 (before the sea starts tucking its crest at 0.02) to 1.12 (after
-  // it has put it back by 1.06). While the two have the same shape the ribbon stays 10 cm
+  // In time: rise gradually just ahead of the sea's crest tuck, then stay until
+  // 1.12 (after the sea has put its crest back by 0.98). At the start the ribbon stays 10 cm
   // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
   // bore at different points, and 3 cm was not enough).
-  float footV = v + jit * 0.12 + peel * 0.12;
+  float footV = v + jit * 0.12;
   float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.77, 0.86, footV))
-               * smoothstep(-0.08, -0.02, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
-  y -= 0.1 * (1.0 - smoothstep(0.02, 0.1, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
+               * smoothstep(-0.08, 0.2, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
+  y -= 0.1 * (1.0 - smoothstep(-0.08, 0.2, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
   // As the sea puts its crest back after the collapse, everything of the ribbon behind the
   // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
   // flat pane over a sea that is still half tucked.
@@ -85802,6 +85825,12 @@ void main() {
   vec2 n2 = normalize(vec2(-d2.y, d2.x) + vec2(0.0, 1e-6));
   vec3 fwd = vec3(-n.x, 0.0, n.y);            // toward the beach, in world space
   vec3 nrm = normalize(fwd * n2.x + vec3(0.0, n2.y, 0.0));
+  // Before the thrown face is shaped, shade the ribbon like the neighboring sea.
+  // Otherwise its profile normal makes the first few columns catch a bright,
+  // vertical reflection even while their geometry is almost the heightfield's.
+  float seaSlope = (hF - hB) / max(Lb + xF, 1.0);
+  vec3 seaN = normalize(vec3(0.0, 1.0, 0.0) - fwd * seaSlope);
+  nrm = normalize(mix(seaN, nrm, smoothstep(0.02, 0.35, tau)));
 
   vec3 w = vec3(pm.x, y, -pm.y);
   vWorld = w;
@@ -86288,7 +86317,7 @@ void main() {
     float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.72, 0.92, aSeed.x);
     float speed = bc.L / uPeriod;                  // the crest's speed (m/s)
     float age = (bc.tau - tauE) * 8.0 / speed;
-    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(1.0, 2.2, aSeed.y);
+    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(0.85, 1.7, aSeed.y);
     if (age < 0.0 || age > life) { kill(); return; }
     // Where the lip was then: the crest stood further out by what it has travelled since.
     vec2 pcE = bc.pc + bc.n * (bc.tau - tauE) * 8.0;
@@ -86314,14 +86343,13 @@ void main() {
       size = mix(0.15, 0.4, aSeed.w);
       alpha = 0.7; mist = 0.35;
     } else {                  // thrown up where the lip lands
-      // (v12) The lip landing on the trough throws spray higher than the wave itself: up to
-      // 8 m/s, which lifts it about 3 m, a few puffs half again. It went up at 2 to 5.5 m/s
-      // and stayed a low fringe, so the impact had no burst to it.
+      // Keep the impact spray close to the travelling break. Tall, long-lived puffs
+      // looked like separate smoke columns on the left and right of the forming wave.
       float kick = aSeed.z * aSeed.z;
-      vel = fwd * speed * mix(0.5, 1.2, aSeed.w) + vec3(0.0, mix(2.5, 8.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.4;
+      vel = fwd * speed * mix(0.55, 1.15, aSeed.w) + vec3(0.0, mix(2.5, 6.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.8;
       g = mix(G, 6.0, step(0.6, aSeed.y));     // the finer part of it hangs in the air
-      size = mix(0.6, 1.6, aSeed.w);
-      alpha = 0.85; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
+      size = mix(0.45, 1.15, aSeed.w);
+      alpha = 0.65; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
     }
     vec2 wind = uWindDrift * mix(0.3, 1.0, mist);
     pos = p0 + vel * age + vec3(wind.x, 0.0, -wind.y) * age - vec3(0.0, 0.5 * g * age * age, 0.0);

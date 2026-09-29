@@ -2431,10 +2431,50 @@ eight-round pass also stayed within budget except `trailLow` at +13%. A focused
 20-round repeat of that view measured +1%, so the isolated overage was not stable.
 The gallery records the paired results.
 
+### 2026-09-29: the break spreading sideways
+
+Sam liked the approaching crest from the beach scroll, but the left and right sections
+seemed to break on a different beat. The ribbon had its own alongshore stage offset of
+up to 0.30 while the sea foam and spray used `surfAt`'s unshifted stage. That could put
+the lip roughly three quarters of a second ahead of its white water at one end. The
+ribbon now uses the same stage as the sea, foam and spray. A smaller broad peel uses the
+crest's existing wave-specific wobble inside `surfAt`, so all four effects move together.
+The ribbon's direction also blends toward the smoothed waterline normal where the
+distance field fans around the headland. Landing spray is shorter, lower and less opaque;
+the old tall puffs looked detached from the moving break.
+
+Matched 9.1-second clips at the sand chapter's scroll camera (`tau` about 4.05) show one
+wave cycle before and after these edits. Five-second fixed `shoreBreak` and `swash`
+clips check the eye-level collapse and runup. The captured clips are local under
+`captures/v18-feedback-*` and are not committed. The existing water colour and fine
+surface texture were left alone.
+
+An alternating eight-round, nine-camera frame check against the first v18 commit
+`1092e1a` put every median change between -1% and +4%. The beach frame was +1%,
+swash -1%, and shoreBreak +2%, within the 10% frame budget.
+
+The 4 m beach camera exposed two further edge problems. The large diagonal lobe at the
+left remained when the breaker mesh was hidden: the shore-distance field folds round
+the rock, and a crest could cross that fold twice. A local, seaward-offset guide now
+sets only the incoming wave's phase across the south end of the cove. It fades out
+before the waterline, so depth, breaking strength and the swash still use the real
+shore distance. The column-by-column ribbon then grows from a small fold while the
+heightfield gradually hands over its crest, instead of exposing a full-height lip in
+the first metre of the peel.
+
+On the right, thin white hooks stayed visible with both spray and ribbon hidden and
+disappeared when the foam simulation was disabled. Older simulated foam is now
+thinned on the rising face; the direct fresh break and the simulation's sediment and
+flow are still present. A matched nine-second capture at the sand chapter now shows
+the left crest forming without the diagonal lobe, with a smoother spreading lip and
+no tall foam hooks on the right. The fixed clip is `captures/v18-feedback-final-wave.mp4`.
+The final alternating eight-round check against `1092e1a` kept all nine hero cameras
+within the 10% frame budget: paired changes ranged from -3% to +7% (`beach` +5%,
+`swash` -3%, `shoreBreak` +1%).
+
 ### Still weak
 
-The cove-wide crest can still form a sharp bend where the sandy shoreline turns round
-the headland. The wave is less tubular at eye level, but it remains a procedural surf
-model rather than a fluid simulation, and the collapse can still read as a bright strip
-from some aerial moments. The old tan sand triangle, visible with water hidden, remains
-the separate terrain/material issue recorded under v5.
+The wave remains a procedural surf model rather than a fluid simulation, and the
+collapse can still read as a bright strip from some aerial moments. The old tan sand
+triangle, visible with water hidden, remains the separate terrain/material issue
+recorded under v5.

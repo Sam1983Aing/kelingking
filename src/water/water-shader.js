@@ -134,7 +134,16 @@ Surf surfAt(vec2 p, vec4 d) {
   if (beachy <= 0.0) return o;
   float jag = vnoise(p * 0.012) * 0.45 + vnoise(p * 0.035) * 0.16 + vnoise(p * 0.11) * 0.03;
   float clock = waveClock(uTime) / uPeriod;
-  float phase0 = shorePhase(s) + clock + jag;
+  // At the cove's south end the nearest-coast distance turns around the rock before
+  // the beach wave has died out. Let just the incoming phase continue the last part
+  // of the sandy waterline, tapering the correction away at the actual shore. Depth,
+  // break strength and swash still use the physical shore distance.
+  float endMask = smoothstep(55.0, 85.0, p.y) * (1.0 - smoothstep(145.0, 185.0, p.y))
+                * (1.0 - smoothstep(145.0, 175.0, p.x));
+  float phaseBand = smoothstep(5.0, 12.0, s) * (1.0 - smoothstep(45.0, 65.0, s));
+  float guideS = dot(p - vec2(95.0, 200.0), vec2(-0.98, 0.21));
+  float phaseS = mix(s, guideS, endMask * phaseBand);
+  float phase0 = shorePhase(phaseS) + clock + jag;
   // Index the nearest crest, so a wave's own size never changes across its crest. The
   // size hands over to the next wave in the trough, blended, so the surface stays
   // continuous (a jump there is a vertical step that the grid draws as a row of teeth).
@@ -179,11 +188,15 @@ Surf surfAt(vec2 p, vec4 d) {
   // own crest is tucked under it.
   float brK = uBreakAt * (0.7 + 0.35 * bigK);
   float sCrest = s - v * Lhere;
-  float tau = (brK + 5.0 - sCrest) / 8.0;
+  // A broad, wave-specific peel moves the landing point along the crest. It must live
+  // in surfAt: the ribbon, spray, sea-foam source and heightfield handoff all read tau.
+  // Using the crest's existing low-frequency wobble also avoids an unrelated, faster
+  // noise pattern appearing only on the lip at the two sides of the break.
+  float tau = (brK + 5.0 - sCrest) / 8.0 + wob * 0.28;
   float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.25, 0.34, v));
-  // (Inside the stretch where the ribbon is fully up, so the sea never shows a half-tucked,
-  // flattened crest: breaker.js rises from -0.08 and stays until 1.12.)
-  float sink = win * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
+  // The sea lowers its crest at the same gradual rate the ribbon emerges from it.
+  // A short handoff made the spreading break appear to start at a vertical cut.
+  float sink = win * smoothstep(0.15, 0.4, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
   float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
   float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
@@ -859,7 +872,12 @@ void main() {
 
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
   // (The band at the rock only where the simulation does not reach, and there is rock.)
-  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
+  // Old foam rides in the trough, then thins on a newly steepening face. Drawing its
+  // advected cell pattern at full strength on the rising face stretched a few
+  // bubble rims into tall white hooks at the sides of the advancing break.
+  float faceFoamW = 1.0 - smoothstep(0.12, 0.42, length(vSurfSlope));
+  float simFoam = sim.r * faceFoamW;
+  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), simFoam, simW) : simFoam;
   vec2 travel = sim.ba * simW;
   // The uprush has one continuous leading edge, but its bubbles gather into scallops and
   // little fingers. Break up the cover along that edge before it settles into older lace.
@@ -873,7 +891,7 @@ void main() {
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
-  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW);
+  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW * faceFoamW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,

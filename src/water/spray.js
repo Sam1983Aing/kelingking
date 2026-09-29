@@ -62,7 +62,7 @@ void main() {
     float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.72, 0.92, aSeed.x);
     float speed = bc.L / uPeriod;                  // the crest's speed (m/s)
     float age = (bc.tau - tauE) * 8.0 / speed;
-    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(1.0, 2.2, aSeed.y);
+    float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(0.85, 1.7, aSeed.y);
     if (age < 0.0 || age > life) { kill(); return; }
     // Where the lip was then: the crest stood further out by what it has travelled since.
     vec2 pcE = bc.pc + bc.n * (bc.tau - tauE) * 8.0;
@@ -88,14 +88,13 @@ void main() {
       size = mix(0.15, 0.4, aSeed.w);
       alpha = 0.7; mist = 0.35;
     } else {                  // thrown up where the lip lands
-      // (v12) The lip landing on the trough throws spray higher than the wave itself: up to
-      // 8 m/s, which lifts it about 3 m, a few puffs half again. It went up at 2 to 5.5 m/s
-      // and stayed a low fringe, so the impact had no burst to it.
+      // Keep the impact spray close to the travelling break. Tall, long-lived puffs
+      // looked like separate smoke columns on the left and right of the forming wave.
       float kick = aSeed.z * aSeed.z;
-      vel = fwd * speed * mix(0.5, 1.2, aSeed.w) + vec3(0.0, mix(2.5, 8.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.4;
+      vel = fwd * speed * mix(0.55, 1.15, aSeed.w) + vec3(0.0, mix(2.5, 6.0, kick) * clamp(bc.H / 1.5, 0.5, 1.5), 0.0) + side * (aSeed.x - 0.5) * 2.8;
       g = mix(G, 6.0, step(0.6, aSeed.y));     // the finer part of it hangs in the air
-      size = mix(0.6, 1.6, aSeed.w);
-      alpha = 0.85; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
+      size = mix(0.45, 1.15, aSeed.w);
+      alpha = 0.65; mist = mix(0.35, 0.7, step(0.6, aSeed.y));
     }
     vec2 wind = uWindDrift * mix(0.3, 1.0, mist);
     pos = p0 + vel * age + vec3(wind.x, 0.0, -wind.y) * age - vec3(0.0, 0.5 * g * age * age, 0.0);

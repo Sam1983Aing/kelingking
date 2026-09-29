@@ -53,3 +53,9 @@ Alternating eight-round render against v17 commit `80b450a`, six frames per roun
 | Swash | 16.35 ms | 17.32 ms | +6% |
 | Shore break | 5.57 ms | 4.95 ms | -9% |
 | Side from sea | 10.87 ms | 10.62 ms | -2% |
+
+The 2026-09-29 side-motion refinement was checked against the first v18 commit
+`1092e1a` with the same alternating eight-round method. Across all nine hero cameras,
+the final paired changes ranged from -3% to +7% (`beach` +5%, `swash` -3%,
+`shoreBreak` +1%). The matched nine-second sand-camera clip is available in the local
+preview at `captures/v18-feedback-final-wave.mp4`.
