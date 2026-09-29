@@ -63,7 +63,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   const isConcrete = (k) => kindAt(0.5 * (TR[k].s0 + TR[k].s1)).kind === 'concrete';
   // Each level tread a little high or low, and tilted across (m at its edge).
   const jit = TR.map((tr, k) => (tr.T === undefined || tr.T === null ? { dh: 0, tilt: 0 }
-    : isConcrete(k) ? { dh: (hash(k, 1) - 0.5) * 0.012, tilt: (hash(k, 2) - 0.5) * 0.014 }
+    : isConcrete(k) ? { dh: (hash(k, 1) - 0.5) * 0.024, tilt: (hash(k, 2) - 0.5) * 0.026 }
     : { dh: (hash(k, 1) - 0.5) * 0.04, tilt: (hash(k, 2) - 0.5) * 0.07 }));
   const levelAt = (k, q) => (TR[k].T ?? frame(q).hd) + jit[k].dh;
   // Each boundary k (between tread k and k + 1): which tread is the upper one, and how high the
@@ -74,17 +74,20 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   });
   // The edge's wobble along the line (m), and how much of the upper tread's edge has worn or
   // broken away (m down).
-  const edgeOff = (k, a) => (bnd[k].isC ? 0.012 * noise(k * 3.7, a * 2.1)
+  const edgeOff = (k, a) => (bnd[k].isC ? 0.042 * noise(k * 3.7, a * 2.1) + 0.014 * noise(k * 8.1 + 7, a * 6.4)
     : 0.05 * noise(k * 3.7 + 11, a * 1.4) + 0.02 * noise(k * 5.1 + 9, a * 4.3));
   const edgeDrop = (k, a) => {
     const { rise, isC } = bnd[k];
     if (rise < 0.03) return 0;
     const r = hash(k, 3);
     if (isC) {
-      const worn = 0.006;
-      if (r > 0.2) return worn;
-      const c = (hash(k, 4) * 2 - 1) * 0.85, w = 0.1 + 0.12 * hash(k, 5);
-      return worn + Math.min(0.06, rise * 0.4) * bump((a - c) / w);
+      const worn = 0.008 + 0.006 * hash(k, 7);
+      if (r > 0.38) return worn;
+      // A few corners have lost a thumb-sized piece of cement, rather than every nosing
+      // having the same crisp full-width line.
+      const c = (hash(k, 4) > 0.5 ? 1 : -1) * (0.68 + 0.28 * hash(k, 6));
+      const w = 0.30 + 0.20 * hash(k, 5);
+      return worn + Math.min(0.085, rise * 0.43) * bump((a - c) / w);
     }
     const worn = Math.min(rise * 0.25, 0.012 + 0.014 * hash(k, 7));
     if (r > 0.16) return worn;
@@ -92,18 +95,23 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     const c = (hash(k, 4) > 0.5 ? 1 : -1) * (0.45 + 0.5 * hash(k, 6)), w = 0.35 + 0.5 * hash(k, 5);
     return worn + rise * (0.3 + 0.4 * hash(k, 8)) * bump((a - c) / w);
   };
-  // A vertex of tread k at q, across a (-1..1): on its first or last row the edge's wobble and,
-  // on the upper tread of a riser, its worn edge.
-  const vertAt = (k, q, a, role) => {
+  // A concrete vertex. Disturbance is confined to the first few centimetres by each riser;
+  // the walking surface stays near level, with a little settlement and shallow wear.
+  const vertAt = (k, q, a) => {
     const tr = TR[k], f = frame(q), hw = f.w / 2, isC = isConcrete(k);
     let along = 0, drop = 0;
-    const b = role === 'first' ? k - 1 : role === 'last' ? k : -1;
-    if (b >= 0 && b < NT - 1) { along = edgeOff(b, a); if (bnd[b].upper === k) drop = edgeDrop(b, a); }
+    const dF = q - tr.s0, dL = tr.s1 - q;
+    const b = dF <= dL ? k - 1 : k, d = Math.min(dF, dL);
+    if (b >= 0 && b < NT - 1 && d < 0.12) {
+      const w = 1 - smooth(0, 0.12, d);
+      along = edgeOff(b, a) * w;
+      if (bnd[b].upper === k) drop = edgeDrop(b, a) * w;
+    }
     const px = f.x + f.nx * a * hw + f.tx * along, py = f.y + f.ny * a * hw + f.ty * along;
     let dh = jit[k].tilt * a;
-    // Dirt: a little dished where feet wear it, and lumpy.
-    if (!isC) dh += -0.035 * (1 - a * a) + 0.02 * noise(px * 2.1, py * 2.1) + 0.01 * noise(px * 7.3 + 5, py * 7.3);
-    return [px, levelAt(k, q) + dh - drop, py, a];
+    if (isC) dh += -0.006 * (1 - a * a) + 0.006 * noise(px * 2.3, py * 2.3) + 0.003 * noise(px * 6.1 + 4, py * 6.1);
+    const age = 0.67 * hash(k, 17) + 0.33 * (0.5 + 0.5 * noise(k * 0.27, 19));
+    return [px, levelAt(k, q) + dh - drop, py, a, age];
   };
   // How far a point of tread k is from its back edge, the foot of the riser above it (m; 9 where
   // there is none), for the dirt and grime that collect there.
@@ -128,6 +136,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
   // toward each edge and columns 6 cm apart; the front edge rolled over (the nosing), soil
   // heaped against the foot of each riser, the riser itself hollowed and lumpy, and the side
   // banks easing into the ground instead of running down in one plane.
+  const ACROSS_C = Array.from({ length: 7 }, (_, i) => -1 + i / 3);
   const ACROSS_D = Array.from({ length: 11 }, (_, i) => -1 + (2 * i) / 10);
   const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
   const hasLog = new Array(NT).fill(false);
@@ -159,10 +168,18 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       if (bnd[b].upper === k) drop = edgeDrop(b, a) * w + bevel(b, a, d);
       else heap = fillet(b, a, d);
     }
-    const px = f.x + f.nx * a * hw + f.tx * along, py = f.y + f.ny * a * hw + f.ty * along;
-    const dh = jit[k].tilt * a - 0.035 * (1 - a * a) + 0.02 * noise(px * 2.1, py * 2.1) + 0.01 * noise(px * 7.3 + 5, py * 7.3)
+    // The trodden line drifts a little across the survey line; grass cuts into the soft
+    // margins. Both are continuous in q, so neighbouring treads still meet at a riser.
+    const edgeWear = smooth(0.65, 1, Math.abs(a));
+    const inset = edgeWear * (0.035 + 0.025 * noise(q * 2.3 + 8, Math.sign(a) * 3.1));
+    const lateral = a * hw - Math.sign(a) * inset + 0.025 * noise(q * 0.65, 11.4);
+    const px = f.x + f.nx * lateral + f.tx * along, py = f.y + f.ny * lateral + f.ty * along;
+    const ridge = kindAt(q).kind === 'ridge';
+    const footRut = -0.012 * bump((Math.abs(a) - 0.32) / 0.28) * (0.7 + 0.3 * noise(q * 0.7, 9.3));
+    const dh = jit[k].tilt * a - (ridge ? 0.04 : 0.035) * (1 - a * a) + footRut
+      + 0.02 * noise(px * 2.1, py * 2.1) + 0.01 * noise(px * 7.3 + 5, py * 7.3)
       + 0.007 * noise(px * 11 + 3, py * 11 + 9);
-    return [px, levelAt(k, q) + dh - drop + heap, py, a];
+    return [px, levelAt(k, q) + dh - drop + heap, py, a, hash(k, 23)];
   };
   // Rows of a dirt tread: the route's samples, and closer together toward both ends.
   const denseRows = (a, b) => {
@@ -174,12 +191,23 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     }
     return [...set].sort((x, y) => x - y);
   };
+  // Short concrete goings still need a row just behind each nosing so chipped corners
+  // round into the level tread instead of stretching a triangle across its full depth.
+  const concreteRows = (a, b) => {
+    const set = new Set(samplesIn(a, b).map((v) => +v.toFixed(5)));
+    if (b - a > 0.15) {
+      set.add(+(a + 0.055).toFixed(5));
+      set.add(+(b - 0.055).toFixed(5));
+    }
+    return [...set].sort((x, y) => x - y);
+  };
   // From a tread's edge vertex V out to the ground, in two steps that roll off the edge and
   // then run with the ground (it was a straight ramp).
   const skirtPts = (V, f, side) => {
     const out = [V];
+    const reach = SKIRT * (0.82 + 0.18 * noise(f.x * 0.85 + side * 13, f.y * 0.85));
     for (const t of [0.4, 1]) {
-      const ox = V[0] + f.nx * side * SKIRT * t, oy = V[2] + f.ny * side * SKIRT * t;
+      const ox = V[0] + f.nx * side * reach * t, oy = V[2] + f.ny * side * reach * t;
       const g = Math.min(heightAt(ox, oy), V[1]) - 0.07 * t;
       const e = t * t * (3 - 2 * t);
       out.push([ox, V[1] + (g - V[1]) * (0.35 * t + 0.65 * e) + 0.012 * noise(ox * 3.1 + 3, oy * 3.1) * 4 * t * (1 - t), oy, side * (1 + 0.3 * t)]);
@@ -196,12 +224,12 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     const logHere = !isC && k < NT - 1 && bnd[k].rise >= 0.12 && rand() < 0.55;
     hasLog[k] = logHere;
     const M = isC ? concrete : dirt;
-    const qs = isC ? samplesIn(tr.s0, tr.s1) : denseRows(tr.s0, tr.s1);
+    const qs = isC ? concreteRows(tr.s0, tr.s1) : denseRows(tr.s0, tr.s1);
     // Across the tread: concrete flat, dirt a little dished where feet wear it, and lumpy.
-    const across = isC ? [-1, -0.5, 0, 0.5, 1] : ACROSS_D;
-    const rows = qs.map((q, qi) => {
-      const f = frame(q), role = qi === 0 ? 'first' : qi === qs.length - 1 ? 'last' : 'mid';
-      return { q, f, back: backDist(k, q), front: frontDist(k, q), verts: across.map((a) => (isC ? vertAt(k, q, a, role) : vertAtDirt(k, q, a))) };
+    const across = isC ? ACROSS_C : ACROSS_D;
+    const rows = qs.map((q) => {
+      const f = frame(q);
+      return { q, f, back: backDist(k, q), front: frontDist(k, q), verts: across.map((a) => (isC ? vertAt(k, q, a) : vertAtDirt(k, q, a))) };
     });
     // Top surface.
     for (let r = 0; r + 1 < rows.length; r++) {
@@ -218,7 +246,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
         const A = rows[r], B = rows[r + 1];
         const ea = A.verts[ci], eb = B.verts[ci];
         if (isC) {
-          const ga = Math.min(heightAt(ea[0], ea[2]), ea[1]) - 0.3, gb = Math.min(heightAt(eb[0], eb[2]), eb[1]) - 0.3;
+          const ga = Math.min(heightAt(ea[0], ea[2]), ea[1]) - 0.16, gb = Math.min(heightAt(eb[0], eb[2]), eb[1]) - 0.16;
           const wall = [[ea[0], ga, ea[2]], [eb[0], gb, eb[2]]];
           if (side > 0) M.quad(ea, eb, [...wall[1], 1], [...wall[0], 1], [1, A.q, 9], [1, B.q, 9]);
           else M.quad(ea, [...wall[0], -1], [...wall[1], -1], eb, [1, A.q, 9], [1, B.q, 9]);
@@ -237,8 +265,8 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       const f = frame(tr.s1);
       const up = bnd[k].upper, lo = up === k ? k + 1 : k;
       const dir = up === k ? 1 : -1;   // which way the riser faces along the line
-      const tops = across.map((a) => (isC ? vertAt(up, tr.s1, a, up === k ? 'last' : 'first') : vertAtDirt(up, tr.s1, a)));
-      const bots = across.map((a) => { const v = isC ? vertAt(lo, tr.s1, a, lo === k ? 'last' : 'first') : vertAtDirt(lo, tr.s1, a); return [v[0], v[1] - (isC ? 0 : 0), v[2], a]; });   // (v13: the dirt riser's foot is the tread's own edge exactly, it was 1 cm under, and the bank's seam showed as a hairline)
+      const tops = across.map((a) => (isC ? vertAt(up, tr.s1, a) : vertAtDirt(up, tr.s1, a)));
+      const bots = across.map((a) => { const v = isC ? vertAt(lo, tr.s1, a) : vertAtDirt(lo, tr.s1, a); return [v[0], v[1], v[2], a]; });   // (v13: the dirt riser's foot is the tread's own edge exactly, it was 1 cm under, and the bank's seam showed as a hairline)
       if (isC) {
         for (let c = 0; c + 1 < across.length; c++) {
           const va = tops[c], vb = tops[c + 1], vc = bots[c + 1], vd = bots[c];
@@ -359,10 +387,10 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
 
   // ---------------------------------------------------------------- handrails
   const timberPosts = instances(), timberRails = instances(), bambooPosts = instances(), bambooRails = instances();
-  // (v13) The cord lashings, in two parts (trail.js): turns round the post, above and below the
-  // rail, with the knot and the loose ends, and turns round the rail either side of the post.
-  // Three variants of each, so they are not all the same.
-  const lashPost = [instances(), instances(), instances()], lashRail = [instances(), instances(), instances()];
+  // Each rail end gets a crossed lashing over the joint. The outer lane also needs its own
+  // bridge back to the post; a rail-only cuff leaves that pole apparently unfastened.
+  // Three irregular ties for each of the near/far lanes, plus the rail turns.
+  const lashPost = Array.from({ length: 6 }, instances), lashRail = [instances(), instances(), instances()];
   // Is (px, py) on or right beside another stretch of the path (a hairpin's other leg)?
   const clashes = (px, py, q) => {
     let hit = false;
@@ -427,8 +455,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
             for (const [p, pr] of [[a, prev], [b, post]]) {
               const rr = rand(), variant = Math.min(2, Math.floor(rr * 3));
               const [mp, mr] = lashingMatrices(p, [inX, inY], pr, [b[0] - a[0], b[1] - a[1], b[2] - a[2]], inset, railR);
-              // (The turns round the post only for the rail next to it.)
-              if (lane === 0) lashPost[variant].push(mp, rr * 3 - variant);
+              lashPost[variant + 3 * lane].push(mp, rr * 3 - variant);
               lashRail[variant].push(mr, rr * 3 - variant);
             }
           } else {
@@ -470,6 +497,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     logs: logs.done(), stones: stones.done(), timberPosts: timberPosts.done(), timberRails: timberRails.done(),
     bambooPosts: bambooPosts.done(), bambooRails: bambooRails.done(),
     lashPost0: lashPost[0].done(), lashPost1: lashPost[1].done(), lashPost2: lashPost[2].done(),
+    lashPost3: lashPost[3].done(), lashPost4: lashPost[4].done(), lashPost5: lashPost[5].done(),
     lashRail0: lashRail[0].done(), lashRail1: lashRail[1].done(), lashRail2: lashRail[2].done(),
     ms: Math.round(performance.now() - t0),
   };
@@ -482,8 +510,8 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
 // side, 2 dirt skirt, 3 riser), and on a tread how far it is from the foot of the riser behind
 // it (v10; 9 for none). Normals are worked out from the faces around each vertex.
 function mesh(smooth = false) {
-  const pos = [], trail = [], idx = [];
-  const add = (v, t) => { pos.push(v[0], v[1], -v[2]); trail.push(v[3] ?? 0, t[1], t[0], t[2] ?? 9); return pos.length / 3 - 1; };
+  const pos = [], trail = [], wear = [], idx = [];
+  const add = (v, t) => { pos.push(v[0], v[1], -v[2]); trail.push(v[3] ?? 0, t[1], t[0], t[2] ?? 9); wear.push(v[4] ?? 0.5); return pos.length / 3 - 1; };
   return {
     // Corners a, b, c, d counterclockwise seen from the outside; ta for a and d, tb for b and c.
     quad(a, b, c, d, ta, tb) {
@@ -520,16 +548,16 @@ function mesh(smooth = false) {
         if (l < 1e-9) { N[o] = 0; N[o + 1] = 1; N[o + 2] = 0; continue; }
         N[o] /= l; N[o + 1] /= l; N[o + 2] /= l;
       }
-      const T = new Float32Array(trail);
-      if (!smooth) return { position: P, normal: N, trail: T, index: I };
+      const T = new Float32Array(trail), W = new Float32Array(wear);
+      if (!smooth) return { position: P, normal: N, trail: T, wear: W, index: I };
       // (v13) Weld: every quad was given four vertices of its own, so a tread of 11 by 20 quads
       // sent four times as many vertices through the vertex shader (with its haze lookup) as it
       // has corners. Corners with the same position, normal and attributes are one vertex.
       const remap = new Uint32Array(P.length / 3), seen = new Map();
-      const outP = [], outN = [], outT = [];
+      const outP = [], outN = [], outT = [], outW = [];
       const r5 = (v) => Math.round(v * 1e5);
       for (let i = 0; i < remap.length; i++) {
-        const key = `${r5(P[i * 3])},${r5(P[i * 3 + 1])},${r5(P[i * 3 + 2])},${r5(T[i * 4])},${r5(T[i * 4 + 1])},${r5(T[i * 4 + 2])},${r5(T[i * 4 + 3])},${r5(N[i * 3])},${r5(N[i * 3 + 1])},${r5(N[i * 3 + 2])}`;
+        const key = `${r5(P[i * 3])},${r5(P[i * 3 + 1])},${r5(P[i * 3 + 2])},${r5(T[i * 4])},${r5(T[i * 4 + 1])},${r5(T[i * 4 + 2])},${r5(T[i * 4 + 3])},${r5(N[i * 3])},${r5(N[i * 3 + 1])},${r5(N[i * 3 + 2])},${r5(W[i])}`;
         let j = seen.get(key);
         if (j === undefined) {
           j = outP.length / 3;
@@ -537,11 +565,12 @@ function mesh(smooth = false) {
           outP.push(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
           outN.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]);
           outT.push(T[i * 4], T[i * 4 + 1], T[i * 4 + 2], T[i * 4 + 3]);
+          outW.push(W[i]);
         }
         remap[i] = j;
       }
       for (let t = 0; t < I.length; t++) I[t] = remap[I[t]];
-      return { position: new Float32Array(outP), normal: new Float32Array(outN), trail: new Float32Array(outT), index: I };
+      return { position: new Float32Array(outP), normal: new Float32Array(outN), trail: new Float32Array(outT), wear: new Float32Array(outW), index: I };
     },
   };
 }

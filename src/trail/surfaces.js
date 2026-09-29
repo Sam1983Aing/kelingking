@@ -6,8 +6,8 @@
 export const TRAIL_SURFACES = [
   // The steps and the platform: pale grey cement, stained (trail-stairs-viewpoint.jpg).
   { id: 'concrete_floor_02', scan: 2, tile: 2, use: 'the concrete steps and the viewpoint platform',
-    // (v10: a little darker; the treads came out white in the noon sun, the photo's are grey.)
-    avg: [0.467, 0.430, 0.354], target: [0.575, 0.56, 0.535] },
+    // The exposed flight is dusty grey limestone concrete rather than a white pebble mosaic.
+    avg: [0.467, 0.430, 0.354], target: [0.505, 0.485, 0.455] },
   // The path: dusty pale limestone dirt and gravel on the ridge (trail-top-railing.jpg); the
   // shader browns it lower down.
   { id: 'rocky_trail', scan: 2, tile: 2, use: 'the dirt path',

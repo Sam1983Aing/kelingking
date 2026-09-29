@@ -2478,3 +2478,36 @@ The wave remains a procedural surf model rather than a fluid simulation, and the
 collapse can still read as a bright strip from some aerial moments. The old tan sand
 triangle, visible with water hidden, remains the separate terrain/material issue
 recorded under v5.
+## v19: the stair path and blue rail lashings (2026-09-29)
+
+Sam showed a close frame of the lower steps: the blue cord read as separate decorative loops,
+and the stone path and first stair flight were too straight and clean. His photos show a wider,
+weathered concrete start, then a narrow brown-earth route with uneven log risers, stones,
+and grasses cutting into the margins. A close photo from [Let's Venture Out](https://www.letsventureout.com/kelingking-beach-hike-nusa-penida/)
+shows the blue twine gripping intersecting poles with diagonal strands and small ends.
+
+### What changed
+
+- The paved flight starts about 1.85 m wide and tapers toward the 1.3 m ridge path. Its
+  treads have modestly varied going and rise, rounded damage at some corners, settled top
+  surfaces, and shorter exposed side walls. The concrete scan is darker, with broad dirt
+  staining and a different weathering value for each tread instead of uniformly white
+  aggregate. More corners break away than in v18, but the central walking line stays intact.
+- The dirt track drifts slightly within the mapped route and gets shallow foot ruts, uneven
+  verge reach, and patches of packed brown earth among the exposed limestone grit. It keeps
+  its rounded nosings, heaped riser feet, and scattered logs from v13.
+- Each bamboo rail end now has thin cord wrapping the post and rail, with two taut crossing
+  strands over the actual interface. Both overlapping rail lanes have a post connection.
+  The knot is compact, the tail is 2–4 cm, and the blue and bamboo colours are weathered.
+  The old 7.5 cm arched ends are gone. The near-only lashing cull still keeps the rope cost
+  out of distant hero views.
+
+### Checks
+
+Close contact sheets at four paved positions and four lower trail positions were compared
+against the supplied photos. The terrain bake was rebuilt for the normal preview. All nine
+hero frames rendered with zero console messages. Side-by-side timing against v18 commit
+`11eabdd`, six rounds of six frames, came in between -6% and +3%; every hero view stays
+within the 10% budget. The local standalone also loaded offline with no console errors,
+generating its own terrain. The dark terrain patch beside the top stairs is present in the
+v18 baseline contact sheet as well; this pass does not change that terrain surface.

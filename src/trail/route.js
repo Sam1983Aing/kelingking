@@ -111,10 +111,15 @@ export function buildRoute(spec, heightAt) {
   for (let i = 0; i < n; i++) if (grade[i] > par('flat', i)) for (let j = Math.max(0, i - 4); j <= Math.min(n - 1, i + 4); j++) steep[j] = 1;
   {
     let T = hd[0], last = 0, t0 = 0, level = steep[0] ? T : null;
-    // Cut by hand, the dirt steps are uneven: each one's rise and going are the section's
-    // times a random factor within +-jitter (0 for the concrete).
+    // Cut by hand, the dirt steps are uneven. The poured concrete flight has a smaller
+    // variation: repairs, settlement and an occasional wider going interrupt its cadence.
     let nk = 0, jr = 1, jg = 1;
-    const next = (i) => { const j = par('jitter', i); jr = 1 + j * (2 * hash(++nk) - 1); jg = 1 + j * (2 * hash(nk + 7919) - 1); };
+    const next = (i) => {
+      const paved = S[sec[i]].kind === 'concrete', j = paved ? 0.13 : par('jitter', i);
+      jr = 1 + j * (2 * hash(++nk) - 1);
+      jg = 1 + j * (2 * hash(nk + 7919) - 1);
+      if (paved && hash(nk + 4831) < 0.025) jg += 0.16;
+    };
     next(0);
     const close = (q) => { treads.push({ s0: t0, s1: q, T: level }); t0 = q; };
     for (let q = 0.01; q < s[n - 1]; q += 0.01) {
@@ -168,7 +173,16 @@ export function buildRoute(spec, heightAt) {
   for (let i = 0; i < n; i++) hg[i] = Math.min(hg[i], lowT[i]) - spec.clearance;
 
   const w = new Float32Array(n);
-  for (let i = 0; i < n; i++) w[i] = par('width', i);
+  // The first paved flight is broad enough for two people to pass. It narrows gradually
+  // toward the exposed ridge, where the original mapped width is appropriate. Keep the
+  // widening in the route so the carved shelf, tread mesh, and handrails share its edge.
+  const concreteEnd = spec.sections[0]?.kind === 'concrete'
+    ? s[sec.findLastIndex((k) => k === 0)] : 0;
+  const ease = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < n; i++) {
+    const pavedExtra = concreteEnd > 25 ? 0.55 * (1 - ease(18, concreteEnd - 4, s[i])) : 0;
+    w[i] = par('width', i) + pavedExtra;
+  }
 
   // ---------------------------------------------------------------- queries
   // A hash of the samples in 2 m cells, for "what part of the path is near here".

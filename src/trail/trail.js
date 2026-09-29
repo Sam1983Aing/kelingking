@@ -15,21 +15,14 @@ import { loadSurfaceTextures } from '../terrain/surface-textures.js';
 
 const srgbGain = (s) => s.target.map((t, i) => Math.pow(t, 2.2) / Math.pow(s.avg[i], 2.2));
 
-// A cord lashing (v13): what one joint of a bamboo rail is tied with, in two parts (geometry.js has
-// the frames). The cord is thin, a 5 mm nylon line, where v6 to v12 had a smooth blue collar 7 cm
-// tall. aTrail carries the angle round the cord and the metres along it, for the twist in the
-// shader.
-//   'post'  turns round the post just above and below the rail (post radius about 0.04, the
-//           rail's axis 0.055 out from the post's), and a knot on the inside of the path with two
-//           loose ends hanging from it,
-//   'rail'  a spiral of turns round the rail on each side of the post, wound at the cord's own
-//           pitch, so they read on the front of the rail, where the post's turns are hidden.
-// Each in three variants, a turn or two different.
-function lashingGeometry(kind, variant) {
-  let seed = 9173 + variant * 4409 + (kind === 'rail' ? 77 : 0);
+// Thin, weathered blue cord. The post piece crosses over the face of the rail as well as wrapping
+// the post; the rail piece adds the tight turns on either side. lane 1 reaches the second,
+// overlapping rail. There are three small variations per lane, shared by the instances.
+function lashingGeometry(kind, variant, lane = 0) {
+  let seed = 9173 + variant * 4409 + lane * 739 + (kind === 'rail' ? 77 : 0);
   const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const pos = [], nrm = [], tr = [], idx = [];
-  const tube = (path, radius, radial) => {
+  const tube = (path, radius, radial, bridgeInset = 0) => {
     const n = path.length, base = pos.length / 3;
     // Frames along the path by parallel transport.
     const tan = path.map((p, i) => {
@@ -51,7 +44,7 @@ function lashingGeometry(kind, variant) {
         const nx = N[0] * c + B[0] * s2, ny = N[1] * c + B[1] * s2, nz = N[2] * c + B[2] * s2;
         pos.push(path[i][0] + nx * radius, path[i][1] + ny * radius, path[i][2] + nz * radius);
         nrm.push(nx, ny, nz);
-        tr.push(a, along, 0, 9);
+        tr.push(a, along, bridgeInset > 0 ? 1 : 0, bridgeInset);
       }
     }
     for (let i = 0; i + 1 < n; i++) {
@@ -62,47 +55,61 @@ function lashingGeometry(kind, variant) {
       }
     }
   };
-  const cord = 0.0028, TAU = Math.PI * 2;
+  const cord = 0.0025, TAU = Math.PI * 2;
   if (kind === 'post') {
-    // Rings round the post, three above the rail and two or three below, each a little tilted,
-    // a little bigger or smaller, and not quite closed: the end runs on past the start.
-    const nAbove = [2, 3, 2][variant], nBelow = [2, 2, 3][variant];
-    const ring = (y0, k) => {
-      const R = 0.0432 + (rnd() - 0.5) * 0.0026, ph = rnd() * TAU, tilt = (rnd() - 0.5) * 0.007;
+    const postR = 0.0432, railR = 0.0287, inset = lane ? 0.109 : 0.055;
+    // Adjacent rail spans meet at a post. Stagger the outer rail's bands vertically so the two
+    // lashings do not become duplicate concentric rings.
+    const bandY = (lane ? 0.049 : 0.036) + (variant - 1) * 0.0018;
+    const band = (sign, turns) => {
+      const phase = rnd() * TAU, steps = Math.ceil(turns * 12);
       const path = [];
-      for (let j = 0; j <= 11; j++) {
-        const th = ph + (j / 10) * TAU;
-        path.push([R * Math.cos(th), y0 + tilt * Math.sin(th) + 0.0011 * Math.sin(3 * th + k), R * Math.sin(th)]);
+      for (let j = 0; j <= steps; j++) {
+        const t = j / steps, th = phase + t * turns * TAU;
+        path.push([postR * Math.cos(th), sign * (bandY + 0.006 * t), postR * Math.sin(th)]);
       }
-      tube(path, cord * (0.92 + 0.16 * rnd()), 3);
+      tube(path, cord, 4);
     };
-    for (let i = 0; i < nAbove; i++) ring(0.0335 + i * 0.0058 + (rnd() - 0.5) * 0.0012, i);
-    for (let i = 0; i < nBelow; i++) ring(-(0.0335 + i * 0.0058) + (rnd() - 0.5) * 0.0012, i + 5);
-    // The knot on the inside face of the top turn, and the two ends.
-    const ka = Math.PI / 2 + (variant - 1) * 0.5 + (rnd() - 0.5) * 0.3, R = 0.0475;
-    const kx = R * Math.cos(ka), kz = R * Math.sin(ka), ky = 0.0335 + (nAbove - 1) * 0.0058;
-    tube([[kx - 0.006, ky, kz - 0.001], [kx, ky + 0.0015, kz + 0.002], [kx + 0.006, ky, kz - 0.001]], 0.0052, 5);
-    tube([[kx - 0.003, ky - 0.004, kz + 0.002], [kx + 0.002, ky + 0.003, kz + 0.003], [kx + 0.004, ky - 0.002, kz]], 0.0042, 5);
-    for (let e = 0; e < 2; e++) {
-      const L = (e === 0 ? 0.075 : 0.038) * (0.7 + 0.6 * rnd()), side = e === 0 ? 1 : -1;
-      const path = [];
-      for (let j = 0; j <= 5; j++) {
-        const t = j / 5;
-        path.push([kx + side * (0.003 + 0.012 * t * t) + (rnd() - 0.5) * 0.0015, ky - 0.004 - L * t, kz + 0.004 + 0.045 * Math.sin(t * 2.0) * (0.75 + 0.25 * e)]);
+    band(1, lane ? 1.0 : [1.5, 1.0, 1.5][variant]);
+    band(-1, 1.0);
+
+    // Two taut diagonal strands run from the post over the exposed face of the rail. Their
+    // curved middle follows the rail's circular section; one passes over the other at the X.
+    const railSurface = railR + cord + 0.0008;
+    for (let cross = 0; cross < 2; cross++) {
+      const dir = cross ? -1 : 1, path = [];
+      const sideX = 0.026, postZ = Math.sqrt(postR * postR - sideX * sideX) + cord;
+      path.push([-dir * sideX, bandY, postZ]);
+      path.push([-dir * 0.031, railSurface + 0.001, inset]);
+      for (let j = 0; j <= 8; j++) {
+        const t = j / 8, y = railSurface * (1 - 2 * t);
+        const x = dir * 0.030 * (2 * t - 1);
+        const z = inset + Math.sqrt(Math.max(0, railSurface * railSurface - y * y))
+          + (cross ? 0.005 * Math.pow(Math.sin(Math.PI * t), 8) : 0);
+        path.push([x, y, z]);
       }
-      tube(path, 0.0023, 3);
+      path.push([dir * 0.031, -railSurface - 0.001, inset]);
+      path.push([dir * sideX, -bandY, postZ]);
+      tube(path, cord * 0.92, 4, inset);
     }
+
+    // Compact overhand knot on the inner face, with one short end falling under its own weight.
+    const knotY = -bandY - 0.004, knotZ = postR + cord * 2;
+    tube([[0.002, knotY + 0.003, knotZ], [0.009, knotY + 0.006, knotZ + 0.003],
+      [0.014, knotY, knotZ + 0.002], [0.009, knotY - 0.003, knotZ]], cord * 1.15, 4);
+    const tail = 0.024 + 0.012 * rnd();
+    tube([[0.010, knotY - 0.003, knotZ], [0.015, knotY - tail * 0.5, knotZ + 0.001],
+      [0.017 + 0.004 * (rnd() - 0.5), knotY - tail, knotZ - 0.003]], cord * 0.86, 3);
   } else {
-    // A spiral round the rail, from just clear of the post outward, on each side.
-    const nA = [2, 3, 2][variant], nB = [2, 2, 3][variant], pitch = 0.0057;
-    for (const [sgn, n] of [[1, nA], [-1, nB]]) {
-      const path = [], seg = 10, R0 = 0.0287, ph = rnd() * TAU;
-      for (let j = 0; j <= n * seg; j++) {
-        const th = ph + (j / seg) * TAU;
-        const R = R0 + 0.0007 * Math.sin(2.1 * th + variant);
-        path.push([sgn * (0.052 + pitch * (j / seg)), R * Math.sin(th), R * Math.cos(th)]);
+    // Uneven tight turns around the rail, immediately beside the crossing instead of broad cuffs.
+    const turns = [[1.5, 1.25], [1.25, 1.5], [1.75, 1.0]][variant];
+    for (const [side, n] of [[1, turns[0]], [-1, turns[1]]]) {
+      const path = [], steps = Math.ceil(n * 12), phase = rnd() * TAU;
+      for (let j = 0; j <= steps; j++) {
+        const t = j / steps, th = phase + t * n * TAU;
+        path.push([side * (0.034 + 0.006 * n * t), 0.0287 * Math.sin(th), 0.0287 * Math.cos(th)]);
       }
-      tube(path, cord * (0.94 + 0.12 * rnd()), 3);
+      tube(path, cord, 4);
     }
   }
   const g = new THREE.BufferGeometry();
@@ -127,16 +134,27 @@ varying vec3 vLocalN;     // and the normal in it
 varying vec3 vScale;      // the shape's size (m)
 varying mat3 vRot;        // its own axes in the world
 varying float vRand;
+varying float vWear;      // one weathering value per tread, shared by all its top vertices
 attribute vec4 aTrail;
 attribute float aRand;
+attribute float aWear;
 ${AERIAL_VERT_PACKED}
 `;
 
 const VERT_BEGIN = /* glsl */ `
 vTrail = aTrail;
+vWear = aWear;
 vLocalN = normal;
 #ifdef USE_INSTANCING
   vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+#ifdef TR_ROPE
+  // The post frame scales with its radius. Keep the crossing's rail end centred on the actual
+  // rail offset, fading the correction away where the strand meets the post band.
+  if (aTrail.z > 0.5) {
+    float towardRail = smoothstep(0.038, aTrail.w, position.z);
+    transformed.z += towardRail * aTrail.w * (1.0 / max(sc.z, 1e-3) - 1.0);
+  }
+#endif
   vLocal = position * sc;
   vScale = sc;
   vRot = mat3(instanceMatrix[0].xyz / sc.x, instanceMatrix[1].xyz / sc.y, instanceMatrix[2].xyz / sc.z);
@@ -201,6 +219,7 @@ varying vec3 vLocalN;
 varying vec3 vScale;
 varying mat3 vRot;
 varying float vRand;
+varying float vWear;
 #define T_CONCRETE 0
 #define T_DIRT 1
 #define T_WOOD 2
@@ -295,6 +314,10 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   float edge = smoothstep(0.55, 1.0, abs(vTrail.x));
   float worn = (1.0 - edge) * step(kind, 0.5);
   float n2 = fb(g * 0.21 + 3.0, 5.0, fp);
+  // Dust and soil settle in broad, broken patches. The second scale interrupts each stain
+  // so the scan does not read as one clean aggregate tile repeated on every going.
+  float grit = smoothstep(0.35, 0.64, tn(g * 0.74 + vec2(19.1, 7.4)))
+    * (0.50 + 0.50 * tn(g * 2.6 + vec2(3.7, 11.3)));
   if (uTrScans > 0.5) {
     TS t = tsTri(T_CONCRETE, P, N, vec2(0.0));
     col = t.color * (0.9 + 0.2 * n2);
@@ -307,6 +330,9 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   }
   col *= mix(1.0, 1.1, worn * 0.7);
   col *= mix(vec3(1.0), vec3(0.78, 0.76, 0.72), edge * 0.8);
+  col *= mix(vec3(1.0), vec3(0.42, 0.39, 0.35), grit * (0.62 + 0.30 * edge));
+  col *= mix(vec3(0.84, 0.82, 0.79), vec3(1.07, 1.06, 1.04), clamp(vWear, 0.0, 1.0));
+  trRough = mix(trRough, 0.96, grit * 0.35);
   // (v10) Grit and soil collect at the back of each tread, against the riser above: from
   // above, the flight reads as steps (it was a smooth pale ramp).
   // Plus a darker line in the corner itself. And the concrete greyer than the scan came out in
@@ -337,6 +363,8 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   float a = abs(vTrail.x);
   float trod = 1.0 - smoothstep(0.3, 0.95, a);
   float n1 = fb(g * 0.9, 1.2, fp), n3 = fb(g * 0.13, 8.0, fp);
+  float packed = smoothstep(0.38, 0.66, tn(g * 0.68 + vec2(13.2, 5.7)));
+  float finer = smoothstep(0.46, 0.7, tn(g * 2.9 + vec2(8.1, 1.4)));
   if (uTrScans > 0.5) {
     // Two readings, scaled and offset against each other and handed over by a noise, so the
     // 2 m tile does not repeat down 300 m of path.
@@ -354,7 +382,15 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
     trRough = 0.95;
   }
   col *= mix(vec3(1.0), vec3(0.76, 0.66, 0.55), lower) * (0.88 + 0.24 * n3);
-  col *= mix(1.0, 1.06, trod * 0.6);
+  // Gravel islands interrupt a compacted brown walking line. The reference path is packed
+  // soil with stones embedded in it, rather than a continuous sheet of loose aggregate.
+  float earthCover = clamp(0.16 + 0.59 * packed + 0.18 * trod - 0.08 * lower, 0.0, 0.86);
+  vec3 earth = mix(lin(vec3(0.39, 0.35, 0.29)), lin(vec3(0.34, 0.30, 0.25)), lower)
+    * (0.84 + 0.25 * n3);
+  col = mix(col, earth, earthCover);
+  col *= mix(vec3(1.0), vec3(0.79, 0.74, 0.68), finer * (0.08 + 0.12 * lower));
+  col *= mix(0.92, 1.04, clamp(vWear, 0.0, 1.0));
+  trNormal = normalize(mix(trNormal, N, earthCover * 0.38));
   // Skirts and the sides of the steps: the ground at the edge, darker and greener.
   if (vTrail.z > 1.5 && vTrail.z < 2.5) col = mix(col, uGroundAlb * (0.8 + 0.4 * n1), smoothstep(1.0, 1.4, a) * 0.75);
   if (vTrail.z > 2.5) col *= 0.72;   // the riser: packed earth, in its own shadow, damp
@@ -399,16 +435,16 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   float node = 1.0 - smoothstep(0.003, 0.016, abs(sd));
   float streak = tn(vec2(along * 3.0, ang * 6.0));
   float fib = tn(vec2(along * 1.6, ang * 11.0)) * 0.6 + tn(vec2(along * 5.0 + 3.0, ang * 27.0)) * 0.4;
-  // Mostly weathered to grey-tan; the odd newer pole still straw coloured.
-  vec3 fresh = lin(vec3(0.66, 0.57, 0.36)), old = lin(vec3(0.5, 0.48, 0.41));
+  // Most poles are sun-greyed tan. A few retain warmer bamboo colour, without reading yellow.
+  vec3 fresh = lin(vec3(0.59, 0.50, 0.34)), old = lin(vec3(0.46, 0.43, 0.36));
   col = mix(fresh, old, smoothstep(0.15, 0.45, vRand)) * (0.78 + 0.28 * streak) * (0.86 + 0.28 * fib);
   col *= mix(vec3(1.0), vec3(0.7, 0.68, 0.62), smoothstep(0.55, 0.8, tn(vec2(along * 1.7, vRand * 30.0))) * 0.6);   // grime
-  col *= 1.0 - 0.5 * node;
+  col *= 1.0 - 0.29 * node;
   col *= mix(1.0, 1.08, smoothstep(0.0, 0.05, sd) * (1.0 - smoothstep(0.05, 0.13, sd)));
   float split = smoothstep(0.9, 0.96, tn(vec2(along * 0.8 + 5.0, ang * 2.5 + vRand * 40.0)));
   col *= 1.0 - 0.45 * split * smoothstep(0.35, 0.0, abs(fract(along * 0.5) - 0.5));
   trNormal = normalize(N + vRot * vec3(0.0, sign(sd) * node * 0.5 * smoothstep(0.0, 0.004, abs(sd)) + (fib - 0.5) * 0.0, 0.0));
-  trRough = mix(0.45, 0.8, vRand) + 0.15 * node;
+  trRough = mix(0.72, 0.87, vRand) + 0.08 * node;
 #elif defined(TR_STONE)
   // (v10) Loose limestone: pale and dusty grey, pitted, each stone its own shade, stained with
   // soil where it sits in the ground.
@@ -421,16 +457,15 @@ vec3 trailSurface(vec3 P, vec3 N, float fp) {
   col = mix(col, col * vec3(0.66, 0.56, 0.44), soil * 0.8);
   trRough = 0.85;
 #elif defined(TR_ROPE)
-  // (v13) The blue nylon cord of trail-mid-descent-b.jpg: a saturated cyan-blue, the sun-faded
-  // ones paler and greyer, three strands twisted (diagonal stripes along it: a turn every 8 mm),
-  // dusty where it lies against the post. vTrail: the angle round the cord and metres along it.
+  // Weathered blue synthetic cord, with a subtle three-strand twist and dusty high spots.
+  // vTrail stores the angle round the cord and metres along its length.
   float ph = vTrail.y * 785.0 + vTrail.x * 2.0;
   float tw = sin(ph);
   tw = mix(tw, 0.0, smoothstep(1.0, 3.0, fwidth(ph)));
-  vec3 fresh = lin(vec3(0.03, 0.46, 0.70)), faded = lin(vec3(0.24, 0.52, 0.62));
-  col = mix(fresh, faded, smoothstep(0.25, 0.9, vRand)) * (0.86 + 0.16 * tw);
-  col *= mix(vec3(1.0), vec3(0.72, 0.68, 0.62), 0.5 * tn(vLocal.xy * 90.0 + vRand * 20.0));
-  trRough = 0.62;
+  vec3 fresh = lin(vec3(0.05, 0.35, 0.60)), faded = lin(vec3(0.18, 0.39, 0.53));
+  col = mix(fresh, faded, smoothstep(0.12, 0.9, vRand)) * (0.92 + 0.065 * tw);
+  col *= mix(vec3(1.0), vec3(0.77, 0.73, 0.68), 0.4 * tn(vLocal.xy * 90.0 + vRand * 20.0));
+  trRough = 0.87;
 #endif
   if (uClayT > 0.5) { col = lin(vec3(0.74, 0.72, 0.68)); trNormal = N; trRough = 0.93; }
   return col;
@@ -506,7 +541,8 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
   const unitCyl = new THREE.CylinderGeometry(1, 1, 1, 10, 1, false);
   const unitCylRail = new THREE.CylinderGeometry(1, 1, 1, 10, 6, false);   // (bamboo rails: bowed in the vertex shader)
   const unitCylFine = new THREE.CylinderGeometry(1, 1, 1, 14, 10, false);
-  const lashPostGeo = [0, 1, 2].map((v) => lashingGeometry('post', v)), lashRailGeo = [0, 1, 2].map((v) => lashingGeometry('rail', v));
+  const lashPostGeo = [0, 1, 2, 3, 4, 5].map((v) => lashingGeometry('post', v % 3, Math.floor(v / 3)));
+  const lashRailGeo = [0, 1, 2].map((v) => lashingGeometry('rail', v));
   // (v10) A stone: a faceted, lumpy ball, flat underneath, about 1 across. Limestone breaks
   // into angular pieces, so its facets stay (no smoothing across them).
   const unitStone = (() => {
@@ -575,6 +611,7 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
       g.setAttribute('position', new THREE.BufferAttribute(d.position, 3));
       g.setAttribute('normal', new THREE.BufferAttribute(d.normal, 3));
       g.setAttribute('aTrail', new THREE.BufferAttribute(d.trail, 4));
+      g.setAttribute('aWear', new THREE.BufferAttribute(d.wear, 1));
       g.setIndex(new THREE.BufferAttribute(d.index, 1));
       g.computeBoundingSphere();
       const m = new THREE.Mesh(g, mats[k]);
@@ -604,9 +641,11 @@ export function createTrail(lightUniforms = {}, gradeUniforms = {}, shared = {})
     // the pass draws them straight: where the real pole was behind that depth, nothing was drawn.)
     inst('bambooPosts', unitCylFine, mats.bambooPost, false);
     inst('bambooRails', unitCylRail, mats.bamboo, false);
-    // (Three variants of each part of the lashing, no depth pass: a few millimetres of cord.)
-    for (let v = 0; v < 3; v++) {
+    // Three variants for each rail lane, with separate post geometry for the outer rail.
+    for (let v = 0; v < 6; v++) {
       if (data.inst['lashPost' + v]) inst('lashPost' + v, lashPostGeo[v], mats.rope, false);
+    }
+    for (let v = 0; v < 3; v++) {
       if (data.inst['lashRail' + v]) inst('lashRail' + v, lashRailGeo[v], mats.rope, false);
     }
     // Where the sections change, for the dirt's colour (metres along).
