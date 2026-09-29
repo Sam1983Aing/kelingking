@@ -170,7 +170,7 @@ Surf surfAt(vec2 p, vec4 d) {
   Ak = min(Ak, 0.85 * depthHere + 0.35);
 
   float Lhere = L0 + LB * max(s, 0.0);
-  float wf = max(mix(0.14, 0.07, smoothstep(br + 45.0, br, s)), 1.8 / Lhere);   // front at least ~2 m wide
+  float wf = max(mix(0.14, 0.095, smoothstep(br + 45.0, br, s)), 2.3 / Lhere);   // an open shoulder before the lip spills
   float w = v < 0.0 ? wf : 0.24;
   float crest = exp(-(v * v) / (w * w)) * smoothstep(0.44, 0.32, abs(v));
   // Breaking: this wave's crest reaches its break point, throws its lip and collapses over
@@ -194,14 +194,20 @@ Surf surfAt(vec2 p, vec4 d) {
   // Where the breaker draws the lip, this only laid a milky veil over the rising crest just
   // before the breaker took over, so it is nearly off then.)
   float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v) * (1.0 - 0.9 * uBreakerOn);
-  // The bore: a white front, the turbulent roller behind it churning for several metres
-  // (v9: a band a fifth of a wavelength deep, where it was a metre or two), then foam that
-  // thins into lace.
-  // (Its leading edge ragged: lobes a metre or two across.)
+  // Foam is born where the thrown lip lands, rather than as a full white bar as soon as
+  // the crest enters shallow water. The source has metre-scale gaps; the surf simulation
+  // carries the broken patches shoreward and lets them spread, tear and thin into lace.
   // (Only inside the break: this runs for every point near a beach, three times per vertex.)
   float vr = broken > 0.0 && abs(v) < 0.1 ? v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02 : v;
-  float front = broken * smoothstep(-0.03, 0.0, vr) * (1.0 - smoothstep(0.05, 0.22, v)) * mix(0.7, 1.0, smoothstep(0.15, 0.0, v));
-  float trail = broken * 0.8 * exp(-max(v, 0.0) / 0.3) * step(0.0, v);
+  float landed = smoothstep(0.59, 0.85, tau);
+  float front = broken * landed * smoothstep(-0.03, 0.0, vr)
+              * (1.0 - smoothstep(0.04, 0.18, v));
+  if (front > 0.001) {
+    float burstPattern = vnoise(p * 0.24 + vec2(idx * 3.17, idx * 7.31)) * 0.7
+                + vnoise(p * 0.62 + vec2(idx * 5.83, -idx * 2.27)) * 0.3;
+    front *= 0.12 + 0.88 * smoothstep(0.28, 0.72, burstPattern);
+  }
+  float trail = broken * landed * 0.5 * exp(-max(v, 0.0) / 0.24) * step(0.0, v);
   float resid = smoothstep(br + 14.0, 0.0, s) * 0.2;
 
   float sz = mix(0.85, 1.1, big) * offshoreFade;
@@ -840,7 +846,7 @@ void main() {
 #else
   if ((simW > 0.0 && sim.r > 0.02) || sf.fresh > 0.0) {
 #endif
-    float fa = max(sim.r * simW, sf.fresh);
+    float fa = max(sim.r * simW, sf.fresh * 0.6);
     bubbles = smoothstep(0.02, 0.6, fa) * (0.55 + 0.45 * vnoise((p - sim.ba * simW) * 0.25 + 3.7)) * (1.0 - sf.sheet);
     vec3 milk = uGordonF * 0.5 * (uSunIrr * sunY * mix(0.4, 1.0, shadow) + uSkyIrr) / PI * vec3(0.9, 0.97, 1.0);
     under = mix(under, milk, bubbles * 0.55);
@@ -863,11 +869,11 @@ void main() {
     frontCover = 0.38 + 0.86 * (vnoise(qf * 0.42 + 6.1) * 0.65
                             + vnoise(qf * 1.8 + 17.3) * 0.35);
   }
-  float amount = clamp(max(max(sf.fresh, older), sf.front * frontCover * 0.8) * uFoam, 0.0, 1.0);
+  float amount = clamp(max(max(sf.fresh * 0.55, older), sf.front * frontCover * 0.8) * uFoam, 0.0, 1.0);
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
-  float fresh = max(sf.fresh, smoothstep(0.25, 0.95, sim.r) * simW);
+  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
@@ -921,7 +927,8 @@ void main() {
     farCover *= clamp(mix(0.25, 0.75, amount) + (brk - 0.5) * mix(2.2, 1.3, amount) + 0.3, 0.0, 1.0);
   }
   float foam = mix(lace, farCover, farW) * smoothstep(0.0, 0.06, amount);
-  foam = max(foam, smoothstep(0.9, 1.05, amount) * (1.0 - onSheet) * (1.0 - 0.6 * farW) * mix(0.5, 1.0, farW));
+  // The texture's bubble pattern can now leave holes even at peak foam density. A solid
+  // white override made a freshly broken crest read as a slab moving toward the beach.
   // Whitecaps: bright where the crest is breaking now, thinning into streaks as the foam ages.
   float capLace = smoothstep(1.0 - caps - 0.1, 1.0 - caps + 0.25, mix(pattern, 0.6, smoothstep(0.1, 0.6, fp)));
   foam = max(foam, capLace * smoothstep(0.02, 0.3, caps) * 0.9);

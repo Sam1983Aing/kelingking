@@ -7,9 +7,9 @@
 // that is breaking there (the surf in water-shader.js, stepped to where its phase is zero),
 // reads how far that wave is through breaking, and bends into that stage:
 //   0     the unbroken crest, exactly the heightfield's own shape
-//   0.35  the face steepens to vertical and the lip starts to throw
-//   0.5   the lip curls forward over a hollow face (the tube)
-//   0.8   the lip lands in the trough in front
+//   0.35  the shoulder steepens and a thin lip starts to spill
+//   0.5   the lip falls down the open face
+//   0.8   the falling water lands in front
 //   1     it collapses into the white water of the bore
 // Along the beach each column is at its own stage (the crest reaches its break point at
 // different times), so the wave peels. While a wave breaks the heightfield tucks its crest
@@ -17,11 +17,10 @@
 //
 // The cross-section is x forward (toward the beach), y up from the trough, in metres:
 //   back slope     the heightfield's Gaussian back
-//   outer lip      an elliptical arc from the crest top, curling forward and down
+//   outer lip      a thin sheet pitching forward from the crest
 //   lip edge
-//   inner lip      the underside, back up to the top of the tube
-//   face           the inside of the tube down to half height, then a concave quarter circle
-//                  into the trough (unbroken: the heightfield's Gaussian front)
+//   inner lip      the underside of that sheet
+//   face           an open, steepening slope into the trough
 //   floor          the trough in front, under the lip
 
 import * as THREE from 'three';
@@ -36,57 +35,48 @@ export const PROFILE = /* glsl */ `
 // is thin, the body of the wave is not), and how much the point follows the heightfield's own
 // shape (1) rather than the breaker's (0).
 vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax) {
-  float a = H * (0.2 + 0.4 * smoothstep(0.1, 0.7, tau));      // how far forward the lip reaches
-  float b = H * 0.5, yc = H * 0.5;
-  float xc = H * (0.02 + 0.3 * tau);                           // the crest moves forward as it throws
-  // A shore break pitches and spills rather than holding a round, identical tube all the
-  // way along the cove. The tip still reaches the trough, but the face stays more open.
-  float sweep = 146.0 * smoothstep(0.04, 0.82, tau);           // degrees the lip has curled through
-  float thTip = radians(90.0 - sweep);
-  float t0 = H * 0.28 * smoothstep(0.0, 60.0, sweep);          // lip thickness at its root
-  // The face keeps the incoming wave's convex shoulder until the lip is well underway.
-  // Forming the full hollow too early made every incoming crest a clean blue cylinder.
-  float m = smoothstep(0.22, 0.72, tau);                       // how far the face has become a tube
-  float ai = max(a - t0, 0.08 * H), bi = max(b - t0, 0.08 * H);
-  float xF = min(max(Lf, xc + a + 0.7 * H), xMax);
-  float faceEnd = min(mix(xc + Lf, xc - ai + yc, m), xF - 0.1);
+  // The old face was an elliptical tube for most of the break. At beach scale that made
+  // dozens of metres of crest look like one extruded blue cylinder. A shore breaker here
+  // spills: the lip is thin, its fall is short, and the face stays open to the sand.
+  float formed = smoothstep(-0.03, 0.55, tau);
+  float landed = smoothstep(0.55, 0.86, tau);
+  float xc = H * (0.02 + 0.18 * max(tau, 0.0));
+  float throwX = H * (0.12 + 0.43 * formed) * (1.0 - 0.18 * landed);
+  float dropY = H * (0.07 + 0.31 * formed + 0.14 * landed);
+  float rootT = max(H * 0.11 * formed, 0.008);
+  float tipX = xc + throwX, tipY = H - dropY;
+  float xF = min(max(Lf, tipX + 0.75 * H), xMax);
+  float faceEnd = max(tipX + 0.04 * H, xF - 0.22 * H);
+  float followSea = 1.0 - formed;
   if (v < 0.25) {
     float x = -Lb * (1.0 - v / 0.25);
     return vec4(x + xc * v / 0.25, H * exp(-3.5 * (x / Lb) * (x / Lb)), 50.0, 1.0);
   }
   if (v < 0.45) {
     float u = (v - 0.25) / 0.2;
-    float th = mix(radians(90.0), thTip, u);
-    return vec4(xc + a * cos(th), yc + b * sin(th), mix(max(t0, 0.3 * H), t0 * 0.15, u), 0.0);
+    float p = u * u * (3.0 - 2.0 * u);
+    return vec4(mix(xc, tipX, p), H - dropY * u * u,
+                mix(rootT, 0.012 * H, u), followSea);
   }
   if (v < 0.47) {
     float u = (v - 0.45) / 0.02;
-    return vec4(xc + mix(a, ai, u) * cos(thTip), yc + mix(b, bi, u) * sin(thTip), t0 * 0.15, 0.0);
+    return vec4(tipX - rootT * u * 0.65, tipY - rootT * u * 0.5,
+                0.012 * H, followSea);
   }
   if (v < 0.82) {
     float u = (v - 0.47) / 0.35;
-    vec2 tube;
-    float thick;
-    if (u < 0.35) {
-      float th = mix(thTip, radians(90.0), u / 0.35);
-      tube = vec2(xc + ai * cos(th), yc + bi * sin(th));
-      thick = mix(t0 * 0.15, t0, u / 0.35);
-    } else if (u < 0.7) {
-      float th = mix(radians(90.0), radians(180.0), (u - 0.35) / 0.35);
-      tube = vec2(xc + ai * cos(th), yc + bi * sin(th));
-      thick = H;
-    } else {
-      float ph = mix(0.0, radians(90.0), (u - 0.7) / 0.3);
-      tube = vec2(xc - ai + yc * (1.0 - cos(ph)), yc - yc * sin(ph));
-      thick = H;
-    }
-    float gu = max((u - 0.35) / 0.65, 0.0);
-    vec2 g = vec2(xc + Lf * gu, H * exp(-(gu / 0.5) * (gu / 0.5)));
-    return vec4(mix(g, tube, m), mix(H, thick, m), 1.0 - m);
+    // A falling sheet merges with a forward-sloping face. The foot is ahead of the lip,
+    // rather than folding back into a hollow tube. The thickening water below the fall
+    // shades like the body of the wave; only the edge stays translucent.
+    float slope = pow(u, 1.35);
+    float x = mix(tipX - 0.65 * rootT, faceEnd, slope);
+    float y = max(tipY - 0.5 * rootT, 0.0) * pow(1.0 - u, 0.78);
+    float thick = mix(0.08 * H, H, smoothstep(0.04, 0.75, u));
+    return vec4(x, y, thick, followSea);
   }
-  // The floor stays at the trough (the heightfield's front slope is tucked away under it).
+  // The short floor merges into the heightfield's advancing bore.
   float u = (v - 0.82) / 0.18;
-  return vec4(mix(faceEnd, xF, u), 0.0, 50.0, 1.0 - m);
+  return vec4(mix(faceEnd, xF, u), 0.0, 50.0, followSea);
 }
 `;
 
@@ -183,12 +173,16 @@ void main() {
   // Each bit of the lip at its own point in the throw (a real lip is never ruler straight).
   // Slow, broad changes in the peel precede the little tears along the lip. A single
   // uniform stage across the beach made the crest read as one extruded cylinder.
-  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.45;
+  float peel = (vnoise(vec2(aProf.y * 0.035, 7.1)) - 0.5) * 0.6;
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
   float st = mix(0.0, clamp(tau + (peel + jit * 0.025) * smoothstep(0.08, 0.32, tau), 0.0, 1.2), on);
   float tauC = max(tau, 0.0);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
-  float xF = min(max(Lf, H * (0.02 + 0.3 * st) + H * (0.2 + 0.4 * smoothstep(0.1, 0.7, st)) + 0.7 * H), xMax);
+  float shaped = smoothstep(-0.03, 0.55, st);
+  float landed = smoothstep(0.55, 0.86, st);
+  float tipX = H * (0.02 + 0.18 * max(st, 0.0))
+             + H * (0.12 + 0.43 * shaped) * (1.0 - 0.18 * landed);
+  float xF = min(max(Lf, tipX + 0.75 * H), xMax);
   vec2 pm = pc - n * pr.x;
   float yRef = mix(hB, hF, clamp((pr.x + Lb) / (Lb + xF), 0.0, 1.0));
   Surf sp = surfAt(pm, dataAt(pm));

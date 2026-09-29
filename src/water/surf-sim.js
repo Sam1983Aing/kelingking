@@ -138,7 +138,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     sand *= exp(-uDt / uLife.z);
 
     // New white water where waves break on the sand...
-    float make = sf.fresh * nearBeach;
+    float make = sf.fresh * nearBeach * 0.72;
     // ...and where a swell crest reaches the foot of the rock. The swell is the ocean's own,
     // so the bursts come with the waves, in sets, and are biggest on the exposed rock.
     float swellH = texture(uSwell0, p / uOceanL.x).y;

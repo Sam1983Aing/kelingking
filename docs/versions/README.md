@@ -23,6 +23,7 @@ version. A session works on its element only, and goes deep on it.
 | v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | in progress |
 | v16 | Batu Satu shape and greenery | [v16-islet-shape-greenery.md](v16-islet-shape-greenery.md) | in progress |
 | v17 | More natural clouds | [v17-cloud-realism.md](v17-cloud-realism.md) | in progress |
+| v18 | Natural shore break | [v18-shore-wave-rebuild.md](v18-shore-wave-rebuild.md) | in progress |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

@@ -2393,3 +2393,48 @@ eight-round run.
 The partial cloud in the east view remains more rounded and shaded than the wind-sheared
 white edge in the photo. The thin high veil is procedural and can read as streaks at certain
 angles. Cloud movement remains slow, matching the trade-wind speed set by the scene.
+
+## v18: natural shore break (2026-09-28)
+
+Sam found the first moments of the beach break unnatural from both the beach and the
+aerial scroll. The v17 cross-section curled into a long, uniform blue tube, then handed
+off to a broad white stripe. The water colour and small surface detail were already in
+the right direction, so this version changes the geometry and foam's large-scale birth.
+
+### What changed
+
+- The breaking ribbon now throws a thin spilling lip down an open sloping face instead
+  of forming an elliptical hollow tube. Its shape develops more gradually along the
+  crest; the approaching face is a little broader before the lip forms.
+- Fresh foam begins as the lip lands. Gaps in its source vary with the wave, and the
+  source is less intense. The existing foam simulation still carries those patches
+  toward shore and draws the same fine bubble texture; the shader no longer fills
+  peak-density foam with a solid white override.
+
+### How it was judged
+
+Matched five-second `shoreBreak` clips from v17 and v18, both from 16 s on the sea clock,
+show the old dark tube holding its shape before collapse. The v18 crest spills sooner
+and the new white water separates into smaller patches. The five-second `swash` clip
+shows the wash continuing onto and off the sand. The `shoreBreak`, `swash`, `beach` and
+`surfTop` still cameras compiled without console errors. Two attempts to straighten the
+whole cove wavefront were removed: an incoming phase skew caused a large white sweep on
+the sand, while a smoothed shore-distance field and run-end taper had little visible
+effect on the aerial corner.
+
+### Speed
+
+An alternating eight-round check against v17 commit `80b450a` measured `shoreBreak`
+at -12%, `swash` at +6%, `beach` at -6% and `viewpoint` at -3%. The spread varied with
+GPU load; all four median results are within the 10% frame budget. A full nine-view
+eight-round pass also stayed within budget except `trailLow` at +13%. A focused
+20-round repeat of that view measured +1%, so the isolated overage was not stable.
+The gallery records the paired results.
+
+### Still weak
+
+The cove-wide crest can still form a sharp bend where the sandy shoreline turns round
+the headland. The wave is less tubular at eye level, but it remains a procedural surf
+model rather than a fluid simulation, and the collapse can still read as a bright strip
+from some aerial moments. The old tan sand triangle, visible with water hidden, remains
+the separate terrain/material issue recorded under v5.
