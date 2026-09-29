@@ -2511,3 +2511,24 @@ hero frames rendered with zero console messages. Side-by-side timing against v18
 within the 10% budget. The local standalone also loaded offline with no console errors,
 generating its own terrain. The dark terrain patch beside the top stairs is present in the
 v18 baseline contact sheet as well; this pass does not change that terrain surface.
+
+## v20: final blue ties and sparse beach prints (2026-09-29)
+
+Sam's last-stair closeups exposed a blue oval apparently hovering beside the bamboo post.
+The original crossing strands made the projected loop, and the high upper rail allowed a
+band to silhouette above the angled post cut near the beach. The cord now makes two short,
+taut bridges between the post and snug rail turns. Over the final 20 m the upper rail eases
+down 14 cm, and a broken stump carries a rail only when its cut leaves enough room for the
+tie. Earlier stairs retain their layout.
+
+The six-metre normal tile had repeated hundreds of overlapping footprints over the dry
+beach. Five world-space walking lines now place alternating prints with varying stride,
+size and lateral drift. The dry sand scan stays, with a little fine colour and roughness
+variation at eye height. Removing the unused print texture also avoids its load-time
+generation and texture-array layer.
+
+Four close rail views from both sides and scroll stills at the last stairs and sand were
+checked against Sam's screenshots. The bake was rebuilt and checked. All nine hero views
+rendered without console messages; the standalone opened offline without errors. A paired
+16-round beach timing check against `a245aee` measured +3% median, below the 10% frame
+limit. The v20 gallery holds the close rail and sand views.

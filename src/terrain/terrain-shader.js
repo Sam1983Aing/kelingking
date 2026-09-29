@@ -47,7 +47,6 @@ varying float vFoot;      // metres out from the foot of a wall on the beach (0 
 #define L_GROUND 4
 #define L_SAND_DRY 5
 #define L_SAND_FIRM 6
-#define L_TRAMPLE 7
 
 ${SUN_SHADOW_GLSL}
 ${SWASH_GLSL}
@@ -105,10 +104,9 @@ float tfbm(vec2 p, float scale, float fp) {
   return 0.5 + s / 0.96875;
 }
 
-// ---------------------------------------------------------------- trampled sand (v10)
-// The scan alone read as a flat, even surface from eye height (Sam, on the sand). The footprints
-// and small lumps are a layer made at load (trample.js), read here like a scan; the lumps and
-// hollows of a metre or so are worked out here, with their slope.
+// ---------------------------------------------------------------- sand relief
+// The dry scan carries small texture; the broader lumps and their slopes come from this noise.
+// Individual prints are placed in world space below so they do not tile across the beach.
 
 // Value noise and its slope.
 vec3 tnd(vec2 p) {
@@ -256,18 +254,44 @@ Surf topLayer(int layer, float tile, vec2 rot, vec2 off, bool withColor) {
   return s;
 }
 
-// The trampled layer at this pixel: its tilt (world x, z) and how deep in a print (0..1), read
-// turned by rot and scaled, as topLayer reads a scan.
-vec3 trampleAt(vec2 rot, float scale, vec2 off) {
-  mat2 R = mat2(rot.x, rot.y, -rot.y, rot.x);
-  float tile = uTile[L_TRAMPLE] * scale;
-  vec2 q = R * triP.xz / tile + off;
-  // (Filtered a level sharper than the pixel asks for: averaged down, the prints go flat
-  // well before they are too small to see.)
-  vec3 n = textureGrad(uSurfNormal, vec3(q, float(L_TRAMPLE)), 0.5 * R * triDx.xz / tile, 0.5 * R * triDy.xz / tile).xyz;
-  vec2 t = n.xy * 2.0 - 1.0;
-  vec3 dn = vec3(rot.x, 0.0, -rot.y) * t.x + vec3(-rot.y, 0.0, -rot.x) * t.y;
-  return vec3(dn.x, dn.z, n.z);
+// Five lightly used routes across the upper beach. Each walker leaves alternating, spaced
+// impressions along a gently wandering line. World coordinates keep them from repeating with
+// the sand scans, and the rest of the beach stays undisturbed.
+vec3 beachPrints(vec2 g) {
+  vec2 uv = vec2(g.x + g.y, g.x - g.y) * 0.70710678;
+  vec3 mark = vec3(0.0); // normal tilt x/z, cavity
+  if (uv.x < 179.0 || uv.x > 242.0 || uv.y < -77.0 || uv.y > -28.0) return mark;
+  for (int i = 0; i < 5; i++) {
+    vec4 walk = i == 0 ? vec4(-44.15, 0.050, 185.0, 228.0)
+      : i == 1 ? vec4(-50.5, 0.065, 181.0, 222.0)
+      : i == 2 ? vec4(-34.0, -0.050, 185.0, 225.0)
+      : i == 3 ? vec4(-62.0, 0.030, 188.0, 230.0)
+      : vec4(-72.0, -0.075, 185.0, 241.0);
+    if (abs(uv.y - walk.x - walk.y * (uv.x - 200.0)) > 0.9) continue;
+    float stride = 0.63 + 0.028 * float(i);
+    float stepNo = floor((uv.x - walk.z) / stride + 0.5);
+    float at = walk.z + stepNo * stride;
+    if (at < walk.z || at > walk.w || abs(uv.x - at) > 0.25) continue;
+    float rnd = th12(vec2(stepNo + 31.0, float(i) * 17.0 + 7.0));
+    float u = uv.x - at + (rnd - 0.5) * 0.075;
+    float side = mod(stepNo, 2.0) < 1.0 ? -0.135 : 0.135;
+    float line = walk.x + walk.y * (at - 200.0) + 0.46 * sin(at * 0.11 + float(i) * 1.7);
+    float v = uv.y - line - side - (rnd - 0.5) * 0.065;
+    if (abs(v) > 0.16) continue;
+    float a = 0.145 * (0.92 + 0.15 * rnd);
+    float b = 0.075 * (0.9 + 0.2 * rnd) * (1.0 + 0.16 * smoothstep(-a, a, u));
+    float r2 = u * u / (a * a) + v * v / (b * b);
+    if (r2 >= 1.0) continue;
+    float core = 1.0 - r2;
+    float fade = smoothstep(walk.z, walk.z + 1.2, at) * (1.0 - smoothstep(walk.w - 1.2, walk.w, at));
+    float depth = (0.026 + 0.013 * rnd) * fade;
+    // Height -depth*(1-r²)²: its derivative makes a rounded wall, not a stamped outline.
+    float dhdu = 4.0 * depth * core * u / (a * a);
+    float dhdv = 4.0 * depth * core * v / (b * b);
+    mark.xy += vec2(-dhdu - dhdv, dhdu - dhdv) * 0.70710678;
+    mark.z = max(mark.z, core * core * fade);
+  }
+  return mark;
 }
 
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -594,9 +618,8 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     } else if (h < 0.0) wetS = 1.0;
     // (Single octaves of noise here: the sand covers most of the frame on the beach, and at
     // these scales the eye cannot tell them from fbm.)
-    // How trodden it is: above the swash nearly everywhere (it is a busy beach), more in some
-    // stretches; below it the waves smooth it and only fresh prints show.
-    float trample = (1.0 - firm) * (0.45 + 0.55 * smoothstep(0.25, 0.7, 0.65 * tn(g * 0.07 + 5.3) + 0.35 * tn(g * 0.19 + 1.1)));
+    // Wind, weather and a few visitors disturb the dry surface without covering it in prints.
+    float trample = (1.0 - firm) * (0.38 + 0.27 * smoothstep(0.25, 0.7, 0.65 * tn(g * 0.07 + 5.3) + 0.35 * tn(g * 0.19 + 1.1)));
     Surf sd = Surf(uSandAlb, vec3(0.0), 0.92, 1.0);
     // Tone: broad patches, drift lines of paler sand, and the pinkish grains of the
     // foraminifera sorted into streaks. (v10: stronger, and in three colours, whiter, creamier
@@ -607,6 +630,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float cream = smoothstep(0.45, 0.75, n2), dull = smoothstep(0.52, 0.78, n1 * 0.6 + (1.0 - n2) * 0.4);
     sd.color *= mix(vec3(1.0), vec3(1.03, 0.98, 0.9), cream * 0.8) * mix(vec3(1.0), vec3(0.9, 0.88, 0.86), dull * 0.7 * (1.0 - firm));
     sd.color *= mix(vec3(1.0), vec3(1.035, 0.985, 0.95), smoothstep(0.55, 0.8, tn(vec2(g.x * 0.05, g.y * 0.2) + 8.0)));
+    // Coral grains change brightness and pore roughness at close range, while the broad tone
+    // above stays visible as that detail filters away into the distance.
+    float grainW = (1.0 - smoothstep(0.012, 0.055, fp)) * (1.0 - firm * 0.5);
+    float grain = tn(g * 8.5 + 11.7);
+    sd.color *= 1.0 + (grain - 0.5) * 0.075 * grainW;
+    sd.rough = clamp(sd.rough + (grain - 0.5) * 0.09 * grainW, 0.75, 1.0);
     // From further off, the aerial scan's variation in colour (its ripples are too small to
     // see from there; up close they came out half a metre apart, which the photos do not show).
     float farW = smoothstep(0.03, 0.12, fp);
@@ -663,33 +692,25 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
 #endif
     if (reliefW > 0.0) {
       vec3 l1 = tnd(g * 0.85 + 2.1);
-      // (Lumps: 9 cm over a metre or so; the smaller ones are in the trampled layer. Gentler on
-      // the firm sand.)
+      // Lumps about a metre across, gentler on the firm sand.
       float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
       vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
       float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
       float cav = 0.0;
-      // (Out to where a print is a few pixels: from the switchbacks, 50 m above the beach, the
-      // two reads bought nothing the mottle does not give.)
-      float printW = (1.0 - smoothstep(0.035, 0.08, fp)) * mix(0.1, 1.0, trample);
+      // At arm's length the five walking lines have individual heel-sized hollows. Fade their
+      // relief as each print becomes smaller than a few pixels from the stairs.
+      float printW = (1.0 - smoothstep(0.06, 0.16, fp)) * mix(0.18, 1.0, 1.0 - firm);
       vec3 tr = vec3(0.0);
       if (printW > 0.0) {
-        // Twice, turned and scaled against each other and handed over by a noise, so the tile
-        // does not repeat.
-        vec3 T1 = trampleAt(vec2(1.0, 0.0), 1.0, vec2(0.0));
-        vec3 T2 = trampleAt(vec2(0.6, 0.8), 1.37, vec2(0.41, 0.13));
-        // (A narrow hand-over: two unrelated reliefs averaged half and half cancel out flat.)
-        tr = mix(T1, T2, smoothstep(0.47, 0.53, tn(g * 0.21 + 6.0)));
+        tr = beachPrints(g);
         cav = tr.z * printW;
       }
       slope *= reliefW * 2.0;
-      // (The layer stores the tilt as its sine, which flattens the steep walls of a print: 3.2
-      // brings them back to what the slope worked out in the shader gave.)
-      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * 3.2 * printW * reliefW;
+      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * printW * reliefW;
       // In a print the sand is disturbed, a touch darker and duller, and the pit sees less sky;
       // the pushed-up rims are fresh dry grains, a touch lighter.
-      sd.color *= (1.0 - 0.1 * cav) * (1.0 + lumpH * 1.5 * reliefW);
-      sd.ao *= 1.0 - 0.4 * cav;
+      sd.color *= (1.0 - 0.18 * cav) * (1.0 + lumpH * 1.5 * reliefW);
+      sd.ao *= 1.0 - 0.5 * cav;
       // The pits shade the sun too: grains and the pit's own rim throw tiny shadows the
       // relief is too coarse to cast. And trodden sand seen at a low angle shows more of the
       // shaded sides of its lumps than it does from above (from the clifftop, looking down at

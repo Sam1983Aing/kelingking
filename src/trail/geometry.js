@@ -427,12 +427,17 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       if (prev && Math.hypot(px - prev.x, py - prev.y) < 3.4) {
         // Rails from post to post on the inside faces, following the design line.
         const inX = -f.nx * side, inY = -f.ny * side;
-        const heights = bamboo ? [0.42, 0.88] : [0.52, 0.95];
+        // At the beach-end posts, leave room between the top rail's lashing and the angled
+        // bamboo cut. The former high joint let its upper band silhouette above the post.
+        const tEnd = Math.min(Math.max((q - (R.length - 20)) / 10, 0), 1);
+        const endEase = tEnd * tEnd * (3 - 2 * tEnd);
+        const heights = bamboo ? [0.42 - 0.02 * endEase, 0.88 - 0.14 * endEase] : [0.52, 0.95];
         heights.forEach((hr, k) => {
           if (bamboo && k === 0 && rand() < 0.12) return;   // the odd lower rail gone
           if (!bamboo && rand() < 0.05) return;             // (v10) and the odd timber one
-          // Nothing to hold it above a post that has snapped off.
-          if ((prev.broken && hr > prev.height - 0.05) || (post.broken && hr > post.height - 0.05)) return;
+          const cutMargin = endEase > 0.001 ? 0.12 : 0.05;
+          if ((prev.broken && hr > prev.height - cutMargin)
+            || (post.broken && hr > post.height - cutMargin)) return;
           // (v10) Timber rails sag a little and sit unevenly; the odd one hangs from one end.
           const hang = rand() < 0.03 ? -(0.25 + 0.2 * rand()) : 0;
           const endA = bamboo ? 0 : (rand() - 0.5) * 0.04, endB = bamboo ? 0 : (rand() - 0.5) * 0.04 + (rand() < 0.5 ? hang : 0);
@@ -441,6 +446,9 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
           const lane = bamboo ? post.span % 2 : 0;
           const inset = bamboo ? 0.055 + 0.054 * lane : 0.065;
           const sag = bamboo ? (rand() - 0.5) * 0.08 : 0;
+          // A broken stump must have room for the rail and both turns of cord below its cut.
+          if (endEase > 0.001 && ((prev.broken && hr + sag > prev.height - 0.12)
+            || (post.broken && hr + sag > post.height - 0.12))) return;
           // (v13: drawn here, at the same place in the sequence, so the lashings can be sized to it.)
           const railR = bamboo ? 0.022 + 0.006 * rand() : 0;
           const a = [prev.x + prev.lean[0] * (hr + 0.35) + inX * inset, prev.hd + hr + sag + endA, prev.y + prev.lean[1] * (hr + 0.35) + inY * inset];

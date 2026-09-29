@@ -73,23 +73,16 @@ function lashingGeometry(kind, variant, lane = 0) {
     band(1, lane ? 1.0 : [1.5, 1.0, 1.5][variant]);
     band(-1, 1.0);
 
-    // Two taut diagonal strands run from the post over the exposed face of the rail. Their
-    // curved middle follows the rail's circular section; one passes over the other at the X.
+    // The last posts are seen from arm's length. Crossing strands joined the post's upper
+    // and lower bands in a projected oval that looked like a loose wire loop. The two short
+    // bridges now run directly from the post to the snug rail turns, without a free arc.
     const railSurface = railR + cord + 0.0008;
-    for (let cross = 0; cross < 2; cross++) {
-      const dir = cross ? -1 : 1, path = [];
+    for (let side = -1; side <= 1; side += 2) {
+      const path = [];
       const sideX = 0.026, postZ = Math.sqrt(postR * postR - sideX * sideX) + cord;
-      path.push([-dir * sideX, bandY, postZ]);
-      path.push([-dir * 0.031, railSurface + 0.001, inset]);
-      for (let j = 0; j <= 8; j++) {
-        const t = j / 8, y = railSurface * (1 - 2 * t);
-        const x = dir * 0.030 * (2 * t - 1);
-        const z = inset + Math.sqrt(Math.max(0, railSurface * railSurface - y * y))
-          + (cross ? 0.005 * Math.pow(Math.sin(Math.PI * t), 8) : 0);
-        path.push([x, y, z]);
-      }
-      path.push([dir * 0.031, -railSurface - 0.001, inset]);
-      path.push([dir * sideX, -bandY, postZ]);
+      path.push([side * sideX, side * bandY * 0.45, postZ]);
+      path.push([side * 0.032, side * 0.010, inset + railSurface * 0.7]);
+      path.push([side * 0.034, 0.0, inset + railSurface]);
       tube(path, cord * 0.92, 4, inset);
     }
 
