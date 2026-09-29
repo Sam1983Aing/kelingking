@@ -363,7 +363,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // facets of the rock and drew them.)
   float upG = abs(Ng.y);
   float upC = mix(up, upG, 0.4) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
-  float sand = sandZone * smoothstep(0.64, 0.72, upC) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // Near a cliff foot the interpolated vertex normal can point upward on a wall triangle.
+  // The triangle's own slope keeps a thin sand veneer from climbing that wall.
+  float sandSlope = min(upC, upG + 0.08);
+  float toeNear = 1.0 - smoothstep(0.2, 2.4, vFoot);
+  float slopeMin = mix(0.65, 0.9, toeNear) + (n1 - 0.5) * 0.035;
+  float sand = sandZone * smoothstep(slopeMin - 0.05, slopeMin + 0.08, sandSlope) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
   // Sand banked against the foot of the rock: up to a metre and more above the beach just in
   // front of the wall, in drifts along it, its top edge ragged. It covers the line where the
   // rock's strips cross the sand (which the triangles drew as a jagged line), and reads as sand
@@ -378,10 +383,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   if (sandZone > 0.05 && up < 0.72 && h < uBeachTop + 6.0 && h > -0.3 && length(nhB) > 0.3 && carveM < 0.3) {
 #endif
     float front = tData(g + normalize(nhB) * 3.0).r;
-    float bankTop = 0.2 + 1.3 * tn(vec2(along * 0.16, 2.3))
-                  + (tn(g * 1.1 + h * 0.7) - 0.5) * 0.8 + (tn(g * 3.7 - h * 1.3) - 0.5) * 0.35
-                  + 1.4 * smoothstep(0.2, 0.55, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
-    banked = sandZone * (1.0 - smoothstep(bankTop - 0.05, bankTop + 0.1, h - front)) * smoothstep(-3.0, -1.0, h - front + 3.0);
+    float bankTop = 0.12 + 0.5 * tn(vec2(along * 0.12, 2.3))
+                  + (tn(g * 0.7 + h * 0.3) - 0.5) * 0.24
+                  + 0.75 * smoothstep(0.25, 0.6, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
+    banked = sandZone * smoothstep(0.42, 0.74, upG)
+           * (1.0 - smoothstep(bankTop - 0.18, bankTop + 0.3, h - front))
+           * smoothstep(-2.0, 0.0, h - front + 2.0);
     sand = max(sand, banked);
   }
   tBanked = banked;
@@ -394,8 +401,8 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // out as a white pyramid with a sawtooth top).
   // (Only where there is any: this ran on every pixel of the island.)
   if (vRock.x > 0.005) {
-    float underSand = smoothstep(0.25, 0.6, vRock.x + (tn(g * 1.3 + h) - 0.5) * 0.45 + (tn(g * 4.1) - 0.5) * 0.15)
-                    * smoothstep(0.68, 0.8, upC);
+    float underSand = smoothstep(0.16, 0.76, vRock.x + (tn(g * 1.1 + h * 0.3) - 0.5) * 0.22)
+                    * smoothstep(0.82, 0.94, min(upC, upG + 0.08));
     sand = max(sand, underSand);
   }
 
@@ -419,6 +426,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
+  veg *= 1.0 - 0.85 * sandZone * wallF * (1.0 - smoothstep(uBeachTop + 5.0, uBeachTop + 12.0, h));
   veg *= 1.0 - sand;
   tSandW = sand;
   tVegW = veg;
@@ -741,22 +749,27 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       float reachFoot = 1.0 - smoothstep(top - 0.1, top + 0.5, h);
       float band = (1.0 - smoothstep(0.1, 0.75, fd)) * reachFoot;
       sd.color = mix(sd.color, sd.color * vec3(0.55, 0.3, 0.27), band * 0.75);
-      float grit = 1.0 - smoothstep(-0.5, 3.5, fd);
+      float grit = 1.0 - smoothstep(-0.5, 3.2, fd);
       if (grit > 0.01 && fp < 0.08) {
-        vec2 gc = g * 16.0;
+        // Sparse chips and small fragments of the actual limestone, in short pockets at
+        // the toe rather than a uniform carpet of bright grains.
+        vec2 gc = g * 4.5;
         vec2 ci = floor(gc);
         float r = th12(ci);
         vec2 off = vec2(th12(ci + 17.1), th12(ci + 3.7)) * 0.6 + 0.2;
         float dist = length(fract(gc) - off);
-        float size = 0.12 + 0.3 * th12(ci + 9.3);
-        float stone = (1.0 - smoothstep(size * 0.7, size, dist)) * step(1.0 - grit * 0.55, r) * smoothstep(0.08, 0.03, fp);
-        vec3 stoneCol = uGain[L_LIMESTONE] * mix(vec3(0.3, 0.28, 0.25), vec3(0.62, 0.6, 0.55), th12(ci + 5.5));
+        float size = 0.12 + 0.22 * th12(ci + 9.3);
+        float pocket = 0.55 + 0.45 * tn(g * 0.16);
+        float stone = (1.0 - smoothstep(size * 0.65, size, dist)) * step(1.0 - grit * pocket * 0.36, r) * smoothstep(0.08, 0.025, fp);
+        vec3 stoneCol = sd.color * mix(vec3(0.5, 0.54, 0.56), vec3(0.72, 0.7, 0.67), th12(ci + 5.5));
         sd.color = mix(sd.color, stoneCol, stone);
         sd.dn += vec3(fract(gc) - off, 0.0).xzy * vec3(1.0, 0.0, -1.0) * stone * 2.5;
-        sd.ao *= 1.0 - 0.35 * (1.0 - smoothstep(size, size * 1.6, dist)) * step(1.0 - grit * 0.55, r) * (1.0 - stone);
+        sd.ao *= 1.0 - 0.3 * (1.0 - smoothstep(size, size * 1.6, dist)) * step(1.0 - grit * pocket * 0.36, r) * (1.0 - stone);
       }
       sd.color *= mix(vec3(1.0), vec3(0.97, 0.94, 0.9), grit * 0.6);
+      sd.color *= mix(vec3(1.0), vec3(0.87, 0.88, 0.86), grit * (0.4 + 0.3 * tn(g * 0.45)));
       sd.color *= mix(vec3(1.0), vec3(0.82, 0.8, 0.78), vRock.x);
+      sd.ao *= 1.0 - 0.16 * grit * (1.0 - smoothstep(0.1, 1.3, max(fd, 0.0)));
     }
     // Wet sand: water in the pores, darker and a little more saturated.
     tWet = wetS * sand;

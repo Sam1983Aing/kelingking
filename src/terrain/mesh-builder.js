@@ -179,15 +179,20 @@ export function buildTerrainMesh(hf, layout, M) {
         const bx = col.x + t * col.gx, by = col.y + t * col.gy;
         let h = heightAt(bx, by);
         const c = carve.offset(col.x, col.y, t, h, P.feat, P.a, P.b, sl) * col.fade * keep(bx, by);
+        const F = P.feat;
+        // The nearly level floor just outside a sandy wall belongs to the ground grid.
+        // Fade the strip below it before it becomes the steep face; otherwise two offset
+        // surfaces compete and the strip's triangles read as detached rocks on the sand.
+        const beachFloor = F.onSand * (1 - smooth(F.tFoot - 1.5, F.tFoot + 1.5, t))
+                         * (1 - smooth(F.hFoot + 0.3, F.hFoot + 1.8, h));
         // At both ends of the profile the strip tucks half a metre under the ground, so
         // where it meets the plain ground there is a clean crossing, not two surfaces
         // fighting.
         const tuck = 1 - smooth(0, 2.5, Math.min(t - P.a, P.b - t));
-        h -= 0.5 * tuck;
+        h -= 0.5 * tuck + 0.9 * beachFloor;
         bands.tuck.push(tuck);
         bands.pos.push(bx + c * col.gx, h, -(by + c * col.gy));
         // Sand runs on in under an overhang, where the ground texture cannot know it.
-        const F = P.feat;
         const sand = F.onSand * (1 - smooth(F.hFoot + 0.4, F.hFoot + 1.6, h)) * smooth(0.5, 2, c);
         bands.rock.push(sand, 1, Math.max(c, 0));
         bands.lit.push(1);
@@ -413,12 +418,18 @@ export function buildTerrainMesh(hf, layout, M) {
             // (Beside the path the strips are cut back and the grid carries the ground (v6):
             // not pushed in right beside it, and never left out within 10 m of it, where a
             // strip's neighbour could claim cover the cut-back strip does not give.)
-            const w = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist) * keep(x, y);
+            const w0 = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist) * keep(x, y);
             // In by the deepest carving within 2.5 m above or below this spot (the grid's
             // big triangles would otherwise cut across the bend of a cave's ceiling), never
             // out, plus a margin; and down a little, but only on flat ground: under a ceiling
             // down is out into the cave.
             const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
+            const F = col.P.feat;
+            // Same handoff from the grid's side: keep the beach at its uncarved height
+            // while the strip is buried, then restore the usual overlap under the wall.
+            const beachFloor = F.onSand * (1 - smooth(F.tFoot - 1.5, F.tFoot + 1.5, psi))
+                             * (1 - smooth(F.hFoot + 0.3, F.hFoot + 1.8, h));
+            const w = w0 * (1 - beachFloor);
             const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
             const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
             const inward = (cl + 1.2) * w;

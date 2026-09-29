@@ -26,6 +26,7 @@ version. A session works on its element only, and goes deep on it.
 | v18 | Natural shore break | [v18-shore-wave-rebuild.md](v18-shore-wave-rebuild.md) | in progress |
 | v19 | Stair path and blue rail lashings | [v19-stair-path-rail.md](v19-stair-path-rail.md) | in progress |
 | v20 | Last bamboo joints and beach sand | [v20-last-rail-sand.md](v20-last-rail-sand.md) | in progress |
+| v21 | Cliff foot and sand contact | [v21-cliff-foot.md](v21-cliff-foot.md) | in progress |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

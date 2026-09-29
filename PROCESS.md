@@ -2532,3 +2532,28 @@ checked against Sam's screenshots. The bake was rebuilt and checked. All nine he
 rendered without console messages; the standalone opened offline without errors. A paired
 16-round beach timing check against `a245aee` measured +3% median, below the 10% frame
 limit. The v20 gallery holds the close rail and sand views.
+
+## v21: cliff foot and sand contact (2026-09-29)
+
+Sam's beach and last-stair frames showed pale sand climbing the limestone in sharp wedges,
+and a row of disconnected-looking rock triangles several metres in front of the wall. The
+view from above also showed the south-end overhang breaking into stretched tan fins.
+
+The traced beach wall now varies over broader distances, and the heightfield softly joins
+the sand profile to the rock toe within about 20 cm of its previous height. The south-end
+cave retains its lip but has a shallower, shorter recess. On the beach, the flat ground grid
+now owns the floor while the face strip fades under it; the strip takes over as the wall
+rises. The contact material keeps sand off steep triangles, lowers the painted sand bank,
+and gives the toe a restrained dusty tint with scattered limestone chips rather than a
+uniform field of bright pebbles. Ground-cover paint fades from the low beach wall.
+
+The close camera at the last stair, the broad beach camera and overhead views were checked
+in clay and finished lighting. The long exposed strip on the sand is no longer visible;
+some attached limestone rubble remains at the base. The revised cave reads more clearly
+from the beach, with the headland silhouette preserved.
+
+All nine hero frames rendered without console messages. The viewpoint and overview outline
+checks showed no new silhouette change. Alternating performance checks against the previous
+`b3d3c8c` checkpoint kept eight hero views between -4% and +1%; a 20-round repeat of the
+noisy stair result measured +2%. The bake is current, and the local standalone opened
+offline with no console errors. The v21 gallery includes close and overhead contact sheets.

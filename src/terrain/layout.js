@@ -152,7 +152,7 @@ export function defaultLayout() {
     // back `cave` metres behind the line of the wall, caveH metres high at the back. Rock in
     // the sea: a deeper notch (notch metres deep, notchTop high).
     overhangs: [
-      { name: 'beach south end', at: [54, 63], r: 34, bulge: 20, lipH: 17, cave: 10, caveH: 5 },
+      { name: 'beach south end', at: [54, 63], r: 34, bulge: 16, lipH: 17, cave: 7, caveH: 5 },
       { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
     ],
 
