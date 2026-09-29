@@ -1,0 +1,103 @@
+{
+  "baseline": "e03424b",
+  "candidate": "codex/v22-cliff-junction",
+  "rounds": 8,
+  "framesPerBurst": 6,
+  "width": 1400,
+  "pixelRatio": 1,
+  "terrainResolution": 1024,
+  "time": 17,
+  "method": "Alternating full frames with synchronous GPU readback. Values transcribed at the precision reported by tools/ab.mjs.",
+  "rows": [
+    {
+      "name": "overview",
+      "baselineMs": 16.93,
+      "candidateMs": 15.35,
+      "medianPairedChangePct": -5,
+      "middleHalfChangePct": [
+        -6,
+        -2
+      ]
+    },
+    {
+      "name": "viewpoint",
+      "baselineMs": 10.02,
+      "candidateMs": 9.5,
+      "medianPairedChangePct": 0,
+      "middleHalfChangePct": [
+        -8,
+        5
+      ]
+    },
+    {
+      "name": "stairs",
+      "baselineMs": 9.65,
+      "candidateMs": 9.23,
+      "medianPairedChangePct": 0,
+      "middleHalfChangePct": [
+        -4,
+        3
+      ]
+    },
+    {
+      "name": "trailTop",
+      "baselineMs": 7.63,
+      "candidateMs": 7.7,
+      "medianPairedChangePct": -1,
+      "middleHalfChangePct": [
+        -3,
+        4
+      ]
+    },
+    {
+      "name": "trailLow",
+      "baselineMs": 10.6,
+      "candidateMs": 10.78,
+      "medianPairedChangePct": -1,
+      "middleHalfChangePct": [
+        -8,
+        18
+      ]
+    },
+    {
+      "name": "beach",
+      "baselineMs": 10.6,
+      "candidateMs": 10.67,
+      "medianPairedChangePct": 5,
+      "middleHalfChangePct": [
+        0,
+        8
+      ]
+    },
+    {
+      "name": "swash",
+      "baselineMs": 12.3,
+      "candidateMs": 12.27,
+      "medianPairedChangePct": 0,
+      "middleHalfChangePct": [
+        -3,
+        4
+      ]
+    },
+    {
+      "name": "shoreBreak",
+      "baselineMs": 5.67,
+      "candidateMs": 5.5,
+      "medianPairedChangePct": 3,
+      "middleHalfChangePct": [
+        -2,
+        4
+      ]
+    },
+    {
+      "name": "sideFromSea",
+      "baselineMs": 9.52,
+      "candidateMs": 9.78,
+      "medianPairedChangePct": 0,
+      "middleHalfChangePct": [
+        -1,
+        4
+      ]
+    }
+  ]
+}

@@ -2557,3 +2557,36 @@ checks showed no new silhouette change. Alternating performance checks against t
 `b3d3c8c` checkpoint kept eight hero views between -4% and +1%; a 20-round repeat of the
 noisy stair result measured +2%. The bake is current, and the local standalone opened
 offline with no console errors. The v21 gallery includes close and overhead contact sheets.
+
+## v22: continuous lower cliff and beach junction (2026-09-29)
+
+Sam's next screenshots showed that v21 still left a blue sawtooth band beneath the beach
+overhang and a broad faceted limestone apron beside the sand. Rendering the ground grid
+and the cliff strips separately traced the teeth to partially covered grid cells crossing
+the recessed cliff face. Concave corners also shortened some face profiles above beach
+height; using that first height as the cliff foot lifted their undercuts into hanging shelves.
+
+The sand floor is now evaluated independently of the uncarved cliff ramp and continues
+beneath the cave. Rising grid cells covered by a beach wall are replaced with shared floor
+vertices; the submerged beach retains its sloping seabed. The rock strip is seated below
+that floor, rather than carrying a second sand-painted surface across it. Lower strip rows
+join by physical elevation and their positions are smoothed across neighbouring columns,
+with the buried toe retained. Short profiles find the actual beach foot outside their window
+before carving.
+
+Walking-height views now show a continuous lower wall instead of the blue triangular comb,
+and the near wall meets the beach without the detached pale apron. The inspection includes
+both ends of the cove and the same contact from the trail above. Small geological ledges
+remain, and the last stair's cut bank is retained around the walking route.
+
+The preview mesh has 1,202,293 vertices and 1,175,130 triangles (+1.0% and +0.4% against
+v21). The bake is 13.35 MB compressed; its round trip has at most 12.2 mm position error
+and exact indices. The local standalone was rebuilt from the same source.
+
+All nine final hero frames rendered without console messages. The viewpoint and overview
+outline captures were generated, but the local reference photos were unavailable; the
+established silhouette was checked against the stored v21 renders instead. Eight alternating
+rounds of six full frames against `e03424b` measured median paired changes between -5% and
++5%, within the 10% limit at every hero camera. The v22 gallery records those timings.
+The rebuilt local standalone opened offline with generated terrain and no console errors;
+four scroll stops were captured, including the beach chapter.
