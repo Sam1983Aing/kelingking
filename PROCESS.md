@@ -2685,3 +2685,75 @@ middle-half ranges are in docs/gallery/v24/bench.json. The 13.38 MB bake is curr
 exact triangle indices and at most 12.2 mm position error after packing. The local
 standalone was rebuilt; with the network blocked it generated terrain, reached four
 scroll stops and produced no console errors.
+
+
+## v25: curved cliff toes and beach relief (2026-09-30)
+
+Sam accepted the blue cord and asked for another close pass on the lower cliff: blue
+angular facets, a pale rock apron, straight sand ribbons and flat-looking sand. The four
+supplied screenshots were reproduced with fixed cameras looking into both ends of the
+cove, back up the last stairs and down at the sand.
+
+### Geometry and contact
+
+A shortened cliff profile was still leaving its original grid ramp exposed. Its lower
+carving taper now stays active only near beach level, and the seated profile owns that
+rising surface. The original ramp continues beneath it as beach floor. Lower face
+columns use a wider Gaussian smoothing window, with physical elevation matching and a
+buried toe retained. This removes the pointed fan at the concave corner without changing
+the upper cliff taper.
+
+The v24 supporting bank remains around the higher descent. At beach level the ground
+outside the actual tread can settle into the sand; keeping the entire 10 m bank there
+had left the pale apron and a narrow terrace beside the last steps. A smooth, height-limited
+relaxation removes that low terrace while preserving the higher support.
+
+Only low rising beach-contact cells are subdivided into a 4 by 4 patch. Finite-difference
+normals round the surface. An initial linear boundary with T junctions showed hairline
+seams after the bake quantized positions. The final boundary uses shared vertex indices
+and conforming fans in its coarse neighbours, and keeps clear of floor-cap ownership
+changes. All packed vertices therefore meet at the same position. The mesh increases
+from 1,175,084 to 1,180,372 triangles (+0.45%) and from 1,202,066 to 1,205,421 vertices.
+
+### Sand and light
+
+A shared dry-sand relief function adds broad, shallow wind-sorted drifts, fading out
+before the wet sand. The exposed floor uses the same formula as the heightfield. The
+heightfield changes by at most 16.7 cm. The route's horizontal coordinates, arc length
+and width are identical; its settled elevations change by at most 27.4 mm. The five
+walking lines are unchanged.
+
+The sand shader adds filtered centimetre-scale slope, subtle colour and cavity variation
+above the geometric relief, while reducing the old metre-scale shader lumps. Existing
+CC0 scans remain in use. Deposited sand follows the smooth bank normal; the triangle-slope
+cutoff had painted straight bands on that bank. Beach bounce under low overhangs now reads
+the exposed beach floor instead of the high uncarved ramp. Actual sky-lit shade on rock
+retains its cooler colour.
+
+### Verification
+
+The final 42 textured and plant-free clay views cover tau 3.665–4.3 and head turns up to
+90 degrees in either direction. No new openings or contact seams were observed. The six
+rays through the v24 opening still strike near supporting ground, at 2.89–3.51 m, rather
+than the distant cliff. A 5.3 s scrolling recording crosses the last descent and turns
+60 degrees toward the cove. Fixed-camera before/after images, clay views, audit sheets,
+geometry measurements and motion stills are in the v25 gallery.
+
+A dark rectangle in the first audit was a capture-script defect: a scripted pose change
+had not refreshed the camera-centred ocean wedge. Refreshing the water after each head
+turn removed the rectangle. The corrected audit was then rerun; the production ocean
+was not changed.
+
+Upper-grid positions above 100 m differ by no more than 7.6 mm after packing, below the
+25 mm reporting threshold. Stored overview and viewpoint comparisons retain the outline.
+Reference photographs remain unavailable, so this is a regression comparison, not a new
+photo-match claim. Strong midday light still makes subtle sand drifts less visible when
+looking straight down; their surface slope is clearer at grazing angles.
+
+The terrain bake is current: 13,450,447 bytes, exact triangle indices after packing,
+12.2 mm maximum position error and 1.9 mm maximum height error. No assets were downloaded.
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against v24 checkpoint 5fa4370 measured median changes from
+-7.3% to +7.9%; every camera passes the 10% limit. The local standalone was rebuilt
+with the final material and opened with network access blocked. It generated terrain,
+reached four scroll stops and produced no console errors.

@@ -22,6 +22,7 @@
 
 import { buildStrata, strataWarp, strataStrength, coarseAt } from './strata.js';
 import { signedDistance } from './heightfield.js';
+import { sandRelief } from './sand-relief.js';
 
 export function buildTerrainMesh(hf, layout, M) {
   const t0 = performance.now();
@@ -37,8 +38,9 @@ export function buildTerrainMesh(hf, layout, M) {
     const dc = Math.max(sample(f.DC, x, y) + layout.beach.shift * sample(f.sand, x, y), 0);
     const top = f.btop ? sample(f.btop, x, y) : layout.beach.top;
     const berm = Math.min(layout.beach.berm, top);
-    return berm * (1 - Math.exp(-dc / layout.beach.face))
+    const level = berm * (1 - Math.exp(-dc / layout.beach.face))
       + (top - berm) * (1 - Math.exp(-dc / layout.beach.spread));
+    return level + sandRelief(x, y, level);
   };
   // No carving of the rock across the path (v6): it is cut into the ground as a level bench
   // (src/trail/carve.js), and the buttresses and beds would push that sideways off its line.
@@ -257,12 +259,12 @@ export function buildTerrainMesh(hf, layout, M) {
             * keep(source[v - base], -source[v + 2 - base]);
           if (blend < 0.01) continue;
           let sx = 0, sy = 0, sz = 0, sw = 0;
-          for (let j = k; j >= 0 && along[k] - along[j] < 3; j--) {
-            const w = Math.exp(-(((along[k] - along[j]) / 1.4) ** 2));
+          for (let j = k; j >= 0 && along[k] - along[j] < 5.5; j--) {
+            const w = Math.exp(-(((along[k] - along[j]) / 2.4) ** 2));
             at(cols[j], col.sf[r], p, source, base); sx += w * p[0]; sy += w * p[1]; sz += w * p[2]; sw += w;
           }
-          for (let j = k + 1; j < n && along[j] - along[k] < 3; j++) {
-            const w = Math.exp(-(((along[j] - along[k]) / 1.4) ** 2));
+          for (let j = k + 1; j < n && along[j] - along[k] < 5.5; j++) {
+            const w = Math.exp(-(((along[j] - along[k]) / 2.4) ** 2));
             at(cols[j], col.sf[r], p, source, base); sx += w * p[0]; sy += w * p[1]; sz += w * p[2]; sw += w;
           }
           bands.pos[v] = lerp(source[v - base], sx / sw, blend);
@@ -453,60 +455,72 @@ export function buildTerrainMesh(hf, layout, M) {
   const floorWeight = new Float32Array(M * M);
   let pushed = 0;
   const e = f.cell;
-  for (let j = 0; j < M; j++) {
-    const y = ys[j];
-    for (let i = 0; i < M; i++) {
-      const x = xs[i];
-      const v = j * M + i;
-      let px = x, py = y, h = heightAt(x, y);
-      const sandZone = smooth(0.7, 0.95, sample(f.sand, x, y));
-      const sandH = sandZone > 0 && h > 0 ? sandHeightAt(x, y) : h;
-      // The beach floor continues beneath the carved wall, but the stair bank is
-      // carried by the original grid: face windows are cut back around the route.
-      // The narrow carving mask (2–5 m) is insufficient here. Lowering that bank
-      // by 20 m leaves the rock strip floating above a hole seen through the plants.
-      const bankReach = (layout.trail?.bank.reach ?? 8) + 2;
-      const path = route?.nearest(x, y, bankReach + 6);
-      const floorClear = path ? smooth(bankReach, bankReach + 6, path.d) : 1;
-      const beachFloor = h > 0 ? sandZone * (1 - smooth(sandH + 30, sandH + 45, h)) * floorClear : 0;
-      floorWeight[v] = beachFloor;
-      const psi = sample(f.PSI, x, y);
-      if (psi > -60 && psi < 60 && i > 0 && j > 0 && i < M - 1 && j < M - 1) {
-        let gx = (sample(f.PSI, x + e, y) - sample(f.PSI, x - e, y));
-        let gy = (sample(f.PSI, x, y + e) - sample(f.PSI, x, y - e));
-        const gl = Math.hypot(gx, gy) / (2 * e);
-        if (gl > 0.3) {
-          gx /= gl * 2 * e; gy /= gl * 2 * e;
-          const Fx = x - psi * gx, Fy = y - psi * gy;
-          const col = nearestColumn(Fx, Fy);
-          if (col && psi > col.P.a && psi < col.P.b) {
-            // (Beside the path the strips are cut back and the grid carries the ground (v6):
-            // not pushed in right beside it, and never left out within 10 m of it, where a
-            // strip's neighbour could claim cover the cut-back strip does not give.)
-            const w0 = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist) * keep(x, y);
-            // In by the deepest carving within 2.5 m above or below this spot (the grid's
-            // big triangles would otherwise cut across the bend of a cave's ceiling), never
-            // out, plus a margin; and down a little, but only on flat ground: under a ceiling
-            // down is out into the cave.
-            const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
-            const w = w0 * (1 - beachFloor);
-            const completeFoot = 1 - smooth(sandH + 0.8, sandH + 2, col.P.floorStart);
-            beachCover[v] = w0 * col.P.feat.onSand * col.P.feat.wall * col.fade * completeFoot * floorClear;
-            const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
-            const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
-            const inward = (cl + 1.2) * w;
-            cover[v] = route && route.nearest(x, y, 10) ? Math.min(w, 0.9) : w;
-            px += inward * gx; py += inward * gy;
-            h -= 1.2 * w * smooth(1.5, 0.4, sl);
-            if (w > 0) pushed++;
-          }
+  const deposits = new Float32Array(M * M);
+  function groundAt(x, y, out) {
+    let px = x, py = y, h = heightAt(x, y), covered = 0, contact = 0;
+    const sandZone = smooth(0.7, 0.95, sample(f.sand, x, y));
+    const sandH = sandZone > 0 && h > 0 ? sandHeightAt(x, y) : h;
+    // The beach floor continues beneath the carved wall, but the stair bank is
+    // carried by the original grid: face windows are cut back around the route.
+    // The narrow carving mask (2–5 m) is insufficient here. Lowering that bank
+    // by 20 m leaves the rock strip floating above a hole seen through the plants.
+    const bankReach = (layout.trail?.bank.reach ?? 8) + 2;
+    const path = route?.nearest(x, y, bankReach + 6);
+    const support = path ? smooth(bankReach, bankReach + 6, path.d) : 1;
+    // At sand level the bank can settle into the beach outside the tread. Higher
+    // supporting ground keeps the v24 clearance, so the stair cut never opens up.
+    const tread = path ? route.lerpAt(route.w, path) / 2 : 0;
+    const lowClear = path ? smooth(tread + 0.35, tread + 2.0, path.d) : 1;
+    const floorClear = Math.max(support, lowClear * (1 - smooth(sandH + 2.0, sandH + 8.0, h)));
+    const beachFloor = h > 0 ? sandZone * (1 - smooth(sandH + 30, sandH + 45, h)) * floorClear : 0;
+
+    const psi = sample(f.PSI, x, y);
+    if (psi > -60 && psi < 60 && x > xs[0] && y > ys[0] && x < xs[M - 1] && y < ys[M - 1]) {
+      let gx = (sample(f.PSI, x + e, y) - sample(f.PSI, x - e, y));
+      let gy = (sample(f.PSI, x, y + e) - sample(f.PSI, x, y - e));
+      const gl = Math.hypot(gx, gy) / (2 * e);
+      if (gl > 0.3) {
+        gx /= gl * 2 * e; gy /= gl * 2 * e;
+        const Fx = x - psi * gx, Fy = y - psi * gy;
+        const col = nearestColumn(Fx, Fy);
+        if (col && psi > col.P.a && psi < col.P.b) {
+          // (Beside the path the strips are cut back and the grid carries the ground (v6):
+          // not pushed in right beside it, and never left out within 10 m of it, where a
+          // strip's neighbour could claim cover the cut-back strip does not give.)
+          const w0 = smooth(0, 3, Math.min(psi - col.P.a, col.P.b - psi)) * smooth(2.5, 0.5, col.dist) * keep(x, y);
+          // In by the deepest carving within 2.5 m above or below this spot (the grid's
+          // big triangles would otherwise cut across the bend of a cave's ceiling), never
+          // out, plus a margin; and down a little, but only on flat ground: under a ceiling
+          // down is out into the cave.
+          const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
+          const w = w0 * (1 - beachFloor);
+          // A shortened profile is seated below the beach as well. Its original
+          // start height must not leave a second, triangular grid wall exposed.
+          contact = w0 * col.P.feat.onSand * col.P.feat.wall * col.fade * support;
+          const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
+          const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
+          const inward = (cl + 1.2) * w;
+          covered = route && route.nearest(x, y, 10) ? Math.min(w, 0.9) : w;
+          px += inward * gx; py += inward * gy;
+          h -= 1.2 * w * smooth(1.5, 0.4, sl);
+
         }
       }
-      h = lerp(h, sandH, beachFloor);
-      pos[v * 3] = px;
-      pos[v * 3 + 1] = h;
-      pos[v * 3 + 2] = -py;
     }
+    const originalH = h;
+    h = lerp(h, sandH, beachFloor);
+    const deposit = sandZone * smooth(0.15, 1.5, originalH - sandH)
+      * (1 - smooth(sandH + 0.15, sandH + 0.8, h));
+    out[0] = px; out[1] = h; out[2] = -py;
+    out[3] = covered; out[4] = contact; out[5] = beachFloor; out[6] = deposit;
+  }
+  const point = new Float64Array(7);
+  for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+    const v = j * M + i;
+    groundAt(xs[i], ys[j], point);
+    pos[v * 3] = point[0]; pos[v * 3 + 1] = point[1]; pos[v * 3 + 2] = point[2];
+    cover[v] = point[3]; beachCover[v] = point[4]; floorWeight[v] = point[5]; deposits[v] = point[6];
+    if (point[3] > 0) pushed++;
   }
   function nearestColumn(x, y) {
     const ci = Math.floor(x / 2), cj = Math.floor(y / 2);
@@ -559,8 +573,67 @@ export function buildTerrainMesh(hf, layout, M) {
     floorVertices.set(v, index);
     return index;
   };
-  const gridIdx = gridIndex(M, pos, cfg.cull, cover, beachCover, floorWeight, floorVertex);
   const gridNrm = gridNormals(pos, M);
+  // Refine only low, rising beach-contact cells. Shared fine edges use one
+  // evaluator; the surrounding coarse cells split their edges to match. This
+  // avoids T-junction cracks after the bake quantizes vertex positions.
+  // This rounds the visible sand bank without changing the upper terrain grid.
+  const fineCells = new Uint8Array(M * M);
+  let fineCount = 0;
+  for (let j = 1; j < M - 2; j++) for (let i = 1; i < M - 2; i++) {
+    const a = j * M + i, vs = [a, a + 1, a + M, a + M + 1];
+    const hs = vs.map(v => pos[v * 3 + 1]);
+    const lo = Math.min(...hs), hi = Math.max(...hs);
+    if (lo < 1.3 || hi > 11 || hi - lo < 0.16) continue;
+    const x = (xs[i] + xs[i + 1]) * 0.5, y = (ys[j] + ys[j + 1]) * 0.5;
+    if (sample(f.sand, x, y) < 0.95 || Math.abs(sample(f.DB, x, y)) > 7) continue;
+    const path = route?.nearest(x, y, 4);
+    if (path && path.d < route.lerpAt(route.w, path) / 2 + 0.6) continue;
+    // Floor caps own a different surface. Keep the refinement clear of their
+    // boundary, including its corner neighbours, to retain the seated overlap.
+    let capNeighbour = false;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const k = (j + dj) * M + i + di, ids = [k, k + 1, k + M, k + M + 1];
+      if (ids.some(v => beachCover[v] > 0.15) && ids.some(v => floorWeight[v] < 0.98)) capNeighbour = true;
+    }
+    if (capNeighbour || vs.every(v => cover[v] > 0.98)) continue;
+    fineCells[a] = 1; fineCount++;
+  }
+  const fineNodes = new Map(), gp = new Float64Array(7), gx0 = new Float64Array(7), gx1 = new Float64Array(7), gy0 = new Float64Array(7), gy1 = new Float64Array(7);
+  const fineVertex = (i, j, u, v) => {
+    if ((u === 0 || u === 4) && (v === 0 || v === 4)) return (j + v / 4) * M + i + u / 4;
+    const key = (j * 4 + v) * (M * 4) + i * 4 + u;
+    if (fineNodes.has(key)) return fineNodes.get(key);
+    const fu = u / 4, fv = v / 4, x = lerp(xs[i], xs[i + 1], fu), y = lerp(ys[j], ys[j + 1], fv);
+    groundAt(x, y, gp);
+    const coarseEdge = (u === 0 && !fineCells[j * M + i - 1]) || (u === 4 && !fineCells[j * M + i + 1])
+      || (v === 0 && !fineCells[(j - 1) * M + i]) || (v === 4 && !fineCells[(j + 1) * M + i]);
+    if (!fineCells[j * M + i] || coarseEdge) {
+      const a = j * M + i, ids = [a, a + 1, a + M, a + M + 1], ws = [(1-fu)*(1-fv), fu*(1-fv), (1-fu)*fv, fu*fv];
+      for (let d = 0; d < 3; d++) gp[d] = ids.reduce((sum, id, k) => sum + pos[id * 3 + d] * ws[k], 0);
+    }
+    groundAt(x - 0.1, y, gx0); groundAt(x + 0.1, y, gx1);
+    groundAt(x, y - 0.1, gy0); groundAt(x, y + 0.1, gy1);
+    const ux = gx1[0]-gx0[0], uy=gx1[1]-gx0[1], uz=gx1[2]-gx0[2];
+    const vx = gy1[0]-gy0[0], vy=gy1[1]-gy0[1], vz=gy1[2]-gy0[2];
+    const nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx, nl=Math.hypot(nx,ny,nz)||1;
+    const index = M * M + bands.pos.length / 3;
+    bands.pos.push(gp[0],gp[1],gp[2]); bands.nrm.push(nx/nl,ny/nl,nz/nl);
+    bands.rock.push(gp[6],1,0); bands.lit.push(1); bands.hor.push(1); bands.tuck.push(1);
+    fineNodes.set(key,index); return index;
+  };
+  const stitchCenter = (i, j) => {
+    const ids = [j * M + i, j * M + i + 1, (j + 1) * M + i, (j + 1) * M + i + 1];
+    const index = M * M + bands.pos.length / 3;
+    for (let d = 0; d < 3; d++) bands.pos.push(ids.reduce((s, v) => s + pos[v * 3 + d], 0) / 4);
+    const ns = [0, 1, 2].map(d => ids.reduce((s, v) => s + gridNrm[v * 3 + d], 0));
+    const nl = Math.hypot(...ns) || 1;
+    bands.nrm.push(...ns.map(n => n / nl));
+    bands.rock.push(ids.reduce((s, v) => s + deposits[v], 0) / 4, 1, 0);
+    bands.lit.push(1); bands.hor.push(1); bands.tuck.push(1);
+    return index;
+  };
+  const gridIdx = gridIndex(M, pos, cfg.cull, cover, beachCover, floorWeight, floorVertex, fineCells, fineCount, fineVertex, stitchCenter);
 
   // Both into one mesh: the grid first, the strips after it.
   const nb = bands.pos.length / 3;
@@ -605,7 +678,7 @@ export function buildTerrainMesh(hf, layout, M) {
     horizon[o + 1] = Math.round(127.5 - 127.5 * col.gx);
     horizon[o + 2] = Math.round(127.5 + 127.5 * col.gy);
   }
-  for (let v = 0; v < M * M; v++) { rock[v * 4 + 1] = 255; rock[v * 4 + 3] = 255; }
+  for (let v = 0; v < M * M; v++) { rock[v * 4] = Math.round(255 * deposits[v]); rock[v * 4 + 1] = 255; rock[v * 4 + 3] = 255; }
   for (let v = 0; v < nb; v++) {
     const o = (M * M + v) * 4;
     rock[o] = Math.round(255 * Math.min(Math.max(bands.rock[v * 3], 0), 1));
@@ -624,7 +697,7 @@ export function buildTerrainMesh(hf, layout, M) {
   index.set(gridIdx); index.set(bandIdx, gridIdx.length);
   // (strips and bandPos are for inspecting the faces from node, see PROCESS.md.)
   return { positions, normals, index, rock, horizon, M, moved: nb, columns: nCols, pushed, surfaceShift, strips: bands.strips, bandPos: bands.pos,
-    gridTris: gridIdx.length / 3, faceTris: bandIdx.length / 3, ms: Math.round(performance.now() - t0) };
+    contactCells: fineCount, contactVertices: fineNodes.size, gridTris: gridIdx.length / 3, faceTris: bandIdx.length / 3, ms: Math.round(performance.now() - t0) };
 }
 
 const hashKey = (x, y) => Math.floor(x / 2) * 65536 + Math.floor(y / 2);
@@ -866,7 +939,11 @@ export function makeCarver(hf, layout, sample) {
   function offset(Fx, Fy, t, h, F, a, b, slopeHere) {
     // Everything fades out towards the ends of the window, so the carved profile joins the
     // untouched ground.
-    const taper = smooth(a, a + 5, t) * smooth(b, b - 8, t);
+    // The lower edge of a beach profile is buried beneath the floor. Tapering
+    // its carving over five metres exposed the original ramp at concave corners,
+    // producing a pointed fin between two otherwise continuous undercuts.
+    const lower = lerp(smooth(a, a + 5, t), 1, F.onSand * (1 - smooth(12, 25, h)));
+    const taper = lower * smooth(b, b - 8, t);
     if (taper <= 0) return 0;
     const slope = smooth(1.2, 3.5, slopeHere);
     const z = zoneAt(Fx, Fy);
@@ -956,8 +1033,8 @@ function makeSampler(f) {
 // Two triangles per grid cell, leaving out cells entirely below `cull` (under the opaque sea)
 // and cells a face strip fully covers (all four corners pushed back with full weight): there
 // the strip is the surface, and the grid would only poke through it here and there.
-function gridIndex(M, pos, cull, cover, beachCover, floorWeight, floorVertex) {
-  const idx = new Uint32Array((M - 1) * (M - 1) * 6);
+function gridIndex(M, pos, cull, cover, beachCover, floorWeight, floorVertex, fineCells, fineCount, fineVertex, stitchCenter) {
+  const idx = new Uint32Array((M - 1) * (M - 1) * 6 + fineCount * 210);
   let n = 0;
   const hy = (v) => pos[v * 3 + 1];
   for (let j = 0; j < M - 1; j++) {
@@ -975,6 +1052,33 @@ function gridIndex(M, pos, cull, cover, beachCover, floorWeight, floorVertex) {
         continue;
       }
       if (Math.min(cover[a], cover[b], cover[c], cover[d]) > 0.98) continue;
+      if (fineCells[a]) {
+        const vertices = Array.from({length:25}, (_, k) => fineVertex(i,j,k%5,Math.floor(k/5)));
+        for (let y=0;y<4;y++) for(let x=0;x<4;x++) {
+          const v=y*5+x;
+          idx[n++]=vertices[v];idx[n++]=vertices[v+1];idx[n++]=vertices[v+5];
+          idx[n++]=vertices[v+1];idx[n++]=vertices[v+6];idx[n++]=vertices[v+5];
+        }
+        continue;
+      }
+      const sides = [fineCells[a - M], fineCells[a + 1], fineCells[a + M], fineCells[a - 1]];
+      if (sides.some(Boolean)) {
+        // A conforming fan: every boundary point is the exact same vertex used
+        // by the finer neighbour, including after position quantization.
+        const perimeter = [a];
+        if (sides[0]) for (let k = 1; k < 4; k++) perimeter.push(fineVertex(i, j, k, 0));
+        perimeter.push(b);
+        if (sides[1]) for (let k = 1; k < 4; k++) perimeter.push(fineVertex(i, j, 4, k));
+        perimeter.push(d);
+        if (sides[2]) for (let k = 3; k > 0; k--) perimeter.push(fineVertex(i, j, k, 4));
+        perimeter.push(c);
+        if (sides[3]) for (let k = 3; k > 0; k--) perimeter.push(fineVertex(i, j, 0, k));
+        const center = stitchCenter(i, j);
+        for (let k = 0; k < perimeter.length; k++) {
+          idx[n++] = center; idx[n++] = perimeter[k]; idx[n++] = perimeter[(k + 1) % perimeter.length];
+        }
+        continue;
+      }
       idx[n++] = a; idx[n++] = b; idx[n++] = c;
       idx[n++] = b; idx[n++] = d; idx[n++] = c;
     }

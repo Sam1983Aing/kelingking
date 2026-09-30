@@ -1,0 +1,47 @@
+{
+  "trianglesBefore": 1175084,
+  "trianglesAfter": 1180372,
+  "verticesBefore": 1202066,
+  "verticesAfter": 1205421,
+  "changedGridVertices": 5510,
+  "changedGridBounds": [
+    36.314945220947266,
+    -3.97310209274292,
+    -308.194091796875,
+    437.0290832519531,
+    89.4438705444336,
+    -49.08369445800781
+  ],
+  "maxGridDelta": 2.9836857318878174,
+  "gridAbove12m": {
+    "changedOver25mm": 1057,
+    "maxDelta": 0.4953899383544922
+  },
+  "heightfield": {
+    "maxDelta": 0.16652274131774902,
+    "above12mMaxDelta": 0.1400299072265625
+  },
+  "trailLineIdentical": false,
+  "trailLineKeys": [
+    "x",
+    "y",
+    "s",
+    "hd",
+    "ht",
+    "w"
+  ],
+  "trailDelta": {
+    "x": 0,
+    "y": 0,
+    "s": 0,
+    "hd": 0.027344465255737305,
+    "ht": 0.027344465255737305,
+    "w": 0
+  },
+  "gridAbove100m": {
+    "changedComponentsOver25mm": 0,
+    "maxDelta": 0.00756072998046875
+  },
+  "footprintsSourceUnchanged": true,
+  "bakeBytes": 13450447
+}

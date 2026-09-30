@@ -163,9 +163,15 @@ vec3 groundBounce(vec3 P, vec3 N) {
       vec2 q = vec2(P.x, -P.z) + dir * (vRock.z * 32.0 + reach * (i == 0 ? 0.5 : 1.3));
       vec4 D = tData(q);
       float sea = smoothstep(-0.5, 1.0, D.g);
-      float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
+      // The raw heightfield still contains the ramp carved out of this wall.
+      // Near the toe, its beach zone identifies the exposed sand below; using
+      // that raw ramp height misclassified the warm bounce as dark land light.
+      float toeFloor = smoothstep(0.5, 0.9, D.b) * (1.0 - sea)
+                     * (1.0 - smoothstep(uBeachTop + 2.0, uBeachTop + 8.0, P.y));
+      float floorH = mix(D.r, min(D.r, uBeachTop), toeFloor);
+      float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, floorH));
       vec3 alb = mix(mix(uBounceAlb[2], uBounceAlb[1], sandW), uBounceAlb[0], sea);
-      float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
+      float lit = bakedShadow(vec3(q.x, max(floorH, 0.0) + 0.3, -q.y), 0.3);
       sum += alb * (uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp);
     }
     // And a second bounce: the rock overhead (the part of the view the sky share leaves) is
@@ -365,7 +371,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   float upC = mix(up, upG, 0.4) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
   // Near a cliff foot the interpolated vertex normal can point upward on a wall triangle.
   // The triangle's own slope keeps a thin sand veneer from climbing that wall.
-  float sandSlope = min(upC, upG + 0.08);
+  // A tagged beach deposit is continuous ground. Let its smooth slope carry
+  // the sand transition; applying a triangle-slope cutoff painted straight
+  // white bands across the small bank beside the final stairs.
+  float bankDeposit = smoothstep(0.98, 1.0, vRock.w)
+                    * (1.0 - smoothstep(0.0, 0.02, vRock.z)) * step(0.005, vRock.x);
+  float sandSlope = mix(min(upC, upG + 0.08), up, bankDeposit);
   float toeNear = 1.0 - smoothstep(0.2, 2.4, vFoot);
   float slopeMin = mix(0.65, 0.9, toeNear) + (n1 - 0.5) * 0.035;
   float sand = sandZone * smoothstep(slopeMin - 0.05, slopeMin + 0.08, sandSlope) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
@@ -386,7 +397,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float bankTop = 0.12 + 0.5 * tn(vec2(along * 0.12, 2.3))
                   + (tn(g * 0.7 + h * 0.3) - 0.5) * 0.24
                   + 0.75 * smoothstep(0.25, 0.6, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
-    banked = sandZone * smoothstep(0.42, 0.74, upG)
+    banked = sandZone * smoothstep(0.42, 0.74, mix(upG, up, bankDeposit))
            * (1.0 - smoothstep(bankTop - 0.18, bankTop + 0.3, h - front))
            * smoothstep(-2.0, 0.0, h - front + 2.0);
     sand = max(sand, banked);
@@ -401,8 +412,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // out as a white pyramid with a sawtooth top).
   // (Only where there is any: this ran on every pixel of the island.)
   if (vRock.x > 0.005) {
+    // Deposits on the supporting bank follow its smooth slope, while carved
+    // wall skirts retain the triangle-slope guard. This prevents a drawn line
+    // along every small triangle at a gently sloping sand-to-rock transition.
+    float depositSlope = mix(min(upC, upG + 0.08), up, bankDeposit);
     float underSand = smoothstep(0.16, 0.76, vRock.x + (tn(g * 1.1 + h * 0.3) - 0.5) * 0.22)
-                    * smoothstep(0.82, 0.94, min(upC, upG + 0.08));
+                    * smoothstep(0.78, 0.90, depositSlope);
     sand = max(sand, underSand);
   }
 
@@ -702,8 +717,17 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       vec3 l1 = tnd(g * 0.85 + 2.1);
       // Lumps about a metre across, gentler on the firm sand.
       float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
-      vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
-      float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
+      vec2 slope = l1.yz * 0.85 * 0.075 * lumpA;
+      float lumpH = (l1.x - 0.5) * 0.075 * lumpA;
+      // Centimetre-scale irregularities sit above the geometric drifts. Elongate
+      // them across the prevailing wind and filter them before they become speckles.
+      float microW = (1.0 - smoothstep(0.035, 0.10, fp)) * (1.0 - firm);
+      mat2 wind = mat2(0.83, -0.56, 0.56, 0.83);
+      vec3 grains = tnd((wind * g) * vec2(2.7, 4.6) + vec2(3.8, 7.1));
+      slope += transpose(wind) * (grains.yz * vec2(2.7, 4.6)) * (0.024 * microW);
+      lumpH += (grains.x - 0.5) * 0.014 * microW;
+      sd.color *= 1.0 + (grains.x - 0.5) * 0.12 * microW;
+      sd.ao *= 1.0 - 0.11 * (1.0 - grains.x) * microW;
       float cav = 0.0;
       // At arm's length the five walking lines have individual heel-sized hollows. Fade their
       // relief as each print becomes smaller than a few pixels from the stairs.

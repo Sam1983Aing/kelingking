@@ -1,3 +1,4 @@
+import { sandRelief } from './sand-relief.js';
 // Builds the Kelingking heightfield from the OSM outlines (geo.js) and the hand-tuned
 // shape (layout.js). Pure data in, typed arrays out, so it runs in the page or in node.
 //
@@ -246,7 +247,8 @@ export function makeHeightAt(f, layout, noise) {
       // The beach face: steep up to the berm (the highest the swash usually runs), then a
       // gentler rise behind it to the top of the beach.
       const hb = Math.min(beach.berm, btop), xs = Math.max(dc + s, 0);
-      const sand = hb * (1 - Math.exp(-xs / beach.face)) + (btop - hb) * (1 - Math.exp(-xs / beach.spread));
+      const sandLevel = hb * (1 - Math.exp(-xs / beach.face)) + (btop - hb) * (1 - Math.exp(-xs / beach.spread));
+      const sand = sandLevel + (sandW > 0 && cove < sandLevel + 1 ? sandRelief(x, y, sandLevel) : 0);
       // A thin accumulation of sand rounds the toe of the wall. A hard maximum makes the
       // beach intersect the limestone at a sharp, faceted crease when the grid and face
       // strip sample it at different positions. Keep this within ~20 cm of the old profile.
