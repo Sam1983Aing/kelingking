@@ -2757,3 +2757,84 @@ of eight complete frames against v24 checkpoint 5fa4370 measured median changes 
 -7.3% to +7.9%; every camera passes the 10% limit. The local standalone was rebuilt
 with the final material and opened with network access blocked. It generated terrain,
 reached four scroll stops and produced no console errors.
+
+
+## v26: one continuous incoming wave, falling lip and whitewater (2026-09-30)
+
+Sam accepted the approaching water and asked for a major pass on the crest and break.
+The screenshots showed clear blue sections separating from the incoming wave, followed by
+foam with a different motion. This pass changes only the near-shore wave, lip, impact spray
+and foam transport. The FFT ocean spectrum and accepted scene elements stay intact.
+
+### Geometry and timing
+
+The main surface previously lowered its crest while a separate ribbon rose over it.
+That produced a trench around the ribbon and cut the incoming swell away from its break.
+The swell now remains the solid body beneath a thin forward-pitching lip. A cubic outer
+profile and a short underside take that lip down to its trough, then settle it into a
+lower bore displaced shoreward. The root uses the actual swell crest height, rather than
+an interpolated pair of trough heights. Impact starts around stage 0.76, shared with spray.
+
+The old distance-gradient crest solver could find different waves in neighbouring sections
+at the curved cove end. Five bounded Newton steps now use the wrapped phase gradient of the
+actual incoming swell. The ribbon direction follows that gradient with a small contribution
+from the smoothed waterline normal. This removed both the spatial cracks and the temporal
+jumps in active crest columns.
+
+Foam begins at the spilling crest, spreads down the falling lip and is born at the forward
+landing point. The main surface's old impact source was behind the lip. It now follows the
+same forward offset as the collapsing body. Persistent foam transport and ballistic spray
+use the local wavelength and derivative of the existing irregular wave clock. The foam's
+trail therefore advances with the bore instead of moving at a fixed unrelated speed.
+
+### Iteration and overlap
+
+Early versions raised impact heaps on the rear shoulder, leaving clear polygon-shaped caps
+above the solid crest. The heaps now sit only on the landing water. The root is seated inside
+the swell, and the sheet remains buried until its pitch and aeration are established. This
+removed blue patches at 17 s and a premature dark sliver at 24 s in the close audit. Impact
+foam retains its lace instead of becoming a completely opaque white pane.
+
+Geometry derivatives provide the normal through onset and collapse, with the analytic
+profile tangent smoothing the folded lip. This replaced four extra surf evaluations per
+vertex from an intermediate version. Its ocean slope perturbation uses the same sign as the
+main water. Narrow Gaussian sources also skip insignificant work outside their windows.
+
+### Verification
+
+Matched 18 s recordings, clock 13–31 s at 24 fps, cover incoming waves, peak, fall, impact,
+advancing foam and the next incoming crest from the screenshot's roughly 20 m stair view
+and from 4.8 m above the sand. A 3.5 m close view was inspected at quarter-second intervals.
+Every sample explicitly updates the water after setting the clock before drawing: an early
+capture that only set time had frozen geometry, and was discarded. The final clips and
+one-second contact sheets are in the v26 gallery. The clips are simulation-time recordings,
+not a claim of real-time frame pacing. All three final captures have zero console errors.
+
+Across the matched 73 quarter-second samples, the largest gap between adjacent active
+columns falls from 6.404 to 1.384 m, with gaps over 4 m falling from 19 to zero. The largest
+same-wave column travel between samples falls from 6.000 to 1.457 m; steps over 2 m fall
+from 239 to zero. Wave resets are excluded by the stage criterion. No active column contains
+non-finite data. These are continuity checks, not a physical fluid simulation validation.
+
+All nine final hero frames were rendered. Land-label comparisons at 1400 × 788 with water
+hidden have zero changed pixels at both overview and viewpoint. Local reference photographs
+are unavailable; this verifies regression against v25, with no new photo-match claim.
+The terrain bake remains current. No assets were downloaded. The final local standalone
+contains 55 bundled modules and parses as a classic script. With network access blocked it
+loaded in 22.2 s, generated terrain, rendered all four validation scroll stops and produced
+no console errors.
+
+### Performance and remaining limits
+
+The eight normal overview, trail, beach and swash heroes stay inside the 10% frame-time gate
+against `51e68d3` (paired medians −7.7% to +6.8%, twelve alternating rounds of eight frames).
+The close water-level hero is an explicit realism exception: +131.6%, middle half +90.4%
+to +164.0%, separate medians 9.95 → 25.61 ms. The intact wave body exposes much more of the
+main water shader at this camera. Diagnostics confirmed that restoring the old sink makes it
+cheaper while also restoring the visual defect. A depth prepass did not help; simplifying
+foam detail only recovered part of the cost. The wave and detail are retained, and this
+remaining cost is recorded in the v11 speed brief. Absolute times vary with background load.
+
+This is an authored continuous surf model, not a resolved fluid simulation. The 1.3 m
+water-level camera can enter a tall crest; underwater rendering is outside this pass.
+Verification covers the specified fixed-time range and cameras, not every possible sea state.

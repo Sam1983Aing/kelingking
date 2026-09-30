@@ -102,7 +102,8 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     // hardest in the rip channels.
     // (The water in a bore moves at about half the speed of its front, so the foam made at
     // the front is left behind it as a trail.)
-    u -= off * 1.6 * sf.push;
+    float boreSpeed = max(sf.L, 22.0) / uPeriod * waveRate(uTime);
+    u -= off * boreSpeed * 0.55 * sf.push;
     float surfZone = smoothstep(uBreakAt * 1.35 + 25.0, uBreakAt * 0.5, s) * nearBeach;
     float rip = smoothstep(0.5, 0.8, vnoise(p * 0.02 + 3.7));
     u += off * (0.3 + 1.1 * rip) * surfZone * (1.0 - sf.push);

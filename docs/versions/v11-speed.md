@@ -249,3 +249,22 @@ Follow Sam's workspace notes, `../CLAUDE.md` (the folder above this project):
 - The cloud march's sub-pixel jitter means a still page keeps marching (the clock runs), as it
   did in v9; nothing new per frame.
 
+
+
+**From v26 (wave continuity), explicit realism exception.**
+
+- Restoring the solid swell under its folding lip removes the trench and detached blue inserts.
+  The close `shoreBreak` hero now shows much more of the fully shaded water body.
+- Against v25 checkpoint `51e68d3`, twelve alternating rounds of eight complete frames at
+  1400 × 788, DPR 1: `shoreBreak` is +131.6% (middle half +90.4% to +164.0%). Separate median
+  times are 9.95 → 25.61 ms; the paired ratio is 2.316. The eight other heroes range from
+  −7.7% to +6.8%, within the normal 10% limit. [Raw timings](../gallery/v26/bench.json).
+- Four redundant surf evaluations per breaker vertex were removed by using the final geometry's
+  fragment derivatives together with the profile tangent. Crest/impact Gaussians are skipped
+  outside their useful window. These savings retain the accepted FFT micro detail.
+- Alternating diagnostics found the close cost follows the restored heightfield body, rather
+  than the extra column solve or the ribbon's vertex work. Restoring the old crest sink reduced
+  the cost but also restored the detached shape. A water depth prepass did not help. Simpler
+  lace shading saved part of the cost but did not recover the gate and lost visible detail;
+  it was not retained. A future speed pass should reduce shading work for this foreground water
+  without changing its geometry or foam motion. No claim that the water-level budget passes.

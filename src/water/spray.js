@@ -59,18 +59,18 @@ void main() {
     }
     if (bc.on < 0.5 || bc.H < 0.4) { kill(); return; }
     // When this particle leaves the wave: a stage, and so an age now.
-    float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.72, 0.92, aSeed.x);
-    float speed = bc.L / uPeriod;                  // the crest's speed (m/s)
+    float tauE = kind < 0.5 ? mix(0.18, 0.72, aSeed.x) : kind < 1.5 ? mix(0.02, 0.45, aSeed.x) : mix(0.74, 0.89, aSeed.x);
+    float speed = bc.L / uPeriod * waveRate(uTime); // the same varying clock as the crest
     float age = (bc.tau - tauE) * 8.0 / speed;
     float life = kind < 0.5 ? mix(0.7, 1.5, aSeed.y) : kind < 1.5 ? mix(1.2, 2.6, aSeed.y) : mix(0.85, 1.7, aSeed.y);
     if (age < 0.0 || age > life) { kill(); return; }
     // Where the lip was then: the crest stood further out by what it has travelled since.
     vec2 pcE = bc.pc + bc.n * (bc.tau - tauE) * 8.0;
     float vE = kind < 0.5 ? 0.44 : kind < 1.5 ? 0.25 : 0.45;
-    float tauP = kind < 1.5 ? tauE : 0.8;
+    float tauP = kind < 1.5 ? tauE : 0.76;
     vec4 pr = breakerProfile(vE, tauP, bc.H, bc.Lb, bc.Lf, bc.xMax);
     vec2 pm = pcE - bc.n * pr.x;
-    float y0 = mix(bc.hB, bc.hF, 0.5) + pr.y;
+    float y0 = bc.hC - bc.H + pr.y;
     vec3 fwd = vec3(-bc.n.x, 0.0, bc.n.y);
     vec3 side = vec3(bc.n.y, 0.0, bc.n.x);
     // Scattered along the beach and across the lip, so the columns of the ribbon do not show.

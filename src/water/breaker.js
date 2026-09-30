@@ -12,8 +12,8 @@
 //   0.8   the falling water lands in front
 //   1     it collapses into the white water of the bore
 // Along the beach each column is at its own stage (the crest reaches its break point at
-// different times), so the wave peels. While a wave breaks the heightfield tucks its crest
-// under the ribbon (surfAt, sink), so the two never fight.
+// different times), so the wave peels. The heightfield remains its solid water body;
+// the lip folds over that surface and settles back into the same advancing bore.
 //
 // The cross-section is x forward (toward the beach), y up from the trough, in metres:
 //   back slope     the heightfield's Gaussian back
@@ -35,46 +35,48 @@ export const PROFILE = /* glsl */ `
 // is thin, the body of the wave is not), and how much the point follows the heightfield's own
 // shape (1) rather than the breaker's (0).
 vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax) {
-  // The old face was an elliptical tube for most of the break. At beach scale that made
-  // dozens of metres of crest look like one extruded blue cylinder. A shore breaker here
-  // spills: the lip is thin, its fall is short, and the face stays open to the sand.
-  float formed = smoothstep(-0.03, 0.55, tau);
-  float landed = smoothstep(0.55, 0.86, tau);
-  float xc = H * (0.02 + 0.18 * max(tau, 0.0));
-  float throwX = H * (0.12 + 0.43 * formed) * (1.0 - 0.18 * landed);
-  float dropY = H * (0.07 + 0.31 * formed + 0.14 * landed);
-  float rootT = max(H * 0.11 * formed, 0.008);
-  float tipX = xc + throwX, tipY = H - dropY;
-  float xF = min(max(Lf, tipX + 0.75 * H), xMax);
-  float faceEnd = max(tipX + 0.04 * H, xF - 0.22 * H);
+  // The crest pitches forward and gravity takes the lip all the way to its trough.
+  // The short inner return is the underside of that sheet, joined to the steep face.
+  // Its impact is at stage 0.76, shared with surfAt and the spray.
+  float formed = smoothstep(0.04, 0.40, tau);
+  float fall = smoothstep(0.16, 0.76, tau);
+  float xc = H * 0.08 * formed;
+  float throwX = H * (0.035 + 0.60 * formed);
+  float rootT = max(H * 0.055 * formed, 0.006);
+  float tipX = xc + throwX, tipY = H * (1.0 - 0.97 * fall);
+  float xF = min(max(Lf, tipX + 0.7 * H), xMax);
+  float faceEnd = min(xF, max(tipX + 0.55 * H, min(Lf, H * 1.6)));
   float followSea = 1.0 - formed;
   if (v < 0.25) {
     float x = -Lb * (1.0 - v / 0.25);
     return vec4(x + xc * v / 0.25, H * exp(-3.5 * (x / Lb) * (x / Lb)), 50.0, 1.0);
   }
   if (v < 0.45) {
-    float u = (v - 0.25) / 0.2;
-    float p = u * u * (3.0 - 2.0 * u);
-    return vec4(mix(xc, tipX, p), H - dropY * u * u,
-                mix(rootT, 0.012 * H, u), followSea);
+    float u = (v - 0.25) / 0.2, a = 1.0 - u;
+    vec2 p0 = vec2(xc, H), p1 = vec2(xc + throwX * 0.65, H + 0.035 * H * formed);
+    vec2 p2 = vec2(tipX + H * 0.12 * formed, tipY + H * 0.26 * fall);
+    vec2 q = a*a*a*p0 + 3.0*a*a*u*p1 + 3.0*a*u*u*p2 + u*u*u*vec2(tipX,tipY);
+    return vec4(q, mix(rootT, 0.012 * H, u), followSea);
   }
   if (v < 0.47) {
     float u = (v - 0.45) / 0.02;
-    return vec4(tipX - rootT * u * 0.65, tipY - rootT * u * 0.5,
-                0.012 * H, followSea);
+    return vec4(tipX - rootT * u * 0.65, tipY - rootT * u * 0.5, 0.012 * H, followSea);
+  }
+  if (v < 0.60) {
+    float u = (v - 0.47) / 0.13, a = 1.0 - u;
+    vec2 p0 = vec2(tipX - rootT * 0.65, tipY - rootT * 0.5);
+    vec2 p1 = vec2(tipX - rootT - H * 0.16 * formed, tipY + H * 0.15 * fall - rootT);
+    float bodyY = H * (1.0 - 0.68 * fall) - rootT;
+    vec2 p2 = vec2(xc - H * 0.10 * fall, bodyY - H * 0.2 * fall);
+    vec2 q = a*a*a*p0 + 3.0*a*a*u*p1 + 3.0*a*u*u*p2 + u*u*u*vec2(xc,bodyY);
+    return vec4(q, mix(0.012 * H, rootT, u), followSea);
   }
   if (v < 0.82) {
-    float u = (v - 0.47) / 0.35;
-    // A falling sheet merges with a forward-sloping face. The foot is ahead of the lip,
-    // rather than folding back into a hollow tube. The thickening water below the fall
-    // shades like the body of the wave; only the edge stays translucent.
-    float slope = pow(u, 1.35);
-    float x = mix(tipX - 0.65 * rootT, faceEnd, slope);
-    float y = max(tipY - 0.5 * rootT, 0.0) * pow(1.0 - u, 0.78);
-    float thick = mix(0.08 * H, H, smoothstep(0.04, 0.75, u));
-    return vec4(x, y, thick, followSea);
+    float u = (v - 0.60) / 0.22;
+    float bodyY = H * (1.0 - 0.68 * fall) - rootT;
+    return vec4(mix(xc, faceEnd, u * u), bodyY * (1.0-u) * (1.0-u),
+                mix(rootT, H, smoothstep(0.0,0.55,u)), followSea);
   }
-  // The short floor merges into the heightfield's advancing bore.
   float u = (v - 0.82) / 0.18;
   return vec4(mix(faceEnd, xF, u), 0.0, 50.0, followSea);
 }
@@ -85,24 +87,33 @@ vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax)
 export const BREAK_GLSL = /* glsl */ `
 ${PROFILE}
 float hAt(vec2 p) { return surfAt(p, dataAt(p)).hRaw; }
-struct BreakCol { vec2 pc; vec2 n; float tau; float on; float L; float Lb; float Lf; float xMax; float hB; float hF; float H; };
+struct BreakCol { vec2 pc; vec2 n; float tau; float on; float L; float Lb; float Lf; float xMax; float hB; float hF; float hC; float H; };
 BreakCol findBreak(vec2 p0, vec2 n0) {
-  // The crest of the wave nearest the middle of the break here: start there and step up or
-  // down the shore distance (along its gradient, which the waterline's own normal is not,
-  // where the beach curves) until the wave's phase is zero.
+  // Start near the break and find the zero phase of that same incoming swell.
   vec2 q = p0 + n0 * uBreakAt * 0.8;
   Surf c;
-  for (int i = 0; i < 4; i++) {
+  vec2 phaseG = n0;
+  // Follow the actual phase gradient: at the cove end the incoming wave continues
+  // across a curved distance field, so distance alone can converge to a different crest.
+  // Wrapped differences keep the Newton step on this crest across phase boundaries.
+  for (int i = 0; i < 5; i++) {
     c = surfAt(q, dataAt(q));
-    q += offshoreAt(q) * clamp(-c.vph, -0.45, 0.45) * c.L;
+    vec2 e = vec2(0.35, 0.0);
+    vec2 dv = vec2(surfAt(q + e.xy, dataAt(q + e.xy)).vph,
+                   surfAt(q + e.yx, dataAt(q + e.yx)).vph) - c.vph;
+    dv -= floor(dv + 0.5);
+    vec2 g = dv / e.x;
+    phaseG = g;
+    vec2 dq = -c.vph * g / max(dot(g,g), 0.00001);
+    q += dq * min(1.0, c.L * 0.35 / max(length(dq), 0.001));
   }
   BreakCol b;
   b.pc = q;
   c = surfAt(q, dataAt(q));
-  // The distance field's gradient fans around the headland. Blend it with the
-  // waterline's wider, tangent-smoothed normal so adjacent cross-sections turn
-  // together instead of pinching the lip at the sides of the cove.
-  b.n = normalize(mix(offshoreAt(q), n0, 0.35));
+  // Point across the actual crest, with a little of the smoothed waterline normal
+  // so neighboring sections turn together around the cove.
+  b.n = normalize(mix(normalize(phaseG), n0, 0.12));
+  b.hC = c.hRaw;
   b.tau = c.tau;
   b.on = step(-0.08, c.tau) * step(c.tau, 1.14) * step(0.001, c.L * step(0.0, c.hRaw + 5.0));
   b.L = c.L;
@@ -117,14 +128,14 @@ BreakCol findBreak(vec2 p0, vec2 n0) {
 // back here by the ribbon's vertices and the spray.
 uniform sampler2D uBreakCol0;   // crest x, y, direction out to sea x, y
 uniform sampler2D uBreakCol1;   // stage, on, wavelength, height
-uniform sampler2D uBreakCol2;   // height behind, height in front, unbroken front width
+uniform sampler2D uBreakCol2;   // back height, front height, front width, actual crest height
 BreakCol readBreak(float col) {
   ivec2 t = ivec2(int(col + 0.5), 0);
   vec4 a = texelFetch(uBreakCol0, t, 0), b = texelFetch(uBreakCol1, t, 0), d = texelFetch(uBreakCol2, t, 0);
   BreakCol r;
   r.pc = a.xy; r.n = a.zw;
   r.tau = b.x; r.on = b.y; r.L = b.z; r.H = b.w;
-  r.hB = d.x; r.hF = d.y; r.Lf = d.z;
+  r.hB = d.x; r.hF = d.y; r.Lf = d.z; r.hC = d.w;
   r.Lb = 0.45 * r.L; r.xMax = 0.12 * r.L;
   return r;
 }
@@ -172,10 +183,8 @@ void main() {
              * texelFetch(uBreakCol1, ivec2(int(min(aProf.z + 1.0, cMax) + 0.5), 0), 0).y;
   vec2 pc = bc.pc, n = bc.n;
   float tau = bc.tau, on = bc.on, L = bc.L, Lb = bc.Lb, Lf = bc.Lf, xMax = bc.xMax, hB = bc.hB, hF = bc.hF;
-  // At the peeling end, the first fold starts small and grows along the crest.
-  // A full-height profile appeared abruptly even while most of it was under the sea.
-  float H = bc.H * smoothstep(0.0, 0.4, tau);
-  Surf c;
+  // Keep the swell's full height as the lip forms; the fold's own blend controls onset.
+  float H = bc.H;
   // surfAt has already varied the crest and its break point alongshore. Use that same
   // stage for the lip, sea foam, spray and the mesh's handoff back into the heightfield.
   // An extra independent peel here used to move the lip as much as 0.75 s ahead of the
@@ -183,13 +192,10 @@ void main() {
   float jit = vnoise(vec2(aProf.y * 0.35, 1.7)) - 0.5 + (vnoise(vec2(aProf.y * 1.3, 4.1)) - 0.5) * 0.5;
   float st = clamp(tau + jit * 0.012 * smoothstep(0.08, 0.32, tau), 0.0, 1.2);
   vec4 pr = breakerProfile(v, st, H, Lb, Lf, xMax);
-  float shaped = smoothstep(-0.03, 0.55, st);
-  float landed = smoothstep(0.55, 0.86, st);
-  float tipX = H * (0.02 + 0.18 * max(st, 0.0))
-             + H * (0.12 + 0.43 * shaped) * (1.0 - 0.18 * landed);
-  float xF = min(max(Lf, tipX + 0.75 * H), xMax);
   vec2 pm = pc - n * pr.x;
-  float yRef = mix(hB, hF, clamp((pr.x + Lb) / (Lb + xF), 0.0, 1.0));
+  // Anchor the lip to this swell's actual crest height, not an interpolated
+  // trough baseline (which dropped the root below the incoming shoulder).
+  float yRef = bc.hC - H;
   Surf sp = surfAt(pm, dataAt(pm));
   float yHf = sp.hRaw;
   float y = mix(yRef + pr.y, yHf, pr.w);
@@ -199,29 +205,29 @@ void main() {
   // settles into the heightfield's own bore (so the ribbon can switch off without a jump).
   float heap = smoothstep(0.7, 0.85, tau) * (1.0 - smoothstep(0.9, 1.05, tau));
   float lumps = vnoise(vec2(aProf.y * 0.9, v * 8.0 + tau * 3.0)) * 0.6 + vnoise(vec2(aProf.y * 2.7, v * 21.0)) * 0.4;
-  y += heap * H * 0.35 * lumps * smoothstep(0.2, 0.45, v) * (1.0 - smoothstep(0.75, 0.95, v));
-  y = mix(y, yHf, smoothstep(0.88, 1.05, tau));
+  // Impact heaps belong to the landing water, not the rear shoulder of the fold.
+  // Raising that shoulder exposed a separate blue shelf above the solid crest.
+  y += heap * H * 0.35 * lumps * smoothstep(0.44, 0.58, v) * (1.0 - smoothstep(0.75, 0.95, v));
+  y = mix(y, yHf, smoothstep(0.74, 1.02, tau));
   // The ribbon hands over to the sea by sinking under it, at its back and front edges and at
   // the start and end of each break: where the two are nearly the same shape, whichever is
   // higher shows, and the depth test draws the seam. (A blend or a dither there showed as a
   // band, because the two are never shaded exactly alike.)
-  // In time: rise gradually just ahead of the sea's crest tuck, then stay until
-  // 1.12 (after the sea has put its crest back by 0.98). At the start the ribbon stays 10 cm
-  // under the sea, so they do not fight over the same pixels (the two meshes sample a steep
-  // bore at different points, and 3 cm was not enough).
+  // Rise into the swell gradually, then settle completely beneath the bore.
+  // Keep the forming sheet inside the swell until its pitch and aeration are established.
   float footV = v + jit * 0.12;
   float keepUp = smoothstep(0.0, 0.06, v) * (1.0 - smoothstep(0.77, 0.86, footV))
                * smoothstep(-0.08, 0.2, tau) * (1.0 - smoothstep(1.08, 1.13, tau)) * on * nbOn;
-  y -= 0.1 * (1.0 - smoothstep(-0.08, 0.2, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
-  // As the sea puts its crest back after the collapse, everything of the ribbon behind the
-  // white heap (its back and the top of the landed lip) goes under it, or it lies there as a
-  // flat pane over a sea that is still half tucked.
+  y -= 0.25 * (1.0 - smoothstep(0.20, 0.48, tau)) + 0.1 * smoothstep(0.86, 0.98, tau);
+  // After impact, the back and top of the lip settle below the common bore,
+  // preventing a separate flat pane from riding above the white water.
   y -= 0.4 * smoothstep(0.84, 0.96, tau) * (1.0 - smoothstep(0.35, 0.5, v));
   // (v12) And the white heap too, at the very end: lying on the sea's own bore it showed as
   // flat white panes with straight edges once the impact's white water covered it.
   y -= 0.3 * smoothstep(0.95, 1.06, tau) * smoothstep(0.35, 0.5, v);
-  // And in space: on its back, beyond where the sea tucks its crest away (a third of a
-  // wavelength behind the crest, surfAt's window), the ribbon lies 10 cm under the sea too.
+  // Seat the rear shoulder and root inside the solid swell. A raised clear-water
+  // cap otherwise masks the crest foam with a separate polygon-shaped blue patch.
+  y -= 0.2 * (1.0 - smoothstep(0.34, 0.42, v));
   y -= 0.1 * smoothstep(0.25, 0.34, -pr.x / L);
   y = mix(sp.h - 0.15, y, keepUp);
 
@@ -229,17 +235,13 @@ void main() {
   float e = 0.004;
   vec4 pa = breakerProfile(max(v - e, 0.0), st, H, Lb, Lf, xMax), pb = breakerProfile(min(v + e, 1.0), st, H, Lb, Lf, xMax);
   vec2 d2 = pb.xy - pa.xy;
+  d2.y += 0.2 * (smoothstep(0.34, 0.42, min(v + e, 1.0))
+                     - smoothstep(0.34, 0.42, max(v - e, 0.0)));
   // The curve runs from the back to the front, water on its right: its left normal points out
   // of the water (up on the back, down under the lip, forward on the face of the tube).
   vec2 n2 = normalize(vec2(-d2.y, d2.x) + vec2(0.0, 1e-6));
   vec3 fwd = vec3(-n.x, 0.0, n.y);            // toward the beach, in world space
   vec3 nrm = normalize(fwd * n2.x + vec3(0.0, n2.y, 0.0));
-  // Before the thrown face is shaped, shade the ribbon like the neighboring sea.
-  // Otherwise its profile normal makes the first few columns catch a bright,
-  // vertical reflection even while their geometry is almost the heightfield's.
-  float seaSlope = (hF - hB) / max(Lb + xF, 1.0);
-  vec3 seaN = normalize(vec3(0.0, 1.0, 0.0) - fwd * seaSlope);
-  nrm = normalize(mix(seaN, nrm, smoothstep(0.02, 0.35, tau)));
 
   vec3 w = vec3(pm.x, y, -pm.y);
   vWorld = w;
@@ -305,9 +307,15 @@ void main() {
   float v = vInfo.x, tau = vInfo.y, H = vInfo.w;
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 N = normalize(vNormal);
-  // The normal points out of the water; seen from its other side (through the thin lip, or
-  // along the edge), turn it to the camera.
+  vec3 Ng = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
   if (dot(N, V) < 0.0) N = -N;
+  if (dot(Ng, V) < 0.0) Ng = -Ng;
+  // Geometry derivatives include the actual swell, its alongshore slope and the
+  // final collapse. The analytic tangent smooths the densely sampled folded lip.
+  // This replaces four extra surf evaluations per vertex.
+  float seaNormal = max(1.0 - smoothstep(0.04,0.40,tau), smoothstep(0.74,1.02,tau));
+  seaNormal = max(seaNormal, 1.0 - smoothstep(0.23,0.27,v));
+  N = normalize(mix(N, Ng, seaNormal));
   float fp = max(length(fwidth(vWorld)), 0.005);
   // The sea's own surface rides on the breaker: the ocean's slopes (tilted onto the ribbon),
   // and the spread of the slopes too small to draw, for the reflection and the glint. The
@@ -320,7 +328,7 @@ void main() {
   // at half their slope, their sub-pixel spread a little more (below). At full slope the sun
   // caught them in chrome flakes all along the lip.
   float stretched = smoothstep(0.2, 0.3, v) * smoothstep(0.02, 0.2, tau);
-  N = normalize(N + (tA * oc.x + tB * oc.y) * mix(1.0, 0.45, stretched));
+  N = normalize(N - (tA * oc.x + tB * oc.y) * mix(1.0, 0.45, stretched));
   vec3 L = uSunDir;
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -332,7 +340,7 @@ void main() {
   // the lip's own water and brightened by the sun coming through it.
   // (Only once a lip has been thrown and only where it is thin: before that, the top of the
   // face is the body of the wave, and shading it as see-through made it pale.)
-  float lip = smoothstep(0.23, 0.27, v) * (1.0 - smoothstep(0.6, 0.66, v)) * smoothstep(0.12, 0.3, tau)
+  float lip = smoothstep(0.23, 0.27, v) * (1.0 - smoothstep(0.57, 0.62, v)) * smoothstep(0.12, 0.3, tau)
             * smoothstep(0.8, 0.3, vInfo.z);
   float thick = 0.9 + 5.5 * exp(-max(vWorld.y + 0.3, 0.0) * 1.1);
   Under uw = underLight(vMap, d, vWorld, N, V, fp, shadow, thick, 0.0, sim.g, uSimOn);
@@ -343,7 +351,7 @@ void main() {
   // it, and the tube's face lit through the lip above it. Both glow teal from the light
   // scattered in the water, where they went navy (the light model looked for a sea bed or the
   // back of the wave, and found neither in the dark).
-  float tube = smoothstep(0.46, 0.52, v) * smoothstep(0.1, 0.35, tau) * (1.0 - smoothstep(0.78, 0.92, tau));
+  float tube = smoothstep(0.59, 0.65, v) * smoothstep(0.1, 0.35, tau) * (1.0 - smoothstep(0.78, 0.92, tau));
   float lit = max(tube, lip * smoothstep(0.26, 0.36, v));
   if (lit > 0.0) {
     // (Clear water there would still be navy: what lights it is the bubbles and sand the
@@ -397,14 +405,19 @@ void main() {
   float rise = smoothstep(0.58, 1.0, tau);
   float billow = fbm3(vec2(vAlong * 0.45, v * max(H, 0.5) * 1.3) + vec2(tau * 0.6, -tau * 2.2)) * 0.7
                + vnoise(vec2(vAlong * 1.6, v * max(H, 0.5) * 4.0) + vec2(0.0, -tau * 4.0)) * 0.3;
-  float impactTop = mix(0.73, 0.28, rise) - (billow - 0.5) * 0.18;
-  float impact = smoothstep(0.60, 0.82, tau) * smoothstep(impactTop - 0.085, impactTop + 0.085, v);
+  float impactTop = mix(0.79, 0.30, rise) - (billow - 0.5) * 0.18;
+  float impact = smoothstep(0.68, 0.84, tau) * smoothstep(impactTop - 0.085, impactTop + 0.085, v);
   // (Old foam drawn up the face as it steepens: faint, and only once it is steep, v9.)
   float streak = sim.r * smoothstep(0.62, 0.8, v) * 0.22 * smoothstep(0.05, 0.3, tau);
-  float amount = clamp(max(max(edge * (0.5 + 0.4 * tear), feather * 0.6), max(impact, streak)) * uFoam, 0.0, 1.0);
+  float aerate = smoothstep(0.22, 0.72, tau);
+  float spillTop = mix(0.41, 0.25, aerate) + (billow - 0.5) * 0.05;
+  float spill = smoothstep(spillTop - 0.035, spillTop + 0.035, v)
+              * (1.0 - smoothstep(0.54, 0.64, v)) * aerate;
+  float amount = clamp(max(max(edge * (0.5 + 0.4 * tear), feather * 0.6),
+                       max(max(impact, streak), spill * 0.85)) * uFoam, 0.0, 1.0);
   // (The patterns only where there is foam to draw: most of the face has none.)
   float foam = 0.0;
-  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount * (1.0 - impact)), smoothstep(0.92, 1.0, amount * (1.0 - impact)));
+  if (amount > 0.002) foam = max(faceFoam(rp, tau, amount), smoothstep(0.98, 1.0, amount));
   // (v12) The impact's white water: dense in the middle of each billow, thinning at its edges
   // (it was cut out of the water with hard edges).
   if (impact > 0.002) {
@@ -474,7 +487,7 @@ void main() {
   BreakCol b = findBreak(l.xy, l.zw);
   o0 = vec4(b.pc, b.n);
   o1 = vec4(b.tau, b.on, b.L, b.H);
-  o2 = vec4(b.hB, b.hF, b.Lf, 0.0);
+  o2 = vec4(b.hB, b.hF, b.Lf, b.hC);
 }`;
 
 export function createBreaker(renderer, waterUniforms) {

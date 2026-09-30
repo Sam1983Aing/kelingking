@@ -24,7 +24,7 @@ uniform float uBreakAt;    // distance offshore where waves break on the beach (
 uniform vec2 uSwellDir;    // direction the swell travels, local
 uniform vec4 uOceanL;      // patch size of each ocean cascade (m)
 uniform vec4 uGust;        // gust pattern: scale (1/m), drift east and north (m/s), strength
-uniform float uBreakerOn;  // 1 when the breaker mesh is drawn (the heightfield tucks its breaking crests away)
+uniform float uBreakerOn;  // breaker presence, retained for shared debug controls
 
 const vec4 OCEAN = vec4(-45.0, 900.0, 0.0, 0.0);
 ${SWASH_GLSL}
@@ -106,12 +106,12 @@ struct Surf {
   float foam;     // what it leaves behind (used where the foam simulation does not reach)
   float push;     // how hard the bore is carrying water up the beach (0..1)
   float broken;   // inside the break
-  float hRaw;     // height before the breaking crest is tucked away under the breaker mesh
+  float hRaw;     // solid swell/bore height, also sampled by the folding lip
   float tau;      // how far this wave is through breaking: 0 starting to throw, 1 collapsed
   float vph;      // where this point is on its wave (phase, 0 at the crest, < 0 in front)
   float L;        // wavelength here (m)
   float wf;       // width of the wave's front (phase)
-  float sink;     // how much of the crest is tucked away (breaker.js draws it instead)
+  float sink;     // legacy diagnostic; the solid swell now remains beneath its lip
   // The swash sheet on the sand (swash.js), where it is the water's surface:
   float sheet;    // how much the sheet makes the surface here (0..1)
   float film;     // its thickness (m)
@@ -182,10 +182,8 @@ Surf surfAt(vec2 p, vec4 d) {
   float wf = max(mix(0.14, 0.095, smoothstep(br + 45.0, br, s)), 2.3 / Lhere);   // an open shoulder before the lip spills
   float w = v < 0.0 ? wf : 0.24;
   float crest = exp(-(v * v) / (w * w)) * smoothstep(0.44, 0.32, abs(v));
-  // Breaking: this wave's crest reaches its break point, throws its lip and collapses over
-  // 8 m of travel (about 2.5 s). The breaker mesh (breaker.js) draws the face and the lip
-  // then, from 0.45 of a wavelength behind the crest to 0.12 in front, and the heightfield's
-  // own crest is tucked under it.
+  // One stage follows the crest through 8 m of travel: pitching lip, impact,
+  // then a lower shoreward bore. The fold and foam use that same stage.
   float brK = uBreakAt * (0.7 + 0.35 * bigK);
   float sCrest = s - v * Lhere;
   // A broad, wave-specific peel moves the landing point along the crest. It must live
@@ -193,34 +191,46 @@ Surf surfAt(vec2 p, vec4 d) {
   // Using the crest's existing low-frequency wobble also avoids an unrelated, faster
   // noise pattern appearing only on the lip at the two sides of the break.
   float tau = (brK + 5.0 - sCrest) / 8.0 + wob * 0.28;
-  float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.25, 0.34, v));
-  // The sea lowers its crest at the same gradual rate the ribbon emerges from it.
-  // A short handoff made the spreading break appear to start at a vertical cut.
-  float sink = win * smoothstep(0.15, 0.4, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
+  // The swell is the solid body of the breaker. Keep it underneath the lip:
+  // lowering it left a trench around the folding ribbon and severed the motion.
+  float sink = 0.0;
+  float collapse = smoothstep(0.68, 1.12, tau);
+  if (collapse > 0.0) {
+    float borePhase = v + Ak * 0.68 / max(Lhere, 1.0);
+    float boreW = borePhase < 0.0 ? 0.085 : 0.18;
+    float bore = exp(-pow(borePhase / boreW, 2.0)) * 0.64;
+    crest = mix(crest, bore, collapse);
+  }
   float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
   float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
   // and squeezing the front into a few grid rows turns it into a staircase of teeth.
   float lean = Ak * 0.1 * crest * smoothstep(br + 25.0, br, s) * (1.0 - broken);
 
-  // (The white lip drawn on the heightfield's own crest, from before the breaker existed.
-  // Where the breaker draws the lip, this only laid a milky veil over the rising crest just
-  // before the breaker took over, so it is nearly off then.)
-  float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v) * (1.0 - 0.9 * uBreakerOn);
+  // Air entrainment starts at the spilling crest, then travels with the falling
+  // sheet to its impact. Keeping that source on the solid swell joins the two surfaces.
+  float lip = 0.0;
+  if (tau > 0.20 && tau < 1.05 && abs(v + 0.012) < 0.12)
+    lip = exp(-pow((v + 0.012) / 0.04, 2.0))
+        * smoothstep(0.20, 0.60, tau) * (1.0 - smoothstep(0.78, 1.05, tau));
   // Foam is born where the thrown lip lands, rather than as a full white bar as soon as
   // the crest enters shallow water. The source has metre-scale gaps; the surf simulation
   // carries the broken patches shoreward and lets them spread, tear and thin into lace.
   // (Only inside the break: this runs for every point near a beach, three times per vertex.)
-  float vr = broken > 0.0 && abs(v) < 0.1 ? v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02 : v;
-  float landed = smoothstep(0.59, 0.85, tau);
-  float front = broken * landed * smoothstep(-0.03, 0.0, vr)
-              * (1.0 - smoothstep(0.04, 0.18, v));
+  // The landing point is shoreward of the crest. v < 0 is in front of it.
+  // Keep new foam at that impact and its trailing wake, never behind a falling lip.
+  float impactPhase = -Ak * 0.68 / max(Lhere, 1.0);
+  float landed = smoothstep(0.68, 0.84, tau);
+  float fv = v - impactPhase;
+  float front = 0.0;
+  if (broken * landed > 0.001 && abs(fv) < 0.16)
+    front = broken * landed * exp(-pow(fv / 0.047, 2.0));
   if (front > 0.001) {
     float burstPattern = vnoise(p * 0.24 + vec2(idx * 3.17, idx * 7.31)) * 0.7
                 + vnoise(p * 0.62 + vec2(idx * 5.83, -idx * 2.27)) * 0.3;
-    front *= 0.12 + 0.88 * smoothstep(0.28, 0.72, burstPattern);
+    front *= 0.32 + 0.68 * smoothstep(0.28, 0.72, burstPattern);
   }
-  float trail = broken * landed * 0.5 * exp(-max(v, 0.0) / 0.24) * step(0.0, v);
+  float trail = broken * landed * 0.5 * exp(-max(fv, 0.0) / 0.18) * smoothstep(-0.035, 0.0, fv);
   float resid = smoothstep(br + 14.0, 0.0, s) * 0.2;
 
   float sz = mix(0.85, 1.1, big) * offshoreFade;
@@ -256,9 +266,10 @@ Surf surfAt(vec2 p, vec4 d) {
   // (On the sand the wave train's phase stops changing, so its bore front would light up the
   // whole beach at once as each crest passed: none of it there, the swash has its own.)
   float sea = smoothstep(-1.0, 0.0, s);
-  o.fresh = max(lip, front * 1.1) * sz * sea;
+  o.fresh = max(lip * 1.15, front * 1.6) * sz * sea;
   o.foam = max(trail, resid) * sz * sea;
-  o.push = broken * smoothstep(-0.03, 0.0, v) * exp(-max(v, 0.0) / 0.1) * offshoreFade * sea;
+  o.push = broken * landed * smoothstep(-0.055, -0.005, fv)
+         * exp(-max(fv, 0.0) / 0.15) * offshoreFade * sea;
   o.broken = broken * offshoreFade * sea;
   o.hRaw = hRaw * offshoreFade;
   o.tau = tau;

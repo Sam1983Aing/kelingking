@@ -31,6 +31,7 @@ version. A session works on its element only, and goes deep on it.
 | v23 | Clouds, clifftop platform, persistent grass and attached blue cord | [v23-cloud-detail.md](v23-cloud-detail.md) | ready for review |
 | v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | ready for review |
 | v25 | Curved cliff toes and beach relief | [v25-cliff-sand-polish.md](v25-cliff-sand-polish.md) | ready for review |
+| v26 | Continuous swell, falling lip and whitewater | [v26-wave-continuity.md](v26-wave-continuity.md) | ready for review; water-level performance exception |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -130,6 +131,7 @@ node tools/ab.mjs beach --rounds=16                  # this build against the pr
 node tools/hero.mjs v15 --url=http://localhost:5180/ # target a separate worktree preview
 node tools/ab.mjs --hero --url=http://localhost:5180/ # pair that preview with an older build
 node tools/parts.mjs beach --parts=none,SKIP_SANDNEAR,WSKIP_SWASH   # what parts of a frame cost
+node tools/wave-cycle.mjs wave-stairs clip 13 18 http://localhost:5183/ stairs # fixed-clock swell → impact → foam
 node tools/capture.mjs cove --console                # print the page's shader errors and warnings
 node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings
 node tools/preview-height.mjs 1024                   # top-down shaded height map

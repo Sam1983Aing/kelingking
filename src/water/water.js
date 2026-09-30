@@ -102,7 +102,7 @@ export function createWater(renderer, atmosphereUniforms = {}, gradeUniforms = {
   const mesh = new THREE.Mesh(dense, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
-  // The breaking lip on the beaches (its own mesh; the sea tucks its breaking crests under it).
+  // The folding beach lip sits over the solid swell and settles into its advancing bore.
   const breaker = createBreaker(renderer, uniforms);
   mesh.add(breaker.mesh);
   // Spray off the breakers and bursts of white water at the rock.

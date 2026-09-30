@@ -270,9 +270,10 @@ the carved mesh, and how exposed it is to the swell), and the light from `src/sk
   crests in the surf zone), irregular timing and sets. Each wave breaks where it gets too
   big for the depth, bigger waves further out.
 - **The breaking wave** (`breaker.js`) is its own mesh, because a heightfield cannot fold
-  over: a ribbon along each beach whose cross-section steepens, throws a lip, curls into a
-  tube and collapses, each half metre of beach at its own stage, so the wave peels. While a
-  wave breaks, the sea tucks its crest under the ribbon.
+  over: a ribbon along each beach whose cross-section steepens, pitches forward as a thin
+  falling sheet and collapses, each half metre of beach at its own stage, so the wave peels. Its root follows the actual swell crest, with the solid wave body retained underneath.
+  The lip, impact spray and foam share that crest and clock; the collapsing swell becomes
+  the same advancing bore (v26).
 - **Foam has a memory** (`surf-sim.js`): a 1024 by 1024 simulation over the bay carries foam
   and stirred sand with the water (up the beach with each bore, out in the backwash and the
   rips, off the rock after each hit, downwind, in slow eddies), and fades it. The lace is
