@@ -3,9 +3,20 @@
 The swell remains solid beneath a forward-pitching lip. The crest, falling sheet, impact spray
 and persistent foam follow the same phase and irregular clock.
 
-## Matched comparisons
+## Latest review polish
 
-v25 checkpoint `51e68d3` on the left; v26 on the right. Identical 1500 × 960 camera, DPR 1,
+The September 30 18:39 review accepts the continuous motion but identifies a bubble-like
+forming lip. Its early reach is now coupled to its fall, and its outer profile no longer
+turns back around the tip. The crest clock and final landing position are retained.
+
+[Review the matched motion, close comparisons and verification](polish/README.md).
+All nine cameras remain within the 10% timing limit against accepted v26 `1e1cc0d`.
+The earlier v25-to-v26 water-level cost exception below still applies.
+
+## Original v25 to v26 comparisons
+
+These original-pass recordings compare v25 checkpoint `51e68d3` on the left with
+accepted v26 checkpoint `1e1cc0d` on the right. Identical 1500 × 960 camera, DPR 1,
 with all water state refreshed after every fixed-clock sample.
 
 ### Forming crest, 15 s
@@ -22,7 +33,7 @@ with all water state refreshed after every fixed-clock sample.
 
 [Watch the matched wave cycles](compare-cycle.mp4).
 
-## Final cycle audits
+## Original accepted cycle audits
 
 The stair camera is about 20 m above the beach, matching the reported view. The sand camera
 is at 4.8 m. Clips follow the actual fixed simulation clock at 24 fps; they do not measure
@@ -68,7 +79,8 @@ unavailable, so this is a comparison against v25, with no new photo-match claim.
 
 ## Hero frames
 
-All nine final hero views, rendered at 1400 × 788 and clock 17 s, with zero console messages.
+All nine hero views were refreshed after the September 30 lip polish, at 1400 × 788
+and clock 17 s, with zero console messages.
 
 ### Overview, straight down
 
@@ -106,7 +118,7 @@ All nine final hero views, rendered at 1400 × 788 and clock 17 s, with zero con
 
 ![Head from the sea](sideFromSea.jpg)
 
-## Paired frame times
+## Original v25 to v26 paired frame times
 
 v25 checkpoint `51e68d3`, twelve alternating rounds of eight complete frames at 1400 × 788,
 DPR 1. The paired ratio is calculated per alternating round and need not equal the ratio of

@@ -18,7 +18,15 @@ try {
  const scrollPose=await p.eval('({position:__app.camera.position.toArray(),forward:__app.camera.getWorldDirection(new __app.camera.position.constructor()).toArray()})');
  console.log('scroll camera',scrollPose);
  const view=process.argv[7]||'stairs';
- const cameras={stairs:'[138.87580572491748,179.83731935783217,21.42465014142438],274,-12,0,50',sand:'[130,188,4.8],274,-5,0,55',shore:'[88,223.3,1.3],282,-4,-2,26',near:'[88,223.3,3.5],282,-8,-2,32',top:'[100,232,55],180,-90,0,72'};
+ // Review camera: the September 30 sand-level report, from the scroll at 4.05.
+ const cameras={
+  review:'[127.23179203160545,188.4760190272445,4.549650273586554],255.629,-10.554,0,53.9478359620796',
+  stairs:'[138.87580572491748,179.83731935783217,21.42465014142438],274,-12,0,50',
+  sand:'[130,188,4.8],274,-5,0,55',
+  shore:'[88,223.3,1.3],282,-4,-2,26',
+  near:'[88,223.3,3.5],282,-8,-2,32',
+  top:'[100,232,55],180,-90,0,72',
+ };
  if (!cameras[view]) throw new Error('Unknown view: '+view);
  await p.eval('__app.setPose('+cameras[view]+');__app.advance(0);0');
  const pose=await p.eval('({position:__app.camera.position.toArray(),forward:__app.camera.getWorldDirection(new __app.camera.position.constructor()).toArray(),fov:__app.camera.fov})');

@@ -41,7 +41,10 @@ vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax)
   float formed = smoothstep(0.04, 0.40, tau);
   float fall = smoothstep(0.16, 0.76, tau);
   float xc = H * 0.08 * formed;
-  float throwX = H * (0.035 + 0.60 * formed);
+  // Keep the forming lip seated in the swell. A full forward throw while the tip was
+  // still high made a horizontal cap that read as an inflated air pocket. Let its
+  // reach grow with the fall; the final landing position and stage stay the same.
+  float throwX = H * (0.035 + 0.60 * formed * fall * fall);
   float rootT = max(H * 0.055 * formed, 0.006);
   float tipX = xc + throwX, tipY = H * (1.0 - 0.97 * fall);
   float xF = min(max(Lf, tipX + 0.7 * H), xMax);
@@ -54,7 +57,9 @@ vec4 breakerProfile(float v, float tau, float H, float Lb, float Lf, float xMax)
   if (v < 0.45) {
     float u = (v - 0.25) / 0.2, a = 1.0 - u;
     vec2 p0 = vec2(xc, H), p1 = vec2(xc + throwX * 0.65, H + 0.035 * H * formed);
-    vec2 p2 = vec2(tipX + H * 0.12 * formed, tipY + H * 0.26 * fall);
+    // Ordered horizontal controls give a descending sheet, without turning back
+    // around its own tip and making a rounded bulb along the peeling crest.
+    vec2 p2 = vec2(tipX - throwX * 0.08, tipY + H * 0.26 * fall);
     vec2 q = a*a*a*p0 + 3.0*a*a*u*p1 + 3.0*a*u*u*p2 + u*u*u*vec2(tipX,tipY);
     return vec4(q, mix(rootT, 0.012 * H, u), followSea);
   }

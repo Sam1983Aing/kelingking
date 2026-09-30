@@ -2838,3 +2838,40 @@ remaining cost is recorded in the v11 speed brief. Absolute times vary with back
 This is an authored continuous surf model, not a resolved fluid simulation. The 1.3 m
 water-level camera can enter a tall crest; underwater rendering is outside this pass.
 Verification covers the specified fixed-time range and cameras, not every possible sea state.
+
+
+### v26 review polish: restrain the forming lip (2026-09-30, 18:39 report)
+
+Sam accepts the wave's continuous motion and asks to polish an intermittent bubble-like
+shape near the peeling crest. A matched beach camera at about 4.55 m reproduced it in the
+larger incoming wave around clock 5–8 s. Thinner underside and normal diagnostics did not
+resolve the shape. The actual profile developed its full forward reach while the tip was
+still high, and its penultimate outer control overshot the tip. This made an inflated cap
+and a rounded turnback along the crest.
+
+Forward reach now grows with the squared fall envelope. The penultimate control remains
+behind the tip, keeping all outer horizontal controls in order. At impact stage 0.76 the
+reach and tip height are identical to accepted v26. Only these two profile expressions
+change in production; the same profile also supplies the lip tangent and spray geometry.
+No underside or shading diagnostic was retained. The clock, crest solver, incoming water,
+foam transport and open ocean are unchanged.
+
+Matched 18 s beach recordings at 24 fps, clock 1–19 s, show the refined forming lip and its
+collapse. A second stair cycle at clock 13–31 s and a close quarter-second audit at 1–19 s
+retain the continuous swell, fall and advancing foam. All three captures have zero console
+errors. Across 73 paired beach samples, the crest and stage readbacks match `1e1cc0d` exactly:
+zero changed components, maximum difference zero and no non-finite active columns.
+Comparison clips, frames and measurements are in `docs/gallery/v26/polish/`.
+
+All nine hero views were refreshed with zero console messages. Water-hidden land-label
+masks at overview and viewpoint have zero changed pixels against `1e1cc0d`. References
+remain unavailable, so this checks regression without a new photo-match claim. The terrain
+bake is current. The local standalone was rebuilt with 55 modules, its scripts parse, and
+it passed all four offline scroll stops with zero console errors after loading in 20.3 s.
+No assets were downloaded.
+
+Twelve alternating rounds of eight complete frames against `1e1cc0d` pass all nine paired
+median timing gates, ranging from −3.4% to +5.9%. This polish adds no performance exception.
+The original v25-to-v26 water-level exception above remains. The authored surf and existing
+underwater-camera limits also remain; verification covers the recorded cameras and sea
+state rather than every possible wave.

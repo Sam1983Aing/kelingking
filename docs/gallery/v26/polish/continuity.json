@@ -1,0 +1,28 @@
+{
+  "baseline": "1e1cc0d",
+  "view": "review",
+  "pose": {
+    "position": [
+      127.23179203160545,
+      4.549650273586554,
+      -188.4760190272445
+    ],
+    "forward": [
+      -0.9523209884663035,
+      -0.18316214033655984,
+      0.24400074851092818
+    ],
+    "fov": 53.9478359620796
+  },
+  "clock": [
+    1,
+    19
+  ],
+  "samples": 73,
+  "sampleIntervalSeconds": 0.25,
+  "changedCrestOrStageComponents": 0,
+  "largestComponentDifference": 0,
+  "nonFiniteActiveColumns": 0,
+  "consoleErrorsBefore": [],
+  "consoleErrorsAfter": []
+}

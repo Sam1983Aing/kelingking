@@ -39,3 +39,34 @@ Ready for review on `codex/v26-wave-continuity`. [Gallery and motion comparisons
   No downloads or external publication.
 - Authored surf model; verification is limited to the recorded cameras and sea state.
   A 1.3 m water-level camera can enter the taller crest; underwater rendering is outside scope.
+
+
+## Review polish, September 30 at 18:39
+
+Sam accepts the continuous motion but reports intermittent bubble-like rolled shapes at the
+crest in the supplied sand-level view. Reproduce that angle and stage, inspect the fold and
+its intersection with the solid swell, and refine those local shapes without changing the
+accepted incoming water or the common wave clock. Compare against checkpoint `1e1cc0d`,
+check complete cycles at sand and stair heights, and rerun the hero, build and frame gates.
+
+
+### Result
+
+The forming lip's forward reach now grows with its fall. Ordered horizontal cubic controls
+remove the turnback around the tip; impact stage and final reach remain the same. Only the
+shared lip profile changes in production. [Polish gallery and motion](../gallery/v26/polish/README.md).
+
+- Matched 18 s beach recordings at 24 fps, clock 1–19 s; stair cycle 13–31 s at 24 fps;
+  close audit 1–19 s at 4 fps. No console errors. The rounded pocket is reduced without
+  disrupting the continuous swell, fall and foam sequence.
+- Across 73 quarter-second beach samples, accepted crest and stage readbacks are identical:
+  zero changed components and no non-finite active columns.
+- Nine hero renders, zero console messages. Land masks at overview and viewpoint exactly
+  match accepted `1e1cc0d`, with water hidden. Regression check only; references unavailable.
+- Twelve alternating rounds of eight frames: all nine paired medians pass the 10% gate
+  against `1e1cc0d` (−3.4% to +5.9%). The original v25-to-v26 water-level cost exception
+  remains; this polish needs no additional exception.
+- Bake current. Local standalone rebuilt (3.16 MB, 55 modules); offline test loaded in
+  20.3 s, rendered four scroll stops and produced no console errors. No downloads.
+- Verification covers the recorded sea state and cameras; the authored model and existing
+  underwater-camera limitation still apply.
