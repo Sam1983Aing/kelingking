@@ -6,8 +6,8 @@
 //
 // Output: one Float32Array, STRIDE floats per plant:
 //   x, height, z (world), scale, yaw, species, variant, tint (0..1, colour variation)
-// Grass tussocks come in the same list (species GRASS). They are drawn only near the camera,
-// so they are scattered only along the path, where the camera goes.
+// Grass tussocks share the same world positions in the close meshes and distant impostors.
+// The trail verge is dense; open headland ground carries a lighter, continuous scatter.
 
 import { makeNoise, fbm } from '../terrain/heightfield.js';
 import { padDistance } from '../trail/carve.js';
@@ -21,7 +21,7 @@ export const STRIDE = 8;
 // stops (for the ground under it, canopyCover).
 export const SPECIES = [
   { id: 'scaevola', heights: [1.3, 1.6, 1.95], impostor: true, crown: [0.85, 0.85] },
-  { id: 'grass', heights: [0.5, 0.65, 0.8], impostor: false },
+  { id: 'grass', heights: [0.5, 0.65, 0.8], impostor: true },
   { id: 'tree', heights: [4.5, 5.5, 6.5], impostor: true, crown: [0.55, 0.8] },
   { id: 'palm', heights: [10, 12.5], impostor: true, crown: [0.36, 0.3] },
   { id: 'pandanus', heights: [3.2, 4.2], impostor: true, crown: [0.5, 0.6] },
@@ -346,6 +346,35 @@ export function scatterPlants(hf, layout, surfaceShift = null) {
         // (Beside the concrete steps it is short: the photos show scrub there, and the view.)
         const scale = (0.75 + 0.5 * rand()) * (0.55 + 0.45 * smooth(0, 1.5, d)) * (q && route.sec[q.i] === 0 ? 0.65 : 1);
         out.push(qx, h - 0.04, -qy, scale, rand() * Math.PI * 2, SP.GRASS, variant, rand());
+      }
+    }
+  }
+  // Distant ground cover on open headland slopes. The trail scatter above already owns
+  // its 22 m corridor; use a separate seed so adding this does not relocate existing plants.
+  const fill = cfg.grass?.fill;
+  if (fill) {
+    const fillRand = mulberry32(cfg.seed * 104729 + 73);
+    const gs = fill.spacing, R = fill.radius;
+    for (let y = cfg.focus[1] - R; y < cfg.focus[1] + R; y += gs) {
+      for (let x = cfg.focus[0] - R; x < cfg.focus[0] + R; x += gs) {
+        const px = x + (fillRand() - 0.5) * gs, py = y + (fillRand() - 0.5) * gs;
+        const radial = Math.hypot(px - cfg.focus[0], py - cfg.focus[1]);
+        if (radial > R || sample(f.DC, px, py) < 2) continue;
+        if (route?.nearest(px, py, cfg.grass.reach)) continue;
+        if (pads.some((p) => padDistance(p, px, py) < cfg.grass.reach * 0.6)) continue;
+        const h = heightAt(px, py), up = slopeAt(px, py);
+        if (h < 12 || up < 0.32) continue;
+        const n1 = fbm(noise, px * 0.07, py * 0.07, 3) + 0.5;
+        let amount = coverAt(px, py, h, up, n1) * (1 - 0.85 * scrubAt(px, py));
+        amount *= 1 - smooth(R * 0.75, R, radial);
+        if (fillRand() > amount * fill.density) continue;
+        let qx = px, qy = py;
+        if (surfaceShift) {
+          const shift = surfaceShift(px, py, h);
+          if (shift) { if (shift.c > 1.5) continue; qx += shift.c * shift.gx; qy += shift.c * shift.gy; }
+        }
+        out.push(qx, h - 0.04, -qy, 0.85 + 0.45 * fillRand(), fillRand() * Math.PI * 2,
+          SP.GRASS, Math.floor(fillRand() * 3), fillRand());
       }
     }
   }

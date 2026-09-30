@@ -1,0 +1,228 @@
+{
+  "baseline": "6463322",
+  "candidate": "codex/v23-cloud-detail",
+  "width": 1400,
+  "pixelRatio": 1,
+  "terrainResolution": 1024,
+  "time": 17,
+  "rounds": 12,
+  "framesPerBurst": 8,
+  "method": "Alternating complete frames with synchronous GPU readback. Change is the median of per-round ratios, not the ratio of independent time medians. trailLow was repeated for 16 rounds after the final knot leads were added.",
+  "rows": [
+    {
+      "name": "overview",
+      "baselineMs": 25.037,
+      "candidateMs": 24.013,
+      "medianPairedChangePct": -7.95,
+      "middleHalfChangePct": [
+        -15.99,
+        14.9
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "viewpoint",
+      "baselineMs": 16.75,
+      "candidateMs": 17.688,
+      "medianPairedChangePct": 0.92,
+      "middleHalfChangePct": [
+        -1.72,
+        21.29
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "stairs",
+      "baselineMs": 15.988,
+      "candidateMs": 16.387,
+      "medianPairedChangePct": 4.64,
+      "middleHalfChangePct": [
+        -2.23,
+        7.99
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "trailTop",
+      "baselineMs": 13.262,
+      "candidateMs": 13.7,
+      "medianPairedChangePct": 7.06,
+      "middleHalfChangePct": [
+        -3.18,
+        10.46
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "trailLow",
+      "baselineMs": 12.95,
+      "candidateMs": 13.425,
+      "medianPairedChangePct": 1.48,
+      "middleHalfChangePct": [
+        0.28,
+        5.07
+      ],
+      "rounds": 16
+    },
+    {
+      "name": "beach",
+      "baselineMs": 18.025,
+      "candidateMs": 17.188,
+      "medianPairedChangePct": 1.72,
+      "middleHalfChangePct": [
+        -8.42,
+        7.24
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "swash",
+      "baselineMs": 19.812,
+      "candidateMs": 19.837,
+      "medianPairedChangePct": 1.53,
+      "middleHalfChangePct": [
+        -5.39,
+        8.57
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "shoreBreak",
+      "baselineMs": 9.925,
+      "candidateMs": 9.45,
+      "medianPairedChangePct": -0.55,
+      "middleHalfChangePct": [
+        -4.79,
+        8.24
+      ],
+      "rounds": 12
+    },
+    {
+      "name": "sideFromSea",
+      "baselineMs": 16.637,
+      "candidateMs": 17.4,
+      "medianPairedChangePct": 5.63,
+      "middleHalfChangePct": [
+        4.32,
+        12.72
+      ],
+      "rounds": 12
+    }
+  ],
+  "initialAllHeroRows": [
+    {
+      "name": "overview",
+      "a": 25.037499997764826,
+      "b": 24.012500002980232,
+      "ratio": 0.9205397301027782,
+      "lo": 0.8401002505966894,
+      "hi": 1.1490084984822584
+    },
+    {
+      "name": "viewpoint",
+      "a": 16.75,
+      "b": 17.6875,
+      "ratio": 1.0091613813380291,
+      "lo": 0.9828358210289656,
+      "hi": 1.212854757961654
+    },
+    {
+      "name": "stairs",
+      "a": 15.987500000745058,
+      "b": 16.387499999254942,
+      "ratio": 1.0463743678758746,
+      "lo": 0.9777049179937018,
+      "hi": 1.0799011531104021
+    },
+    {
+      "name": "trailTop",
+      "a": 13.262499999254942,
+      "b": 13.700000002980232,
+      "ratio": 1.0706126685490844,
+      "lo": 0.9681978801712339,
+      "hi": 1.1045685280398063
+    },
+    {
+      "name": "trailLow",
+      "a": 16.700000002980232,
+      "b": 15.987500000745058,
+      "ratio": 1.0029940117970566,
+      "lo": 0.8887147336305455,
+      "hi": 1.1222967934876167
+    },
+    {
+      "name": "beach",
+      "a": 18.024999998509884,
+      "b": 17.1875,
+      "ratio": 1.0172413793103448,
+      "lo": 0.9157832745369581,
+      "hi": 1.0723781389327143
+    },
+    {
+      "name": "swash",
+      "a": 19.8125,
+      "b": 19.837499998509884,
+      "ratio": 1.0152722444356703,
+      "lo": 0.9460815047395641,
+      "hi": 1.085676037576731
+    },
+    {
+      "name": "shoreBreak",
+      "a": 9.925000000745058,
+      "b": 9.449999999254942,
+      "ratio": 0.994505494831643,
+      "lo": 0.9521410577879639,
+      "hi": 1.0823798625582157
+    },
+    {
+      "name": "sideFromSea",
+      "a": 16.637499999254942,
+      "b": 17.399999998509884,
+      "ratio": 1.0563271605884001,
+      "lo": 1.0431848851240617,
+      "hi": 1.1271721960868868
+    }
+  ],
+  "movingClouds": [
+    {
+      "name": "large",
+      "before": 11.491666667163372,
+      "after": 11.866666667163372,
+      "ratio": 1.0480059084173847,
+      "ratios": [
+        1.0447761194915046,
+        0.908962596795096,
+        1.1669195748725936,
+        1.5268166090752642,
+        0.8156808804606603,
+        1.086789554630995,
+        1.1247280639386363,
+        1.0480059084173847,
+        0.9657738095696761,
+        0.9923184355886557,
+        0.9525083612438826,
+        1.1438004401805641
+      ]
+    },
+    {
+      "name": "horizon",
+      "before": 10.991666667163372,
+      "after": 11.083333333333334,
+      "ratio": 0.9679767102927977,
+      "ratios": [
+        0.9462365591348624,
+        1.1008339649849703,
+        1.1225604995223233,
+        1.0421303657605268,
+        0.9660120843685821,
+        0.9545126352929897,
+        0.8551933281047859,
+        1.0794912562100456,
+        0.9078171091404909,
+        0.9357290947969262,
+        1.097502014197523,
+        0.9679767102927977
+      ]
+    }
+  ]
+}

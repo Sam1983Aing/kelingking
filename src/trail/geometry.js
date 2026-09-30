@@ -24,6 +24,7 @@
 
 import { DS } from './route.js';
 import { padDistance } from './carve.js';
+import { bambooAtHeight } from './bamboo.js';
 
 // How far the dirt runs out past the tread's edge, down to the ground: over the level shoulder
 // the carve leaves (0.7 m), so the trodden verge is the path's own, not the ground shader's
@@ -373,7 +374,8 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     for (let r = 0; r + 1 < rings.length; r++) {
       for (let k = 0; k < ring.length; k++) {
         const k2 = (k + 1) % ring.length;
-        concrete.quad(pt(k, rings[r]), pt(k, rings[r + 1]), pt(k2, rings[r + 1]), pt(k2, rings[r]), [0, 0, 0], [0, 0, 0]);
+        // Face kind 4 is a platform: it has no riser behind it or stair nosing.
+        concrete.quad(pt(k, rings[r]), pt(k, rings[r + 1]), pt(k2, rings[r + 1]), pt(k2, rings[r]), [4, 0, 9], [4, 0, 9]);
       }
     }
     for (let k = 0; k < ring.length; k++) {
@@ -387,10 +389,8 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
 
   // ---------------------------------------------------------------- handrails
   const timberPosts = instances(), timberRails = instances(), bambooPosts = instances(), bambooRails = instances();
-  // Each rail end gets a crossed lashing over the joint. The outer lane also needs its own
-  // bridge back to the post; a rail-only cuff leaves that pole apparently unfastened.
-  // Three irregular ties for each of the near/far lanes, plus the rail turns.
-  const lashPost = Array.from({ length: 6 }, instances), lashRail = [instances(), instances(), instances()];
+  // Joint descriptors refer to the actual wood instances, including their deformation.
+  const lashings = [];
   // Is (px, py) on or right beside another stretch of the path (a hairpin's other leg)?
   const clashes = (px, py, q) => {
     let hit = false;
@@ -418,7 +418,9 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
       if (bamboo) {
         const r = 0.032 + 0.01 * rand();
         const bx = px + post.lean[0] * (topH - base), by = py + post.lean[1] * (topH - base);
-        bambooPosts.push(cylinderBetween([px, base, py], [bx, topH, by], r), rand());
+        post.matrix = cylinderBetween([px, base, py], [bx, topH, by], r);
+        post.random = rand();
+        post.index = bambooPosts.push(post.matrix, post.random);
         post.r = r;
       } else {
         const bx = px + post.lean[0] * (topH - base), by = py + post.lean[1] * (topH - base);
@@ -441,10 +443,9 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
           // (v10) Timber rails sag a little and sit unevenly; the odd one hangs from one end.
           const hang = rand() < 0.03 ? -(0.25 + 0.2 * rand()) : 0;
           const endA = bamboo ? 0 : (rand() - 0.5) * 0.04, endB = bamboo ? 0 : (rand() - 0.5) * 0.04 + (rand() < 0.5 ? hang : 0);
-          // (v13) Where two rails meet at a post they run on past it side by side (they were on the
-          // same line, one through the other): alternate spans lie a rail's width further in.
+          // Successive spans splice above/below one another at each post.
           const lane = bamboo ? post.span % 2 : 0;
-          const inset = bamboo ? 0.055 + 0.054 * lane : 0.065;
+          const inset = 0.065;
           const sag = bamboo ? (rand() - 0.5) * 0.08 : 0;
           // A broken stump must have room for the rail and both turns of cord below its cut.
           if (endEase > 0.001 && ((prev.broken && hr + sag > prev.height - 0.12)
@@ -454,18 +455,30 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
           const a = [prev.x + prev.lean[0] * (hr + 0.35) + inX * inset, prev.hd + hr + sag + endA, prev.y + prev.lean[1] * (hr + 0.35) + inY * inset];
           const b = [px + post.lean[0] * (hr + 0.35) + inX * inset, f.hd + hr + sag + endB, py + post.lean[1] * (hr + 0.35) + inY * inset];
           if (bamboo) {
-            // Bamboo runs on a little past each post.
-            const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d);
-            const ext = 0.12 / L;
-            bambooRails.push(cylinderBetween([a[0] - d[0] * ext, a[1] - d[1] * ext, a[2] - d[2] * ext], [b[0] + d[0] * ext, b[1] + d[1] * ext, b[2] + d[2] * ext], railR), rand());
-            // Blue cord lashing it to the posts (v13: turns of thin cord round the joint, a knot and
-            // two loose ends, as in trail-mid-descent-b.jpg. It was a smooth blue collar).
-            for (const [p, pr] of [[a, prev], [b, post]]) {
-              const rr = rand(), variant = Math.min(2, Math.floor(rr * 3));
-              const [mp, mr] = lashingMatrices(p, [inX, inY], pr, [b[0] - a[0], b[1] - a[1], b[2] - a[2]], inset, railR);
-              lashPost[variant + 3 * lane].push(mp, rr * 3 - variant);
-              lashRail[variant].push(mr, rr * 3 - variant);
-            }
+            // Splices sit beside one another vertically, both against the post. The old outer
+            // lane moved a pole 5 cm away from its support and could never be tightly lashed.
+            const laneShift = (lane ? 1 : -1) * (railR + 0.004);
+            const section = pr => bambooAtHeight(pr.matrix, pr.random,
+              pr.hd + Math.min(hr + sag + laneShift, pr.height - 0.105));
+            const pa = section(prev), pb = section(post);
+            const dir0 = pb.center.map((v,i) => v-pa.center[i]);
+            const dl = Math.hypot(...dir0); const dir = dir0.map(v=>v/dl);
+            const contact = (pole, railT) => {
+              let out = [pole.axis[1]*dir[2]-pole.axis[2]*dir[1], pole.axis[2]*dir[0]-pole.axis[0]*dir[2], pole.axis[0]*dir[1]-pole.axis[1]*dir[0]];
+              const ol = Math.hypot(...out); out = out.map(v=>v/ol);
+              if (out[0]*inX-out[2]*inY < 0) out=out.map(v=>-v);
+              const separation = pole.radius + railR*(1.03-0.06*railT) - 0.0005;
+              const c = pole.center.map((v,i)=>v+out[i]*separation);
+              return [c[0],c[1],-c[2]];
+            };
+            const extension = 0.12, railT = extension/(dl+2*extension);
+            const ca=contact(pa,railT), cb=contact(pb,1-railT);
+            const d=cb.map((v,i)=>v-ca[i]), L=Math.hypot(...d), ext=extension/L;
+            const rm=cylinderBetween(ca.map((v,i)=>v-d[i]*ext),cb.map((v,i)=>v+d[i]*ext),railR);
+            const ri=bambooRails.push(rm,rand());
+            // Consuming the same two random values preserves the posts after this span.
+            for(const [pr,ps,rt] of [[prev,pa,railT],[post,pb,1-railT]])
+              lashings.push(pr.index,ri,ps.t,rt,rand());
           } else {
             const mid = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1]), 0.5 * (a[2] + b[2])];
             const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
@@ -504,9 +517,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
     concrete: concrete.done(), dirt: dirt.done(),
     logs: logs.done(), stones: stones.done(), timberPosts: timberPosts.done(), timberRails: timberRails.done(),
     bambooPosts: bambooPosts.done(), bambooRails: bambooRails.done(),
-    lashPost0: lashPost[0].done(), lashPost1: lashPost[1].done(), lashPost2: lashPost[2].done(),
-    lashPost3: lashPost[3].done(), lashPost4: lashPost[4].done(), lashPost5: lashPost[5].done(),
-    lashRail0: lashRail[0].done(), lashRail1: lashRail[1].done(), lashRail2: lashRail[2].done(),
+    lashings: new Float32Array(lashings),
     ms: Math.round(performance.now() - t0),
   };
 }
@@ -515,7 +526,7 @@ export function buildTrailGeometry(route, heightAt, spec, seed = 5) {
 
 // A triangle mesh with per-vertex aTrail = (across, along, face kind, back): across -1..1 on the
 // tread (beyond on a skirt), metres along the line, what the face is (0 tread, 1 concrete
-// side, 2 dirt skirt, 3 riser), and on a tread how far it is from the foot of the riser behind
+// side, 2 dirt skirt, 3 riser, 4 platform), and on a tread how far it is from the foot of the riser behind
 // it (v10; 9 for none). Normals are worked out from the faces around each vertex.
 function mesh(smooth = false) {
   const pos = [], trail = [], wear = [], idx = [];
@@ -586,7 +597,7 @@ function mesh(smooth = false) {
 function instances() {
   const m = [], r = [];
   return {
-    push(mat, rnd) { m.push(...mat); r.push(rnd); },
+    push(mat, rnd) { m.push(...mat); r.push(rnd); return r.length - 1; },
     done() { return { matrices: new Float32Array(m), rand: new Float32Array(r), count: r.length }; },
   };
 }
@@ -620,43 +631,6 @@ function boxBetween(a, b, t, sx, sz) {
   ex = ex.map((v) => v / xl);
   const ez = [ex[1] * ey[2] - ex[2] * ey[1], ex[2] * ey[0] - ex[0] * ey[2], ex[0] * ey[1] - ex[1] * ey[0]];
   return compose(ex, ey, ez, [sx, L, sz], [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2]);
-}
-// The two frames of a cord lashing (v13, the shapes are in trail.js). p is where the rail meets the
-// post (map x, h, y), inn the way in (map x, y), d the rail's direction, inset how far the rail's
-// axis is off the post's.
-//   post: origin on the post's axis at the rail's height, y up the post (stretched by 1 / cos of
-//         the rail's slope, so the turns above and below the rail clear it on a steep flight),
-//         x horizontal along the rail, z out toward the inside of the path.
-//   rail: origin on the rail's axis at the post, x along the rail, y across it (up), z toward
-//         the inside of the path.
-function lashingMatrices(p, inn, post, d, inset, railR) {
-  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
-  const inward = [inn[0], 0, -inn[1]];
-  const facing = (ez) => ez[0] * inward[0] + ez[2] * inward[2] >= 0;
-  const ey = norm([post.lean[0], 1, -post.lean[1]]);
-  const dir = norm([d[0], d[1], -d[2]]);
-  // Post frame.
-  const dp = dir[0] * ey[0] + dir[1] * ey[1] + dir[2] * ey[2];
-  let ex = norm([dir[0] - ey[0] * dp, dir[1] - ey[1] * dp, dir[2] - ey[2] * dp]);
-  let ez = cross(ex, ey);
-  if (!facing(ez)) { ex = ex.map((v) => -v); ez = cross(ex, ey); }
-  const cosA = Math.max(Math.sqrt(1 - dp * dp), 0.55);
-  // Sized to this post at this height (the pole tapers, trail.js) and to this rail.
-  const hy = Math.min(Math.max((p[1] - post.base) / (post.top - post.base), 0), 1);
-  const sp = ((post.r ?? 0.036) * (1.1 - 0.2 * hy) + 0.0045) / 0.0435;
-  const sy = (railR + 0.0055) / (0.0335 * cosA);
-  const c = [p[0] - inn[0] * inset, p[1], -(p[2] - inn[1] * inset)];
-  const matP = compose(ex, ey, ez, [sp, sy, sp], c);
-  // Rail frame.
-  let rx = dir;
-  const ry0 = [ey[0] - rx[0] * dp, ey[1] - rx[1] * dp, ey[2] - rx[2] * dp];
-  const ry = norm(ry0);
-  let rz = cross(rx, ry);
-  if (!facing(rz)) { rx = rx.map((v) => -v); rz = cross(rx, ry); }
-  const sr = (railR + 0.0038) / 0.0287;
-  const matR = compose(rx, ry, rz, [sr, sr, sr], [p[0], p[1], -p[2]]);
-  return [matP, matR];
 }
 // A stone at c (map x, h, y): turned by yaw about the vertical, tipped by tilt, sized s.
 function stoneMatrix(c, yaw, tilt, s) {

@@ -312,8 +312,9 @@ sheer face, none on the sand or at the foot of the cliffs. Scrub in patches tens
 across with grass between on the finger, a mosaic of woodland and open grassland with palm
 groves on the plateau, hanging scrub in patches down the sheer faces and along the ledges
 (the tops of the hard beds, from the same bedding table the mesh is carved with). Grass
-tussocks within 22 m of the path, low leafy scrub beside the concrete steps, and views from
-the path kept open (v6's rule).
+tussocks within 22 m of the path plus sparse open-ground tussocks across the headland, low
+leafy scrub beside the concrete steps, and views from the path kept open (v6's rule). Grass
+uses matched distant impostors, so its coverage persists from the aerial view to the path.
 
 **How they are drawn.** Up close, real geometry (`near.js`, `plant-material.js`): the plants
 within reach are picked each frame the camera moves, nearest first, in two or three levels of
@@ -349,7 +350,8 @@ One physical model for the sun, the sky, the haze and the clouds (`src/sky/`), i
   that into pixel values. One exposure for every shot, as with a camera on a sunny day. With
   nothing tuned, the render's sky matched the same-day photo within 0.3 stops from 5 to 32
   degrees up. Then the Khronos PBR Neutral tone curve and a small saturation lift.
-- **Clouds.** Fair-weather cumulus, marched through a volume at half resolution: billow noise
+- **Clouds.** Fair-weather cumulus, marched through a volume at three quarters of the drawing
+  buffer resolution (capped at 1920 px), with bounded temporal reconstruction: billow noise
   kept where a weather map puts cloud clusters, flat bases, rounded tops, lit by the same sun
   and sky and hazed by the same froxels. The sky over the island is kept clear, as on the
   photo day, so their shadows drift over the open sea (and over the island too if the clear

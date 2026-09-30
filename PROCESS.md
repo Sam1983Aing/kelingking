@@ -2590,3 +2590,62 @@ rounds of six full frames against `e03424b` measured median paired changes betwe
 +5%, within the 10% limit at every hero camera. The v22 gallery records those timings.
 The rebuilt local standalone opened offline with generated terrain and no console errors;
 four scroll stops were captured, including the beach chapter.
+
+
+## v23: connected blue cord, persistent grass and cloud detail (2026-09-30)
+
+Sam accepted the larger cloud shapes but showed blurry edges and separate white dots. During
+this pass he also reported a black platform at the clifftop, sparse vegetation from above,
+and blue cord that appeared detached from the stair rails. These additions are recorded in
+the same brief.
+
+### Blue cord and wood contact
+
+The previous outer rail lane was offset from its post, and a generic lashing did not follow
+the poles’ bowed, tapered surfaces. Adjacent rail spans now alternate vertically against
+the same post side. A shared bamboo cross-section function matches their rendered shape.
+Joint descriptors identify the actual wood pair and contact heights. Their cord follows the
+combined cross section, with two winding families, short leads into a compact locking knot,
+and short gravity tails. The shader resolves braided carriers, fine fibres, subtle relief,
+blue fading and roughness. Every one of 502 wood interfaces has about 0.5 mm of seating;
+the measured range is -0.516 to -0.485 mm.
+
+Full rope geometry initially added too much work. A shared vertex pool now submits nearby
+joints in one draw call, with coarser ring indices beyond arm’s length and a distant fade.
+Both sides, the lowest landing and the final scrolling descent were reviewed. The walking
+path and irregular treads remain as they were. At extreme macro distance the bamboo still
+reads as procedural; the cord texture is generated rather than scanned.
+
+### Clouds, platform and vegetation
+
+Clouds now resolve at three quarters of the drawing buffer, capped at 1920 px. Bounded
+cubic temporal reconstruction refreshes detail sooner during motion. Small cloud bodies
+retain their parent height and receive a continuous density core instead of isolated bright
+sites. Secondary billows and internal light contrast retain the accepted larger shapes.
+An early opaque-fleck filter also affected thin cirrus and produced visible contours; its
+support filter is now blended only into opaque cloud pixels. Fine outside wisps stay soft.
+
+The black clifftop patch came from marking the concrete platform as a stair tread: zero
+riser distance removed sunlight across the whole pad. It now has its own concrete face tag,
+verified at five adjacent actual scroll positions, including tau 1.012.
+
+Grass had no distant representation and only occupied a 22 m route corridor. Its existing
+43,365 positions are retained, with matched distant impostors and 5,927 extra seeded tussocks
+in open headland ground. Path clearances, bare rock and sand are excluded. The first grass
+impostor shader exceeded the frame budget at trailTop; averaging its matte blades instead
+of applying a costly single-leaf sky reflection brought that view back under the limit.
+
+### Checks
+
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against `6463322` measured paired median changes from -7.9% to
++7.1%; all pass the 10% limit. After the final knot leads were added, a sixteen-round
+trailLow repeat measured +1.5% (middle half +0.3% to +5.1%). Moving-cloud comparisons measured
++4.8% for the large-cloud view and -3.2% for the horizon. Timings and images are in v23’s
+gallery, with a 4.8 s clip of the final stairs retained locally for review.
+
+The 13.38 MB terrain bake is current. The headland’s decoded positions, normals and triangle
+indices are unchanged from v22. The local reference photographs were unavailable, so shape
+verification uses numerical identity and stored v22 renders, with no new photo-match claim.
+No assets were downloaded. The local standalone was rebuilt and loaded with network access
+blocked; it generated terrain and reached four scroll stops with no console errors.

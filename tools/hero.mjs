@@ -1,6 +1,7 @@
 // Render and time the hero frames for a version (the list is HERO in src/shots.js).
 //   node tools/hero.mjs v2              timed against the previous version's git tag
 //   node tools/hero.mjs v2 --prev=v1    against a chosen one
+//   node tools/hero.mjs v23 --q=1024 --rounds=0 --no-compare  renders, with paired timings supplied separately
 // Writes to docs/gallery/<version>/: one JPEG per hero frame (renders only, safe to publish),
 // bench.json and README.md (the frames, and frame times against the previous version).
 // Side-by-side comparisons with the reference photos go to captures/compare-<version>/, which
@@ -24,6 +25,10 @@ const num = (v) => +v.slice(1);
 const gallery = join(root, 'docs/gallery');
 const out = join(gallery, version);
 const T = '17';   // the sea is frozen at the same moment in every version
+const qualityFlag = args.find((a) => a.startsWith('--q=')) ?? '--q=2048';
+const roundsFlag = args.find((a) => a.startsWith('--rounds='));
+const roundCount = roundsFlag ? Math.max(0, Number(roundsFlag.slice(9))) : 3;
+const comparePhotos = !args.includes('--no-compare');
 const baseFlag = args.find((a) => a.startsWith('--url='));
 const BASE = (baseFlag ? baseFlag.slice(6) : 'http://localhost:5178/').replace(/\/?$/, '/');
 
@@ -41,7 +46,7 @@ const prev = prevFlag ? prevFlag.split('=')[1] : versions.filter((v) => num(v) <
 const hasTag = prev && spawnSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${prev}`], { cwd: root }).status === 0;
 
 console.log(`rendering hero frames for ${version}`);
-run('--hero', `--t=${T}`, '--jpeg', `--out=docs/gallery/${version}`);
+run('--hero', '--console', `--t=${T}`, qualityFlag, '--jpeg', `--out=docs/gallery/${version}`);
 
 console.log(hasTag ? `timing, alternating with ${prev} checked out from its tag` : 'timing');
 let prevDir = null;
@@ -56,7 +61,7 @@ if (hasTag) {
 // another shot).
 const prevShots = prevDir ? (await import(join(root, prevDir, 'src/shots.js'))).SHOTS : null;
 const rounds = { cur: [], prev: [] };
-for (let r = 0; r < 3; r++) {
+for (let r = 0; r < roundCount; r++) {
   if (prevDir) {
     run('--hero', '--bench', `--out=captures/bench-runs/${prev}-${r}`, `--url=${new URL(`${prevDir}/`, BASE).href}`);
     rounds.prev.push(JSON.parse(readFileSync(join(root, `captures/bench-runs/${prev}-${r}/bench.json`), 'utf8')));
@@ -74,8 +79,10 @@ const bench = best(rounds.cur);
 const prevBench = rounds.prev.length ? best(rounds.prev) : null;
 writeFileSync(join(out, 'bench.json'), JSON.stringify(bench, null, 2) + '\n');
 
-console.log('side by side with the photos (local only)');
-run('--hero', `--t=${T}`, '--compare', '--jpeg', `--out=captures/compare-${version}`);
+if (comparePhotos) {
+  console.log('side by side with the photos (local only)');
+  run('--hero', `--t=${T}`, qualityFlag, '--compare', '--jpeg', `--out=captures/compare-${version}`);
+}
 
 // Frame times against the previous version.
 const { HERO, SHOTS } = await import(join(root, 'src/shots.js'));
@@ -100,7 +107,7 @@ Hero frames, rendered with \`node tools/hero.mjs ${version}\`. The sea is frozen
 ${HERO.map((n) => `### ${SHOTS[n].label}\n\n![${SHOTS[n].label}](${n}.jpg)\n`).join('\n')}
 ## Frame times
 
-Time to render one frame to completion at 1400 px wide, pixel ratio 1, best of three rounds, on
+Time to render one frame to completion at 1400 px wide, pixel ratio 1, ${roundCount ? `best of ${roundCount} rounds` : 'timed separately'}, on
 the build machine (Apple M1 Max). Absolute times depend on what else is using the GPU, so only
 the change column means anything${prevBench ? `: it is against ${prev}, timed in the same run` : ''}.
 

@@ -17,7 +17,7 @@
 // Needs the local server (python3 tools/serve.py).
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch } from './cdp.mjs';
@@ -128,3 +128,5 @@ try {
 } finally {
   b.close();
 }
+
+if (flag('out')) writeFileSync(join(root,String(flag('out'))),JSON.stringify(rows,null,2)+'\n');

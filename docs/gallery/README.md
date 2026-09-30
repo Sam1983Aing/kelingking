@@ -24,4 +24,5 @@ The same hero frames for every version, so they can be compared side by side.
 - [v20](v20/README.md)
 - [v21](v21/README.md)
 - [v22](v22/README.md)
+- [v23](v23/README.md)
 - [How v1 was built, stage by stage](history/README.md)

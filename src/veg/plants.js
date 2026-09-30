@@ -84,7 +84,7 @@ export async function createVegetation(renderer, lightUniforms, { wind = {}, det
       // (The naupaka's impostor takes over from 13 m, so it gets the most texels.)
       const bake = bakeImpostor(renderer, v.geometry, leafTex, { grid: 8, frame: sp.id === 'grass' ? 128 : 192 });
       v.bake = bake;
-      imp.addKind(`${k}:${j}`, bake, { ...v.info, trans: v.info.trans ?? 0.3, gloss: v.info.gloss ?? 0.6 }, sp.lod);
+      imp.addKind(`${k}:${j}`, bake, { ...v.info, groundCover: sp.id === 'grass', trans: v.info.trans ?? 0.3, gloss: v.info.gloss ?? 0.6 }, sp.lod);
     });
   });
   const bakeMs = Math.round(performance.now() - t1);

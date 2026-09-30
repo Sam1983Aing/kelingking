@@ -67,7 +67,8 @@ void main() {
   vec3 xW = rotY(xL, yaw), yW = rotY(yL, yaw);
   vec3 card = cW + (xW * position.x + yW * position.y) * uRadius * s;
   // The wind leans the plant as it leans the 3D one: the card's top moves, its foot stays.
-  float push = windPush(iPosScale.xz);
+  float gust = windGust(iPosScale.xz);
+  float push = uWind.z * (0.35 + 0.65 * mix(1.0, gust * 1.5, uWind.w));
   float t = uWindTime;
   float seed = fract(sin(dot(iPosScale.xz, vec2(12.9898, 78.233))) * 43758.5453);   // as the 3D plant's
   float sway = sin(t * uWindShape.x + seed * 6.2832) * 0.6 + sin(t * uWindShape.x * 2.13 + seed * 17.0) * 0.25;
@@ -82,7 +83,7 @@ void main() {
   vYaw = yaw;
   vScale = s;
   vTint = iYawTint.y;
-  vGust = windGust(iPosScale.xz) * uWind.z * uWind.w;
+  vGust = gust * uWind.z * uWind.w;
   vFoot = iPosScale.xyz;
   vFrameDir = rotY(d, yaw);
   vec4 mvPosition = viewMatrix * vec4(wp, 1.0);
@@ -171,7 +172,13 @@ void main() {
   float tt = disc > 0.0 ? max((-b + sqrt(disc)) / a, 0.0) : 0.0;
   float sunVis = bakedShadow(P, 0.5) * cloudShadow(P, uSunDir) * exp(-uDensity * tt * vScale);
   // A texel of the atlas covers several leaves already; more as the card shrinks.
+#ifdef GROUND_COVER
+  // A distant tussock already averages many thin blades. Its broad matte sheen needs no
+  // individual leaf's sky reflection; keep the baked normal and both-sided diffuse light.
+  float spread = 1.0;
+#else
   float spread = mix(0.55, 1.0, smoothstep(0.03, 0.2, length(fwidth(vCard))));
+#endif
   vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, dt.a), uLeafLook.x, uLeafLook.y, spread);
 
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
@@ -204,6 +211,7 @@ export function createImpostors(shared) {
         uWindShape: { value: new THREE.Vector4(info.wind.freq, info.wind.stiff, info.wind.branchAmp, info.wind.branchFreq) },
         uLeafLook: { value: new THREE.Vector2(info.trans ?? 0.3, info.gloss ?? 0.6) },
       },
+      defines: info.groundCover ? { GROUND_COVER: 1 } : {},
       vertexShader: VERT, fragmentShader: FRAG,
       alphaToCoverage: true,
     });

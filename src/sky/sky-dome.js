@@ -24,10 +24,10 @@ void main() {
 
 const FRAG = /* glsl */ `
 ${SKY_PARS}
-uniform sampler2D uClouds;   // clouds at half resolution: rgb their light and haze, a what passes
+uniform sampler2D uClouds;   // clouds at three-quarter resolution: rgb their light and haze, a what passes
 uniform float uHasClouds;
 varying vec3 vDir;
-// The clouds are marched at half resolution; a Catmull-Rom read (five bilinear taps, the
+// The clouds are marched at three-quarter resolution; a Catmull-Rom read (five bilinear taps, the
 // corners left out) keeps their edges crisp without showing the texel grid (v9; a B-spline
 // before, which blurred them by about two pixels). Clamped, so it cannot ring past the edge.
 vec4 cloudsAt(vec2 uv) {
@@ -60,7 +60,21 @@ void main() {
     col += uSunRadiance * (1.0 - 0.6 * (1.0 - pow(mu, 0.8)));
   }
   if (uHasClouds > 0.5) {
-    vec4 cl = cloudsAt(gl_FragCoord.xy / uResolution);
+    vec2 uv = gl_FragCoord.xy / uResolution;
+    vec4 cl = cloudsAt(uv);
+    float opacity = 1.0 - cl.a;
+    if (opacity > 0.25) {
+      // Tiny isolated opaque fragments cannot resolve as cloud volumes. Fade those
+      // flecks by their surrounding support; a connected lobe or a thin wide cloud
+      // keeps its opacity. Cirrus and translucent fringes retain their soft detail.
+      vec2 reach = 5.0 / vec2(textureSize(uClouds, 0));
+      float support = 1.0 - 0.25 * (
+        texture(uClouds, uv + vec2(reach.x, 0.0)).a + texture(uClouds, uv - vec2(reach.x, 0.0)).a
+        + texture(uClouds, uv + vec2(0.0, reach.y)).a + texture(uClouds, uv - vec2(0.0, reach.y)).a);
+      float retain = mix(1.0, smoothstep(0.04, 0.16, support), smoothstep(0.25, 0.50, opacity));
+      cl.rgb *= retain;
+      cl.a = 1.0 - opacity * retain;
+    }
     col = col * cl.a + cl.rgb;
   }
   gl_FragColor = vec4(col, 1.0);
