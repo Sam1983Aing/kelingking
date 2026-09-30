@@ -461,9 +461,14 @@ export function buildTerrainMesh(hf, layout, M) {
       let px = x, py = y, h = heightAt(x, y);
       const sandZone = smooth(0.7, 0.95, sample(f.sand, x, y));
       const sandH = sandZone > 0 && h > 0 ? sandHeightAt(x, y) : h;
-      // This floor is continuous across the beach, including gaps between face runs.
-      // A per-column floor left thin pieces of the old grid wherever a run ended.
-      const beachFloor = h > 0 ? sandZone * (1 - smooth(sandH + 30, sandH + 45, h)) * keep(x, y) : 0;
+      // The beach floor continues beneath the carved wall, but the stair bank is
+      // carried by the original grid: face windows are cut back around the route.
+      // The narrow carving mask (2–5 m) is insufficient here. Lowering that bank
+      // by 20 m leaves the rock strip floating above a hole seen through the plants.
+      const bankReach = (layout.trail?.bank.reach ?? 8) + 2;
+      const path = route?.nearest(x, y, bankReach + 6);
+      const floorClear = path ? smooth(bankReach, bankReach + 6, path.d) : 1;
+      const beachFloor = h > 0 ? sandZone * (1 - smooth(sandH + 30, sandH + 45, h)) * floorClear : 0;
       floorWeight[v] = beachFloor;
       const psi = sample(f.PSI, x, y);
       if (psi > -60 && psi < 60 && i > 0 && j > 0 && i < M - 1 && j < M - 1) {
@@ -486,7 +491,7 @@ export function buildTerrainMesh(hf, layout, M) {
             const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
             const w = w0 * (1 - beachFloor);
             const completeFoot = 1 - smooth(sandH + 0.8, sandH + 2, col.P.floorStart);
-            beachCover[v] = w0 * col.P.feat.onSand * col.P.feat.wall * col.fade * completeFoot;
+            beachCover[v] = w0 * col.P.feat.onSand * col.P.feat.wall * col.fade * completeFoot * floorClear;
             const cAt = (hh) => carve.offset(col.x, col.y, psi, hh, col.P.feat, col.P.a, col.P.b, sl);
             const cl = Math.max(0, cAt(h - 2.5), cAt(h), cAt(h + 2.5)) * col.fade * keep(x, y);
             const inward = (cl + 1.2) * w;

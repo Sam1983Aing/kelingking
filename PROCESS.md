@@ -2649,3 +2649,39 @@ indices are unchanged from v22. The local reference photographs were unavailable
 verification uses numerical identity and stored v22 renders, with no new photo-match claim.
 No assets were downloaded. The local standalone was rebuilt and loaded with network access
 blocked; it generated terrain and reached four scroll stops with no console errors.
+
+
+## v24: solid supporting terrain beside the stairs (2026-09-30)
+
+Sam showed a see-through opening beside the lower stairs at roughly 28 m elevation.
+The terrain material was already opaque and double-sided. The defect came from the v22
+beach-floor pass: it lowered the grid outside the narrow 2–5 m trail carving mask while
+face-strip windows stopped short of the walking bank. Rock stayed above the lowered grid,
+exposing the distant cliff and water beneath its edge.
+
+Beach-floor lowering and rising-cell replacement now preserve the complete authored bank
+reach plus mesh overlap (10 m from the route, transitioning into the floor over 6 m).
+This follows the whole route and leaves the beach recess intact. The screenshot location
+was reproduced at tau 3.665, height 28.03 m, then checked with and without vegetation.
+A ray through the opening previously struck distant rock at 27.77 m; it now strikes the
+supporting bank at 3.56 m. Five neighbouring rays also hit the near ground.
+
+38 plant-free clay views cover the walking descent from tau 1.0 through 4.2, including
+±35° head turns at seven lower-stair positions. No remaining see-through openings were
+observed in those views. A 4.8 s actual scrolling clip includes a 25° turn through the
+reported area. The gallery records before/after renders, both inspection sheets and
+stills from that clip. The clip remains local in captures/v24-closure-motion.mp4.
+
+The heightfield, 141,677 authored face-strip vertices, vegetation arrays, route line and
+stair mesh arrays are identical to v23. Only 973 grid vertices change by more than 25 mm,
+within the lower stair-bank region below 48.3 m. The mesh has 1,202,066 vertices and
+1,175,084 triangles, 227 and 46 fewer respectively. Shape verification uses those numeric
+checks and stored v23 renders: local reference photographs remain unavailable.
+
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against v23 checkpoint bfafc01 measured paired median changes
+from -6.5% to +7.2%; every hero camera passes the 10% limit. Raw timing ratios and
+middle-half ranges are in docs/gallery/v24/bench.json. The 13.38 MB bake is current, with
+exact triangle indices and at most 12.2 mm position error after packing. The local
+standalone was rebuilt; with the network blocked it generated terrain, reached four
+scroll stops and produced no console errors.

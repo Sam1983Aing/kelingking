@@ -29,6 +29,7 @@ version. A session works on its element only, and goes deep on it.
 | v21 | Cliff foot and sand contact | [v21-cliff-foot.md](v21-cliff-foot.md) | in progress |
 | v22 | Continuous lower cliff and beach junction | [v22-cliff-junction.md](v22-cliff-junction.md) | in progress |
 | v23 | Clouds, clifftop platform, persistent grass and attached blue cord | [v23-cloud-detail.md](v23-cloud-detail.md) | ready for review |
+| v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | ready for review |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

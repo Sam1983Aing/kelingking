@@ -1,0 +1,24 @@
+{
+  "trianglesBefore": 1175130,
+  "trianglesAfter": 1175084,
+  "verticesBefore": 1202293,
+  "verticesAfter": 1202066,
+  "heightsIdentical": true,
+  "plantsIdentical": true,
+  "trailLineIdentical": true,
+  "trailMeshesIdentical": true,
+  "changedGridVertices": 973,
+  "changedGridBounds": [
+    122.96177673339844,
+    1.4875346422195435,
+    -202.89463806152344,
+    177.3571319580078,
+    48.220603942871094,
+    -156.2142333984375
+  ],
+  "maxGridDelta": 30.63477849960327,
+  "faceVertexPrefixIdentical": {
+    "vertices": 141677,
+    "firstMismatch": 1192302
+  }
+}
