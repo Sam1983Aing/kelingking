@@ -294,7 +294,8 @@ float faceFoam(vec2 rp, float tau, float amount) {
   float shred = fbm3(rp * vec2(0.9, 0.7) + vec2(4.0, -tau * 2.5)) * 0.25;
   float p = streak + shred;
   // (Soft, and thin where there is little: a streak is a film of bubbles, not paint.)
-  return smoothstep(1.0 - amount - 0.2, 1.0 - amount + 0.2, p) * mix(0.55, 1.0, smoothstep(0.2, 0.7, amount));
+  float soft = max(0.2, min(fwidth(p) * 1.5, 0.35));
+  return smoothstep(1.0 - amount - soft, 1.0 - amount + soft, p) * mix(0.55, 1.0, smoothstep(0.2, 0.7, amount));
 }
 
 void main() {
@@ -401,7 +402,7 @@ void main() {
              * (1.0 - smoothstep(0.465, 0.495, v - tear * 0.02))
              * smoothstep(0.12, 0.45, tau);
   // Feathering: a thin broken fringe along the very top as the crest starts to spill.
-  float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * step(0.45, tear);
+  float feather = smoothstep(0.235, 0.25, v) * (1.0 - smoothstep(0.26, 0.29, v)) * smoothstep(0.05, 0.2, tau) * (1.0 - smoothstep(0.45, 0.6, tau)) * smoothstep(0.35, 0.55, tear);
   // (The collapse hands its white water over to the sea's own bore: it fades out before the
   // ribbon switches off, so no section of it ends in a hard edge.)
   // (v12) It starts where the lip lands, at the foot of the tube, and boils up the face over

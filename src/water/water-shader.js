@@ -122,8 +122,7 @@ struct Surf {
   float frontZ;
 };
 
-// The swash sheet is only worked out when this is set (the vertex shader's slope samples
-// leave it out: the sheet lies on the sand, so its slope is the sand's).
+// Only the water vertices and their slope samples read the cached swash sheet.
 bool gSwash = true;
 Surf surfAt(vec2 p, vec4 d) {
   Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0);   // L = 0: no surf here
@@ -251,14 +250,16 @@ Surf surfAt(vec2 p, vec4 d) {
     float film = max(sm.z, 0.0);
     // Its surface: the sand plus the water on it, and past its edge diving under the sand.
     float sheetH = d.r + (sm.x > 0.0 ? film : sm.x) - (1.0 - beachy) * 0.5;
-    if (sheetH > o.h) {
-      o.sheet = smoothstep(o.h, o.h + 0.02, sheetH) * beachy;
-      o.h = sheetH;
-    }
+    // A smooth maximum joins the bore and wash without a dipped trough or an
+    // overshooting slope as the higher surface changes through the wave cycle.
+    float join = 0.12;
+    float sheetW = clamp(0.5 + 0.5 * (sheetH - o.h) / join, 0.0, 1.0);
+    o.sheet = sheetW * beachy;
+    o.h = mix(o.h, sheetH, sheetW) + join * sheetW * (1.0 - sheetW);
     o.film = film * beachy;
     o.front = swashFront(sm.y) * beachy;
     o.swVel = sm.w;
-    o.swUp = step(0.0, sm.w);
+    o.swUp = smoothstep(-0.35, 0.35, sm.w);
     o.edgeZ = sm.x;
     o.frontZ = sm.y;
   }
@@ -392,8 +393,11 @@ vec2 lacePattern(vec2 pf, float fp) {
     // foam gets thicker. Each size only where it shows.)
     float c1 = fp < 0.6 && coarse > 0.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.45, uTime * 0.1)) : 0.3;
     float c2 = fp < 0.4 && coarse < 1.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.85 + 5.3, uTime * 0.12)) : 0.3;
+    c1 = mix(0.3, c1, 1.0 - smoothstep(0.35, 0.6, fp));
+    c2 = mix(0.3, c2, 1.0 - smoothstep(0.23, 0.4, fp));
     float big = mix(c2, c1, coarse);
     float small = fp < 0.22 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 2.0 + 3.1, uTime * 0.16)) : 0.28;
+    small = mix(0.28, small, 1.0 - smoothstep(0.12, 0.22, fp));
     // Finer threads and bubbles up close.
     float near = smoothstep(0.06, 0.02, fp);
     float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells4(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
@@ -402,6 +406,7 @@ vec2 lacePattern(vec2 pf, float fp) {
     // The threads break up into strings of bubble clumps, thicken and thin along their length,
     // and break off, leaving loose ends (v10: they ran unbroken all round every cell).
     float clumps = fp < 0.3 ? vnoise(qq * 3.3 + 1.9) * 0.6 + vnoise(qq * 8.1 + 6.2) * 0.4 : 0.5;
+    clumps = mix(0.5, clumps, 1.0 - smoothstep(0.18, 0.3, fp));
     walls *= mix(0.55, 1.2, clumps);
     walls *= mix(0.35, 1.0, smoothstep(0.18, 0.4, vnoise(qq * 1.4 + 21.0) * 0.7 + vnoise(qq * 3.7 - 5.0) * 0.3));
     // In places the foam is drawn out into filaments by the flow instead: ridges of stretched
@@ -412,7 +417,7 @@ vec2 lacePattern(vec2 pf, float fp) {
       vec2 sd = normalize(w1 + vec2(0.3, 0.1));
       vec2 qs = vec2(dot(qq, sd) * 0.8, dot(qq, vec2(-sd.y, sd.x)) * 2.8);
       float fil = 1.0 - abs(2.0 * (vnoise(qs + w2 * 2.0) * 0.7 + vnoise(qs * 2.1 + 3.3) * 0.3) - 1.0);
-      walls = mix(walls, pow(fil, 2.5) * mix(0.7, 1.2, clumps), strands * 0.8);
+      walls = mix(walls, pow(fil, 2.5) * mix(0.7, 1.2, clumps), strands * 0.8 * (1.0 - smoothstep(0.25, 0.4, fp)));
     }
     // Where it is thick and where it is thin: patches a few metres across.
     float body = fbm3(qw * 0.1 + 11.0) * 0.7 + vnoise(qq * 0.33 + 4.4) * 0.3;
@@ -594,8 +599,11 @@ void roughReflect(vec3 N0, vec3 V, float sub, out float F, out vec3 refl) {
   if (sub < 0.015) {
     F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
     vec3 Rd = reflect(-V, N0);
-    Rd.y = abs(Rd.y);
-    refl = skyRadiance(Rd);
+    // Match the rough branch as its slope spread fades: below-horizon facets see
+    // masked neighbouring water, not the sky mirrored upward.
+    float seen = smoothstep(-0.05, 0.03, Rd.y);
+    Rd.y = max(Rd.y, 0.01);
+    refl = skyRadiance(Rd) * mix(uWaveMask, 1.0, seen);
     return;
   }
   vec3 t = V - N0 * dot(V, N0);
@@ -685,11 +693,18 @@ void main() {
 #else
   if (sf.L > 0.0) {
     vec4 dx = dataAt(p + vec2(se, 0.0)), dy = dataAt(p + vec2(0.0, se));
-    gSwash = false;
+    // Differentiate the same surface that is displaced, including the wash. Comparing
+    // a sheet-covered centre with bare-sea neighbours made a false slope at their join.
     float hx = surfAt(p + vec2(se, 0.0), dx).h, hy = surfAt(p + vec2(0.0, se), dy).h;
-    gSwash = true;
-    // On the sheet, the sand's own slope.
-    vSurfSlope = mix(vec2(hx - sf.h, hy - sf.h), vec2(dx.r - d.r, dy.r - d.r), sf.sheet) / se;
+    vSurfSlope = vec2(hx - sf.h, hy - sf.h) / se;
+    if (sf.sheet > 0.0) {
+      // The cached bed has a narrow shoreline shoulder. A thin flowing film sees
+      // its metre-scale slope, rather than reflecting each coarse depth-map kink.
+      float r = 2.0;
+      vec2 bed = vec2(dataAt(p + vec2(r, 0.0)).r - dataAt(p - vec2(r, 0.0)).r,
+                      dataAt(p + vec2(0.0, r)).r - dataAt(p - vec2(0.0, r)).r) / (2.0 * r);
+      vSurfSlope = mix(vSurfSlope, bed, sf.sheet);
+    }
   } else vSurfSlope = vec2(0.0);
 #endif
   // Beyond the sheet's edge the surface dives under the sand, but only after a few millimetres
@@ -755,6 +770,13 @@ varying vec4 vSheetA;
 varying vec2 vSheetB;
 
 
+vec2 washRipple(vec2 q, vec2 stretch) {
+  vec2 qa = q * stretch;
+  float e = 0.35;
+  float h = fbm3(qa);
+  return vec2(fbm3(qa + vec2(e, 0.0)) - h, fbm3(qa + vec2(0.0, e)) - h) / e * stretch;
+}
+
 void main() {
   #include <logdepthbuf_fragment>
 #ifdef FRAG_FLAT
@@ -810,13 +832,13 @@ void main() {
   if (sf.sheet > 0.01) {
 #endif
     vec2 up = -offshoreAt(p);
-    vec2 q = vec2(dot(p, up), dot(p, vec2(-up.y, up.x)));
-    float flow = sf.swVel * uTime;
-    vec2 qa = sf.swUp > 0.5 ? vec2(q.x * 3.0 - flow * 3.0, q.y * 3.0) : vec2(q.x * 1.2 - flow * 1.2, q.y * 9.0);
-    float ee = 0.35;
-    float n0 = fbm3(qa), nx = fbm3(qa + vec2(ee, 0.0)), ny = fbm3(qa + vec2(0.0, ee));
-    vec2 g = vec2(nx - n0, ny - n0) / ee;
-    g = vec2(g.x * (sf.swUp > 0.5 ? 3.0 : 1.2), g.y * (sf.swUp > 0.5 ? 3.0 : 9.0));
+    // The simulation integrates the wash's travel. Instantaneous velocity times the
+    // absolute clock raced the pattern backwards as the water slowed or reversed.
+    vec2 advected = p - sim.ba * simW;
+    vec2 q = vec2(dot(advected, up), dot(advected, vec2(-up.y, up.x)));
+    vec2 g = vec2(0.0);
+    if (sf.swUp > 0.0) g += washRipple(q, vec2(3.0)) * sf.swUp;
+    if (sf.swUp < 1.0) g += washRipple(q, vec2(1.2, 9.0)) * (1.0 - sf.swUp);
     vec2 gm = up * g.x + vec2(-up.y, up.x) * g.y;
     float amp = mix(0.006, 0.02, sf.swUp) * smoothstep(0.001, 0.015, sf.film) * sf.sheet * smoothstep(0.3, 0.05, fp);
     slope += gm * amp;
@@ -824,7 +846,7 @@ void main() {
   vec3 N = normalize(vec3(-slope.x, 1.0, slope.y));
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
-  float sub = sqrt(oc.z);   // spread of the slopes this pixel cannot show
+  float sub = sqrt(oc.z + sf.sheet * 0.0009);   // spread of the slopes this pixel cannot show
 
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -926,8 +948,15 @@ void main() {
   // On the swash sheet even the thickest foam is a single layer of bubbles, with clear water
   // showing between its clumps: it never closes up into a white carpet.
   float onSheet = swFoam * sf.sheet;
-  if (swFoam > 0.001 && amount > 0.002)
-    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.68, onSheet), fp), swFoam);
+  if (swFoam > 0.001 && amount > 0.002) {
+    // Blend two fixed-coordinate patterns through the turn. Rescaling world
+    // coordinates by a changing stretch value made the entire foam texture slide.
+    float cover = 0.0, a = amount * mix(1.0, 0.68, onSheet);
+    vec2 up = -offshoreAt(p);
+    if (sf.swUp > 0.0) cover += swashCover(p - travel, up, 0.6, a, fp) * sf.swUp;
+    if (sf.swUp < 1.0) cover += swashCover(p - travel, up, 2.5, a, fp) * (1.0 - sf.swUp);
+    lace = mix(lace, cover, swFoam);
+  }
   fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
   float lumps = 0.5, lumpsMid = 0.5;
@@ -1026,7 +1055,8 @@ void main() {
 #endif
     if (cs > 0.0) {
       vec2 up = -offshoreAt(p);
-      vec2 qc = vec2(dot(p, up) * 2.2 - sf.swVel * uTime * 2.2, dot(p, vec2(-up.y, up.x)) * 5.0);
+      vec2 causticP = p - travel;
+      vec2 qc = vec2(dot(causticP, up) * 2.2, dot(causticP, vec2(-up.y, up.x)) * 5.0);
       float cc = max(caustics(qc, uTime * 2.5) - 0.2, 0.0) * smoothstep(0.35, 0.7, fbm3(p * 0.8 + uTime * 0.2));
       caus = uWetSandAlb / PI * uSunIrr * sunY * shadow * cc * 0.3 * cs * T;
     }

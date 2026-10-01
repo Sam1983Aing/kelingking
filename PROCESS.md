@@ -3032,3 +3032,58 @@ generated texture fallbacks. The online preview is the scan-material review targ
 ES-module parsing, bake freshness and whitespace checks pass. No downloads or reference
 uploads. The lower geometry and column visibility remain approximations; the check covers
 the specified cameras and approaches rather than a claim of perfect realism everywhere.
+
+
+### v30 — Final water texture and continuous wave polish (2026-09-30)
+
+Sam approves the latest wave's motion and asks for one final texture and smoothness
+pass. Matched beach and lower-stair cycles reproduce a thin blue stripe across the
+shallow wash. Disabling ripple detail does not remove it; disabling the wash does.
+The surface's neighbor slopes omitted the sheet, and its bed map carries a narrow
+shoreline shoulder. The low-variance reflection path also mirrored below-horizon
+facets into the sky, unlike the rough path.
+
+The bore and sheet now join with a smooth maximum over 12 cm, adding at most 3 cm.
+Neighbor samples use the same displaced surface, including the wash. A four metre
+bed-normal filter and small unresolved ripple variance soften the coarse shoulder.
+The low-variance reflection path applies the same horizon mask as the rough path.
+Matched beach frames show the blue stripe replaced by a softer reflective wash.
+A flat wash normal removed the line but looked artificial; a sea-level floor and
+smoothstep height interpolation introduced unwanted edges or a trough. None remains.
+
+Ripple and caustic coordinates now follow the simulation's accumulated transport.
+Instantaneous speed times the absolute clock made them race when the wash slowed or
+reversed. Two fixed-coordinate uprush/backwash fields blend during the turn, avoiding
+a global stretch of the texture. The shared film thickness blends its laws as well;
+its previous centimetre drop at reversal was a separate temporal discontinuity.
+Foam detail fades to its mean before distance cutoffs. Crest feathering uses a soft
+threshold and face foam filters by pixel footprint. Crest solve, lip shape, impact
+timing and spectrum are unchanged; there are no added maps or texture allocations.
+
+### Verification
+
+Two 18-second matched cycles contain 433 frames each at 24 fps. The beach spans 1–19 s,
+the lower stairs 13–31 s, with 73 close review frames from 13–31 s. Inspected sequences
+preserve the translucent wave face, break and foam handoff. All cycles and nine heroes
+have zero console errors. Quarter-second crest-column readbacks compare 933,976 finite
+values against `fe00f69`, with zero changes and matching inactive values. Readbacks,
+clips and visual comparisons are retained in `docs/gallery/v30/`.
+
+A GPU audit of the actual shared GLSL samples the reversal at 0.5 ms intervals for
+three bed heights, runup 1 m and turn time 3.2 s. Maximum adjacent film steps fall
+from 10.04–11.00 mm to 0.0115–0.0348 mm. All data are finite, velocity behavior is
+unchanged, and the final diagnostic compiles without errors.
+
+Twelve alternating paired rounds of eight complete frames pass all nine incremental
+hero limits against `fe00f69`: −2.5% to +7.6%. No new exception; the original v26
+close water-level performance exception remains documented. Water-hidden land masks
+at overview and viewpoint have zero changed pixels at 1400 × 788. Reference photos
+remain unavailable, so this is an accepted-outline regression check.
+
+The terrain bake is current. The local standalone bundles 55 modules and its inline
+scripts compile as classic scripts. Its optional local asset base points to port 5183.
+With networking blocked it loads in 20.7 s and renders four scroll stops (0.3, 1, 2.6,
+4.6) with zero console errors, using generated texture fallbacks. The online preview
+is the material target. ES-module syntax and whitespace checks pass. No asset downloads,
+uploads or publication. The shore wash still has a broad reflective shoulder; water
+and foam are authored approximations verified in the recorded views and cycles.

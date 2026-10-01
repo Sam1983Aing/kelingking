@@ -88,8 +88,15 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
   if (rising) o.frontZ = max(o.frontZ, zeta);
   // The sheet: thin at its edge, thicker behind; thick at first (the bore), thinning as it
   // runs out of speed, and thin in the backwash.
-  float cap = rising ? mix(0.3, 0.06, tau / tu) : mix(0.05, 0.008, (tau - tu) / td);
-  float h = zeta > 0.0 ? min(rising ? 0.16 * zeta + 0.3 * zeta * zeta : 0.07 * zeta + 0.1 * zeta * zeta, cap) : zeta;
+  // The uprush and backwash share one surface through the turn. Switching their
+  // thickness laws at tu dropped a centimetre instantly during the reversal.
+  float turn = smoothstep(tu - 0.35, tu + 0.45, tau);
+  float capUp = mix(0.3, 0.06, clamp(tau / tu, 0.0, 1.0));
+  float capDown = mix(0.06, 0.008, clamp((tau - tu) / td, 0.0, 1.0));
+  float cap = mix(capUp, capDown, turn);
+  float riseH = 0.16 * zeta + 0.3 * zeta * zeta;
+  float drainH = 0.07 * zeta + 0.1 * zeta * zeta;
+  float h = zeta > 0.0 ? min(mix(riseH, drainH, turn), cap) : zeta;
   if (z + h > o.surf) {
     o.surf = z + h;
     // Speed along the slope (about 1 in 7): the edge's own speed, and the water behind it a

@@ -26,6 +26,8 @@ try {
   shore:'[88,223.3,1.3],282,-4,-2,26',
   near:'[88,223.3,3.5],282,-8,-2,32',
   top:'[100,232,55],180,-90,0,72',
+  grazing:'[110,203,3.8],295,-8,0,55',
+  beach:'[110,203,3.8],295,-8,0,55',
  };
  if (!cameras[view]) throw new Error('Unknown view: '+view);
  await p.eval('__app.setPose('+cameras[view]+');__app.advance(0);0');
