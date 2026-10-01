@@ -3,7 +3,7 @@
 // light as the 3D plants (foliage-glsl.js) and swaying with the same wind. One instanced mesh
 // per baked variant.
 //
-// Near the camera a 3D plant takes over (near.js): both stipple across the same band, the
+// Near the camera a 3D plant takes over (near.js): continuous MSAA coverage fades the
 // impostor out as the plant comes in.
 
 import * as THREE from 'three';
@@ -133,7 +133,10 @@ float pHash(vec2 p) {
 }
 
 void main() {
-  if (vFade < 0.999 && pHash(gl_FragCoord.xy) < 1.0 - vFade) discard;
+  // Match the near plants' continuous MSAA coverage fade. Whole-pixel stippling made
+  // the hand-over shimmer and the grass look pixelated, even at Retina resolution.
+  if (vFade <= 0.001) discard;
+  float coverage = sqrt(clamp(vFade, 0.0, 1.0));
   vec4 c = texture2D(uColor, vUv);
   // Close up a crisp edge. Further off, where a texel of the smaller mip levels averages
   // leaves and the gaps between them, the average itself is the coverage, handed to alpha to
@@ -181,7 +184,7 @@ void main() {
 #endif
   vec3 col = foliageLight(alb, N, V, sunVis, mix(0.25, 1.0, dt.a), uLeafLook.x, uLeafLook.y, spread);
 
-  gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
+  gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0) * coverage);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) {

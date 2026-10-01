@@ -3145,3 +3145,62 @@ console errors, using generated terrain and texture fallbacks. The online previe
 scan-material target. No downloads, uploads or publication. The moonlit treatment and
 clouds remain authored approximations; the controlled switch dissolves between settings
 rather than simulating hours of changing daylight.
+
+
+### v32 — Clean foliage edges and pixelation (2026-10-01)
+
+Sam reports pixelated plants along the ridge and switchbacks, most obvious in evening light
+at 94, 88 and 61 m. The main renderer already has multisampling. Matched diagnostic views
+showed that whole-pixel random discard in near plant and impostor LOD transitions, also
+used when the camera approaches a crown, was breaking blades into dots and punching noise
+into nearby leaves. Turning that discard off restored continuous blades; changing render
+scale does not remove that screen-space discard.
+
+Both representations now send their coverage weight to MSAA instead of deleting random
+pixels. A gentle square-root coverage bias limits thinning where the two representations
+do not overlap exactly. The near picker excludes empty intervals created by the lens fade.
+The full-coverage shaders, plant geometry, species distribution, texture assets, camera,
+lighting controls and accepted water are unchanged. The existing adaptive pixel ratio
+policy is preserved. Camera-proximity clearance remains and plants still dissolve before
+filling the lens.
+
+The first diagnostic script treated the pose's north coordinate as altitude; correcting
+it to the third coordinate reproduced the screenshots. A linear coverage trial made
+handover crowns too faint, so a biased coverage trial was selected after comparing grass
+and leaf silhouettes. The first full timing run put stairs just over the limit (+10.4%)
+with a broad noise range. A targeted 24-round, 12-frame recheck measured +4.6%, with its
+middle half +0.2% to +9.5%; the first result is retained alongside the recheck. An initial
+standalone command supplied the wrong local flag and reached the existing stale-CDN guard.
+The corrected local build uses the active localhost assets and does not publish anything.
+
+### Verification
+
+All nine noon hero renders have zero console errors. The three matched evening views were
+rendered at 0.75×, 1× and 2×. Readbacks confirm four MSAA samples and a 3174 × 2000 buffer
+for a 1587 × 1000 CSS canvas at 2×. A resize to 1024 × 640 retains a 2048 × 1280 buffer and
+the correct camera aspect. Morning, noon, evening and night selection/readback agree and
+render without errors. No foliage material retains the random screen-pixel discard and
+no near fading instance has an empty interval.
+
+A 144-frame, 24 fps recording reviews two moving approaches through the reported views,
+with animated wind; 72 further frames check the same approaches at Retina resolution.
+Inspected sequences retain continuous leaf edges and grass blades. Same-camera 1× and 2×
+measurements confirm actual target scaling; they include cold-target overhead and are
+not the paired performance gate.
+
+Twelve alternating paired rounds of eight complete frames compare every hero with accepted
+`5cd561d`. Using the targeted stairs recheck, all incremental limits pass (−2.8% to +4.6%).
+No new exception; the historical v26 close-water-level exception remains. Water-hidden
+land labels have zero changed pixels at overview and viewpoint. Reference photos are still
+unavailable, so this verifies the accepted outline rather than a new photographic match.
+
+The terrain bake is current. Three changed ES modules parse as modules; whitespace checks
+pass. The local standalone contains 56 modules, its inline scripts compile as classic
+scripts, and its offline load takes 21.0 s. It renders four scroll stops and the night
+option without console errors, using generated terrain and texture fallbacks. The online
+preview remains the material target. No new asset files, uploads or publication.
+
+The fade is still an authored LOD approximation with four-sample coverage on the checked
+renderer. Very thin blades soften at reduced resolution; distant cards still use discrete
+baked directions. This pass removes the conspicuous stochastic pixel breakup without
+adding temporal post-processing or changing the accepted scene.

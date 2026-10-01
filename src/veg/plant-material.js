@@ -60,7 +60,7 @@ attribute vec4 aColor;
 attribute vec4 aWind;
 attribute vec4 aLeaf;
 attribute vec4 iPosScale;    // world x, y, z of the foot, scale
-attribute vec4 iYawTint;     // heading, colour shift (-1..1), the band of the stipple pattern kept (near.js)
+attribute vec4 iYawTint;     // heading, colour shift (-1..1), the coverage interval kept (near.js)
 uniform float uHeight;       // the plant's height at scale 1
 uniform vec3 uCrownC;        // the crown's ellipsoid, plant space
 uniform vec3 uCrownR;
@@ -177,13 +177,14 @@ float pHash(vec2 p) {
 }
 
 void main() {
+  float coverage = 1.0;
 #ifndef SOLID
-  // Handing over (to the impostor, or between levels of detail): a stipple, each side keeps
-  // its band of it.
-  if (vKeep.x > 0.001 || vKeep.y < 0.999) {
-    float hsh = pHash(gl_FragCoord.xy);
-    if (hsh < vKeep.x || hsh >= vKeep.y) discard;
-  }
+  // Resolve the fade in MSAA samples, not holes in whole pixels. Random pixel discard
+  // broke the thin grass into dots and punched noise into nearby leaf silhouettes.
+  // The two representations overlap imperfectly; a gentle coverage bias keeps the crown
+  // from thinning during the hand-over. Full plants and texture cut-outs stay unchanged.
+  coverage = sqrt(clamp(vKeep.y - vKeep.x, 0.0, 1.0));
+  if (coverage <= 0.001) discard;
 #endif
   float kind = floor(vLeaf.x * 255.0 + 0.5);
   vec3 alb = vCol.rgb * vCol.rgb;
@@ -238,7 +239,7 @@ void main() {
   float lit = sunVis * max(dot(N, uSunDir), 0.0);
 #endif
 
-  gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
+  gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0) * coverage);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   if (uLabel > 0.5) {
@@ -249,7 +250,7 @@ void main() {
 `;
 
 // shared: uniforms shared by every plant material (light, haze, wind, shadow).
-// solid: for plants not handing over (no stipple); alpha: whether any leaf is cut out by its
+// solid: for plants not handing over (full coverage); alpha: whether any leaf is cut out by its
 // texture. A shader without discard lets the GPU skip what is hidden before shading it.
 export function plantMaterial(shared, info, leafTex, { vertexLight = false, solid = false, alpha = true } = {}) {
   const defines = {};
