@@ -1,0 +1,21 @@
+{
+  "bake": "current",
+  "moduleParse": "passed",
+  "inlineScripts": "compiled as classic scripts",
+  "modules": 56,
+  "standalone": "kelingking-local.html",
+  "offline": {
+    "loadSeconds": 21.3,
+    "terrain": "generated",
+    "textures": "fallbacks present",
+    "scrollStops": [
+      0.3,
+      1,
+      2.6,
+      4.6
+    ],
+    "consoleErrors": 0
+  },
+  "heroConsoleErrors": 0,
+  "referencePhotos": "unavailable"
+}

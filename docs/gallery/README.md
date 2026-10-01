@@ -34,4 +34,5 @@ The same hero frames for every version, so they can be compared side by side.
 - [v30](v30/README.md)
 - [v31](v31/README.md)
 - [v32](v32/README.md)
+- [v33](v33/README.md)
 - [How v1 was built, stage by stage](history/README.md)

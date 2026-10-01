@@ -536,9 +536,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         float row = clamp(log2(K / 0.25) / 0.62, 0.0, SHADOW_ROWS - 1.0);
         float margin = textureGrad(uStrataC, vec2(su, (row + 0.5) / SHADOW_ROWS), sdx, sdy).r;
         float soft = max(0.03, 1.5 * fpz);
-        // A margin of about zero is the face just below, tangent to the sun: lit. (Centring
-        // the soft edge on zero left every face half in shadow.)
-        tFineShadow = mix(1.0, 1.0 - smoothstep(0.01, 0.01 + 2.0 * soft, margin), wallF);
+        // The table is in unscaled relief metres. K accounts for the local strength when
+        // finding the occluder; its margin still needs that same strength to be in world
+        // metres, like the bias and pixel footprint. Otherwise millimetre ledges on smooth
+        // rock cast full black seams. Zero margin is tangent to the sun and remains lit.
+        tFineShadow = mix(1.0, 1.0 - smoothstep(0.01, 0.01 + 2.0 * soft, margin * m), wallF);
       }
     }
 

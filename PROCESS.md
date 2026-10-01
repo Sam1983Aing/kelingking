@@ -3204,3 +3204,55 @@ The fade is still an authored LOD approximation with four-sample coverage on the
 renderer. Very thin blades soften at reduced resolution; distant cards still use discrete
 baked directions. This pass removes the conspicuous stochastic pixel breakup without
 adding temporal post-processing or changing the accepted scene.
+
+
+## v33 — Correct the artificial cliff shadow line (2026-10-01)
+
+Sam reported a long thin dark line across the rock behind the final stairs, in evening
+light at beach level. Reproduced from local position (124.091, 189.952, 4.209), looking
+130° at a 3° pitch and 64° field of view. The line crossed both sides of the stair bank.
+
+### Diagnosis and correction
+
+The initial depth-prepass hypothesis was wrong. Independent material clones showed that
+hiding the prepass, enabling invariant position output, or disabling bounce lighting did
+not remove it. Disabling direct terrain shadowing did. Isolating the factors narrowed it
+to `tFineShadow`: ground/overhang shadows and canopy shadowing rendered a continuous wall,
+while fine ledge shadows alone reproduced the line.
+
+The strata table's shadow margin is in unscaled relief metres. The lookup's sun-steepness
+parameter already includes local relief strength, but the returned margin was compared
+against world-space bias and softness without applying that strength. A readback on the
+line gave roughly 0.08 m of table margin and 0.114 local strength: the actual margin was
+about 9 mm, below the existing 10 mm lit bias, instead of a fully dark ledge.
+
+One functional expression changes in terrain-shader.js: `margin * m` restores world-space
+units before the shadow comparison. A separate opacity-fade trial was unnecessary and
+was not retained. The correction applies throughout the terrain material. The original
+depth pass, textures, mesh, coast, plants, trail, sand contact, camera, lights and water
+are unchanged.
+
+### Verification
+
+Matched before/after stills show the line removed. Three beach headings (50°, 90°, 130°)
+in morning, noon, evening and night have no reported line in the inspected views and zero
+console errors. A 2× Retina render is 3200 × 2000 for 1600 × 1000 CSS pixels, with four
+MSAA samples. A 72-frame / 24 fps sweep moves four metres and turns from 110° to 148°;
+inspected frames keep the wall continuous without the seam reappearing.
+
+Nine noon hero renders have zero console errors. Twelve alternating paired timing rounds
+of eight completed frames against accepted `6cf2940` pass every incremental hero limit
+(−12.8% to +3.1%). The apparent speed variation is background timing noise, not a claimed
+optimization. No new exception; the historical v26 close-water exception remains.
+Overview and viewpoint land labels with water hidden have zero changed pixels.
+Reference photos remain unavailable; this compares the accepted scene outline.
+
+The terrain bake is current. The modified ES module parses and whitespace checks pass.
+The local standalone rebuild contains 56 modules and its inline scripts parse as classic
+scripts. With networking disabled it loads in 21.3 s, generates terrain and texture
+fallbacks, and renders four scroll stops (0.3, 1, 2.6, 4.6) without console errors.
+The online preview remains the texture target. No assets, downloads, uploads or publication.
+
+The fine ledge shadows still use the existing precomputed relief approximation. This fix
+corrects its units; it does not claim a full ray-traced rock surface. Gallery and raw
+readbacks are in docs/gallery/v33; the local sweep is captures/v33/cliff-sweep.mp4.
