@@ -55,6 +55,13 @@ or start a module worker from `file://`). `kelingking.html` is the same page bui
 without one. Nothing to install: the source page loads three.js, GSAP and Lenis from jsDelivr
 and the fonts from Google Fonts, and the standalone file carries its own copies (`vendor/`).
 
+The scene controls beneath “Kelingking” switch between Morning, Noon, Evening and Night.
+The selection is preserved in the URL (for example `?at=4.35&lighting=evening`). Daylight
+uses the photo date's sun; Night is an authored moonlit view. Once off the stairs, the
+camera opens up across the cove. Drag to choose a view; it stays while you scroll along
+the beach. “Reset view” returns to the composed camera. Left/right arrow keys work when
+the scene is focused; Escape resets. A vertical touch swipe still scrolls.
+
 The tools that match the scene to photos are the same page with a shot in the URL:
 http://localhost:5178/?shot=viewpoint. There, keys `1` to `9` switch shots, `O` photo overlay,
 `D` difference blend, `L` outline mode, `F` free camera, `C` contour lines, and the panel on the

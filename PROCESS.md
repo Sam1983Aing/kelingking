@@ -3087,3 +3087,61 @@ With networking blocked it loads in 20.7 s and renders four scroll stops (0.3, 1
 is the material target. ES-module syntax and whitespace checks pass. No asset downloads,
 uploads or publication. The shore wash still has a broad reflective shoulder; water
 and foam are authored approximations verified in the recorded views and cycles.
+
+
+### v31 — Beach camera and selectable time of day (2026-10-01)
+
+Sam asks for a better view after the stairs and morning, noon, evening and night options.
+The previous beach view continued looking down along the walking direction, and dragging
+returned to that direction. The new composition keeps every pose through tau 4, eases
+into a level 64° view across the cove, then settles toward the surf at 58°. Walking arrays,
+positions, terrain, stair geometry and accepted v30 water are unchanged. Dragging on the
+beach holds an absolute world heading until reset or returning onto the stairs. A reset
+button, stage arrow keys/Escape and touch handling provide the same control; vertical
+swipes continue scrolling without releasing the chosen heading.
+
+Four native radio controls coordinate the existing physical atmosphere, source direction,
+SH sky light, cloud lighting, terrain shadows, water reflections and exposure. Noon keeps
+the accepted photo sun. Morning uses 08:00, evening 17:00 on the same reference date. Night
+uses one authored moon direction and a dim blue source, a moon disk and filtered procedural
+stars occluded by the clouds. Night is an authored moonlit view, not a lunar ephemeris.
+A temporary canvas dissolves the previous frame over 850 ms; it is removed on navigation,
+rapid selection or resize. Reduced motion switches immediately. Selection is stored in
+the URL. Morning/night beach text uses cream; noon/evening use dark ink on the bright sand.
+
+The first path edit reused an existing variable name; standalone compilation caught it
+and the beach sample was renamed. Initial evening light/text was too harsh, so evening
+was moved to 17:00 and its sand chapter uses dark text. Mobile review led to retaining the
+route beat on rotation, rather than retaining its pixel scroll offset. The test then
+waited for native swipe momentum to end before comparing rotation positions: measuring
+mid-fling had mistaken continuing scroll for a resize error.
+
+### Verification
+
+Eight matched approach stills and a 377-frame clip at 24 fps cover the final stairs,
+widening panorama and water approach. The inspected sequence lifts and turns continuously.
+All nine noon hero frames, four lighting reviews, moon view and phone screenshot have no
+console errors. Desktop input verifies drag/scroll holding a world heading, reset, return
+to stairs and eight rapid lighting choices (maximum one dissolve canvas). At 390 × 844,
+controls retain 44 px targets without overflow. URL night restoration, native radio arrow
+keys, reduced-motion reset, vertical touch scroll with the heading held and portrait /
+landscape route position and selection retention pass.
+
+A 1,001-sample path comparison against `8310f05` reports zero differences in stair poses
+and camera positions. Sampled ground clearance is at least 1.498 m. Nine rays at each
+reviewed beach pose have no terrain hit closer than 0.6 m; nearest is 3.103 m. These checks
+cover the specified route and cameras, not arbitrary free camera travel.
+
+Twelve alternating paired rounds of eight complete frames pass all nine incremental
+hero limits: −0.4% to +5.1% against `8310f05`. No new exception; the original v26 close
+water-level exception remains. Water-hidden land labels at overview and viewpoint have
+zero changed pixels. Reference photos remain unavailable, so this is an accepted-outline
+regression check. Raw timing, outline, input and clearance readbacks accompany the gallery.
+
+The terrain bake is current. Six changed ES modules parse; the local standalone contains
+56 modules and its inline scripts compile as classic scripts. With networking blocked,
+the standalone loads in 20.4 s, renders four scroll stops and switches to night without
+console errors, using generated terrain and texture fallbacks. The online preview is the
+scan-material target. No downloads, uploads or publication. The moonlit treatment and
+clouds remain authored approximations; the controlled switch dissolves between settings
+rather than simulating hours of changing daylight.

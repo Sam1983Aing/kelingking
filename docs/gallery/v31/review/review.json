@@ -1,0 +1,155 @@
+{
+  "drag": {
+    "anchor": {
+      "heading": 244.23999414879685,
+      "elevation": 5.421390802022328
+    },
+    "held": {
+      "heading": 244.23999414879688,
+      "elevation": 5.421390802022328
+    },
+    "reset": true
+  },
+  "switches": [
+    {
+      "id": "morning",
+      "ms": 31.69999998807907,
+      "selection": "morning",
+      "dir": [
+        0.9015652669112321,
+        0.3957057956712232,
+        -0.17491996104356783
+      ],
+      "exposure": 0.09839338882323281,
+      "overlays": 1
+    },
+    {
+      "id": "evening",
+      "ms": 41.19999998807907,
+      "selection": "evening",
+      "dir": [
+        -0.9327835358888015,
+        0.3201169885177411,
+        -0.16565020023265098
+      ],
+      "exposure": 0.10917430049156064,
+      "overlays": 1
+    },
+    {
+      "id": "night",
+      "ms": 59.59999996423721,
+      "selection": "night",
+      "dir": [
+        -0.8164426289906261,
+        0.5591929034707469,
+        -0.14396086369159825
+      ],
+      "exposure": 3337.8541301458267,
+      "overlays": 1
+    },
+    {
+      "id": "noon",
+      "ms": 56.89999997615814,
+      "selection": "noon",
+      "dir": [
+        0.09908440619198079,
+        0.9597562917750511,
+        -0.2627739348713753
+      ],
+      "exposure": 0.07719788820888035,
+      "overlays": 1
+    },
+    {
+      "id": "night",
+      "ms": 47.89999997615814,
+      "selection": "night",
+      "dir": [
+        -0.8164426289906261,
+        0.5591929034707469,
+        -0.14396086369159825
+      ],
+      "exposure": 3337.8541301458267,
+      "overlays": 1
+    },
+    {
+      "id": "evening",
+      "ms": 51.19999998807907,
+      "selection": "evening",
+      "dir": [
+        -0.9327835358888015,
+        0.3201169885177411,
+        -0.16565020023265098
+      ],
+      "exposure": 0.10917430049156064,
+      "overlays": 1
+    },
+    {
+      "id": "morning",
+      "ms": 56.60000002384186,
+      "selection": "morning",
+      "dir": [
+        0.9015652669112321,
+        0.3957057956712232,
+        -0.17491996104356783
+      ],
+      "exposure": 0.09839338882323281,
+      "overlays": 1
+    },
+    {
+      "id": "noon",
+      "ms": 54.10000002384186,
+      "selection": "noon",
+      "dir": [
+        0.09908440619198079,
+        0.9597562917750511,
+        -0.2627739348713753
+      ],
+      "exposure": 0.07719788820888035,
+      "overlays": 1
+    }
+  ],
+  "returnToStairs": true,
+  "camera": {
+    "samples": 1001,
+    "stairPoseDelta": 0,
+    "positionDelta": 0,
+    "minimumGroundClearance": 1.4978813946390064,
+    "nearPlaneHits": 0,
+    "closestTerrain": 3.1028648957544176
+  },
+  "mobile": {
+    "lighting": "night",
+    "checked": "night",
+    "overflow": false,
+    "controls": [
+      {
+        "x": 29.4375,
+        "right": 97.65625,
+        "height": 44
+      },
+      {
+        "x": 97.65625,
+        "right": 149.203125,
+        "height": 44
+      },
+      {
+        "x": 149.203125,
+        "right": 215.546875,
+        "height": 44
+      },
+      {
+        "x": 215.546875,
+        "right": 267.46875,
+        "height": 44
+      }
+    ],
+    "keyboardRadio": true,
+    "reducedReset": true,
+    "noDissolve": true,
+    "verticalTouchScroll": true,
+    "touchHeadingPreserved": true,
+    "resizeLighting": "noon",
+    "resizePosePreserved": true,
+    "errors": []
+  }
+}

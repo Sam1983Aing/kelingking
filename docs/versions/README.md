@@ -36,6 +36,7 @@ version. A session works on its element only, and goes deep on it.
 | v28 | Natural beach sand texture and surface relief | [v28-natural-sand.md](v28-natural-sand.md) | ready for review |
 | v29 | Lower cliff texture and seamless sand contact | [v29-cliff-contact.md](v29-cliff-contact.md) | ready for review |
 | v30 | Final water texture and continuous wave polish | [v30-water-polish.md](v30-water-polish.md) | ready for review |
+| v31 | Beach camera and selectable time of day | [v31-beach-camera-light.md](v31-beach-camera-light.md) | ready for review |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

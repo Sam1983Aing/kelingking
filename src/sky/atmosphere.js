@@ -254,12 +254,13 @@ export function createAtmosphere(renderer, opts = {}) {
     return wbGains;
   }
 
+  let sourceStrength = 1, sourceColor = [1, 1, 1];
   function relight() {
     const u = uniforms;
     applyParams();
     const wb = whiteBalance();
     const { Tsun, shUnit, skyUp, shFull } = lightFor(u.uSunDir.value);
-    const E = wb.map((w) => SOLAR_KLUX * w);
+    const E = wb.map((w, c) => SOLAR_KLUX * w * sourceStrength * sourceColor[c]);
     u.uSunE.value.set(E[0], E[1], E[2]);
     sunIrradiance.setRGB(E[0] * Tsun[0], E[1] * Tsun[1], E[2] * Tsun[2], THREE.LinearSRGBColorSpace);
     u.uSunIrr.value.copy(sunIrradiance);
@@ -284,6 +285,7 @@ export function createAtmosphere(renderer, opts = {}) {
     params, uniforms, targets, sunIrradiance, sh, shSky,
     precompute, update, relight,
     get version() { return version; },
+    setSource(strength = 1, color = [1, 1, 1]) { sourceStrength = strength; sourceColor = color.slice(); },
     setSun(dir) { uniforms.uSunDir.value.copy(dir).normalize(); },
     setWhiteBalanceSun(dir) { wbSun.copy(dir).normalize(); },
   };

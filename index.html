@@ -45,6 +45,20 @@
       <p class="hud__where"><span class="hud__lat">8°45′07″S</span><span class="hud__lon">115°28′24″E</span><span class="hud__alt">1,096 m</span></p>
     </header>
 
+    <div class="scene-controls">
+      <fieldset class="time-of-day">
+        <legend class="sr-only">Time of day</legend>
+        <label><input type="radio" name="lighting" value="morning"><span>Morning</span></label>
+        <label><input type="radio" name="lighting" value="noon" checked><span>Noon</span></label>
+        <label><input type="radio" name="lighting" value="evening"><span>Evening</span></label>
+        <label><input type="radio" name="lighting" value="night"><span>Night</span></label>
+      </fieldset>
+      <div class="beach-look" hidden>
+        <span>Drag to look around</span>
+        <button type="button" class="look-reset">Reset view</button>
+      </div>
+    </div>
+
     <aside class="rail" aria-hidden="true">
       <div class="rail__line"></div>
       <div class="rail__fill"></div>
@@ -97,7 +111,7 @@
           <h2 class="display" data-lines>You made it <em>down</em>.</h2>
           <p class="body">Getting back up is the hard part.</p>
           <div class="end__actions"><button class="button" type="button" data-top>Climb back up</button></div>
-          <p class="end__credits">A real place, rebuilt in three.js. Terrain from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data, © OpenStreetMap contributors. Rock, sand and path textures from Poly Haven (CC0). The plants are grown in code. The sun stands where it did at noon on 6 April 2025.</p>
+          <p class="end__credits">A real place, rebuilt in three.js. Terrain from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> data, © OpenStreetMap contributors. Rock, sand and path textures from Poly Haven (CC0). The plants are grown in code. Daylight follows 6 April 2025; the night view is moonlit.</p>
         </div>
       </footer>
     </main>

@@ -16,6 +16,7 @@
 //   hide=terrain,water leave objects out (for tracking down which one draws what)
 //   clay=1             plain grey ground, to judge the shape on its own (2: flat triangles)
 //   pr=1               pin the pixel ratio and turn the resolution governor off (for measuring)
+//   lighting=morning|noon|evening|night  coordinated scene lighting
 //   hour=11.96         local time on the photo's day (6 April 2025), sets the sun
 //   sun=az,el          or set the sun directly, compass heading and elevation in degrees
 //   haze=3             background aerosol (1 = clear continental air); seaHaze=0.065 the
@@ -42,6 +43,7 @@ import { createAtmosphere } from './sky/atmosphere.js';
 import { createSkyDome } from './sky/sky-dome.js';
 import { createClouds } from './sky/clouds.js';
 import { PHOTO_DAY, PHOTO_HOUR, sunAtHour } from './sky/sun.js';
+import { TIME_OF_DAY, lightingPreset } from './sky/time-of-day.js';
 import { createGrade } from './post/grade.js';
 import { createSunShadow } from './terrain/sun-shadow.js';
 import { loadSurfaceTextures } from './terrain/surface-textures.js';
@@ -65,6 +67,7 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     clay: +(params.get('clay') || 0),
     // The sun where it was when the viewpoint photo was taken (src/sky/sun.js).
     hour: +(params.get('hour') ?? PHOTO_HOUR),
+    lighting: Object.hasOwn(TIME_OF_DAY, params.get('lighting')) ? params.get('lighting') : 'noon',
     sunAz: 0,
     sunEl: 0,
   };
@@ -145,8 +148,17 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
   sun.target.position.set(100, 0, -100);
   scene.add(sun, sun.target);
   let shadowDirty = true;
+  let presetSelected = params.has('lighting');
+  const exposureOffset = grade.params.compensation;
   function placeSun() {
-    if (params.has('sun')) {
+    const preset = presetSelected ? lightingPreset(state.lighting) : null;
+    atmosphere.setSource(preset?.strength ?? 1, preset?.color ?? [1, 1, 1]);
+    skyDome.material.uniforms.uNight.value = preset === TIME_OF_DAY.night ? 1 : 0;
+    grade.params.compensation = exposureOffset + (preset?.exposure ?? 0);
+    grade.apply();
+    if (preset?.direction) {
+      [state.sunAz, state.sunEl] = preset.direction;
+    } else if (!presetSelected && params.has('sun')) {
       [state.sunAz, state.sunEl] = params.get('sun').split(',').map(Number);
     } else {
       const p = sunAtHour(state.hour);
@@ -171,9 +183,10 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     // itself, so its probe carries the sky alone.
     skyLight.sh.copy(atmosphere.shSky);
     water.uniforms.uSkyIrr.value.setRGB(...r.skyUp);
-    window.__light = { sun: r.sunIrradiance.toArray().map((v) => +v.toFixed(2)), skyUp: r.skyUp.map((v) => +v.toFixed(2)),
+    window.__light = { sun: r.sunIrradiance.toArray().map((v) => +v.toPrecision(6)), skyUp: r.skyUp.map((v) => +v.toPrecision(6)),
       transmittance: r.Tsun.map((v) => +v.toFixed(3)), whiteBalance: r.wb.map((v) => +v.toFixed(3)), sunAz: state.sunAz, sunEl: state.sunEl };
   }
+  if (presetSelected) state.hour = lightingPreset(state.lighting).hour;
   placeSun();
 
   scene.add(water.mesh);
@@ -435,7 +448,15 @@ export function createApp({ params, capture = false, keepBuffer = false, maxPixe
     get loaded() { return loadedSent; },
     setTime(t) { simTime = t; },
     // Move the sun to a local time on the photo day (for time-of-day clips).
-    setHour(h) { state.hour = h; placeSun(); },
+    setHour(h) { presetSelected = false; state.hour = h; state.lighting = 'custom'; placeSun(); },
+    setLighting(id) {
+      if (!Object.hasOwn(TIME_OF_DAY, id)) return false;
+      presetSelected = true;
+      state.lighting = id;
+      state.hour = TIME_OF_DAY[id].hour;
+      placeSun();
+      return true;
+    },
     markShadowDirty() { shadowDirty = true; },
   };
 }
