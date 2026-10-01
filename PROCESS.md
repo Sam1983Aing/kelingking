@@ -2929,3 +2929,52 @@ exception; the original v25-to-v26 close water-level exception remains. The orig
 curved geometry is retained: this fixes its misleading lighting and refines weathering,
 not a new geological reconstruction. The visibility approximation remains column-based,
 and verification covers the specified cameras rather than every possible view.
+
+
+### v28 — Natural beach sand (2026-09-30, 18:41 report)
+
+Sam reports that the sand feels flat and perfect from the lower stairs and requests a
+pass grounded in real beaches. Browser-viewed sand references showed interrupted,
+curved ripple ridges, quiet patches between deposits and mixed grain sizes. NPS beach
+profile information informed the distinction between dry backshore and smoother packed
+sand beside the swash. No reference images or other assets were downloaded or shipped.
+
+The first shader revision strengthened surface normals and added broader relief, but
+it remained too faint. Shader diagnostics from a close camera confirmed dry sand
+(firm = 0), nonzero surface detail and the actual nearly overhead sun direction. The
+final material combines elongated metre-scale hummocks and hollows with interrupted
+31 cm ripples and shallow micro relief. Ridge shading follows the same profile as its
+normal slope. An intermediate pore tint looked smudged; the final pass reduces it and
+filters it into the middle distance. The second ripple harmonic filters earlier than
+the main ridge, preventing fine stripes from persisting below a pixel.
+
+Existing CC0 sand scans supply grain normals, roughness and occlusion; the dry normal
+is stronger. Sparse 1–3 cm coral/shell chips appear only close enough to resolve them.
+Patterns use world coordinates and a shared deposition field, leaving smoother patches.
+The five walking lines, broad geometric drifts, wet-material transition and accepted
+swash clock remain unchanged. This is material surface relief, not extra granular mesh
+geometry. Existing 2048² colour and 1024² normal/mask arrays with mipmaps and anisotropy 8
+are reused; there are no added texture allocations.
+
+Four matched cameras cover the lower stairs, beach level, a grazing view and close sand.
+A 145-frame, 24 fps approach with a head turn keeps the sea fixed at 17 s for the sand
+review. The inspected approach frames retain world-fixed ridges and quiet deposits.
+These captures and all nine final hero renders have zero console errors. Before/after
+panels, cameras, clip and readbacks are in docs/gallery/v28/. The existing thin blue
+swash-film join visible in the grazing camera is recorded in the v26 water brief.
+
+Water-hidden land-label masks at overview and viewpoint (1400 × 788) have zero changed
+pixels against 7ca785b. Geometry, scatter, coast, wave solver and bake are unchanged;
+the bake check passes. Local photo references remain unavailable, so the outline check
+is a regression check without a new photo-match claim. The local standalone was rebuilt
+with 55 modules and its inline scripts compile as classic scripts. With networking
+blocked, it loaded in 23.0 s, generated its terrain/texture fallbacks and rendered four
+scroll stops with zero console errors. The online preview is the scan-material target.
+
+Twelve alternating paired rounds of eight frames against 7ca785b pass eight heroes.
+Beach was marginally over the gate at +10.14%; the required focused repeat (16 rounds)
+measured −0.28%, with its middle half −9.5% to +6.4%. Both records are retained rather
+than discarding the first. Final paired medians are −6.9% to +4.7% across all nine views.
+No new performance exception is needed; the original v25-to-v26 close water-level cost
+exception remains. The material is an authored approximation, judged from the matched
+cameras and approach, without a claim of perfect photographic realism.

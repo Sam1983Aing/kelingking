@@ -70,3 +70,11 @@ shared lip profile changes in production. [Polish gallery and motion](../gallery
   20.3 s, rendered four scroll stops and produced no console errors. No downloads.
 - Verification covers the recorded sea state and cameras; the authored model and existing
   underwater-camera limitation still apply.
+
+
+### Found by v28 (sand material)
+
+The extra grazing camera `[110, 203, 3.8], yaw 295, pitch -8` shows a thin, straight blue
+join across the swash film at clock 17 s. It is present in the `7ca785b` baseline as well
+as the sand-material review. Inspect this water sheet join in a future water pass; v28
+changes the dry sand material and retains the accepted wave/swash geometry.

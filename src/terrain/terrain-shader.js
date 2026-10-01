@@ -699,7 +699,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         Surf b = topLayer(L_SAND_DRY, uTile[L_SAND_DRY] * 1.37, vec2(0.8, 0.6), vec2(0.31, 0.77), true);
         mixSurf(a, b, smoothstep(0.3, 0.7, tn(g * 0.33 + 2.0)) * close);
       }
-      a.dn *= mix(0.35, 0.7, trample);
+      a.dn *= mix(0.50, 0.90, trample);
       if (firm > 0.001) {
         if (close > 0.0) {
           Surf fs = topLayer(L_SAND_FIRM, uTile[L_SAND_FIRM], vec2(0.6, -0.8), vec2(0.13, 0.4), true);
@@ -726,20 +726,71 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     reliefW = 0.0;
 #endif
     if (reliefW > 0.0) {
-      vec3 l1 = tnd(g * 0.85 + 2.1);
-      // Lumps about a metre across, gentler on the firm sand.
-      float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
-      vec2 slope = l1.yz * 0.85 * 0.075 * lumpA;
-      float lumpH = (l1.x - 0.5) * 0.075 * lumpA;
-      // Centimetre-scale irregularities sit above the geometric drifts. Elongate
-      // them across the prevailing wind and filter them before they become speckles.
-      float microW = (1.0 - smoothstep(0.035, 0.10, fp)) * (1.0 - firm);
+      // Deposited sand has interleaved hummocks and hollows, not uniformly round
+      // noise bumps. The elongated field sits above the existing geometric drifts.
       mat2 wind = mat2(0.83, -0.56, 0.56, 0.83);
-      vec3 grains = tnd((wind * g) * vec2(2.7, 4.6) + vec2(3.8, 7.1));
-      slope += transpose(wind) * (grains.yz * vec2(2.7, 4.6)) * (0.024 * microW);
-      lumpH += (grains.x - 0.5) * 0.014 * microW;
-      sd.color *= 1.0 + (grains.x - 0.5) * 0.12 * microW;
-      sd.ao *= 1.0 - 0.11 * (1.0 - grains.x) * microW;
+      vec2 q = wind * g;
+      vec3 l1 = tnd(q * vec2(0.65, 1.1) + vec2(2.1, 9.7));
+      vec3 drift = tnd(q * vec2(0.23, 0.37) + vec2(7.3, 3.1));
+      float lumpA = mix(1.0, 0.18, firm) * mix(0.75, 1.0, trample);
+      vec2 slope = transpose(wind) * (l1.yz * vec2(0.65, 1.1)) * (0.10 * lumpA);
+      slope += transpose(wind) * (drift.yz * vec2(0.23, 0.37)) * (0.16 * lumpA);
+      float lumpH = ((l1.x - 0.5) * 0.10 + (drift.x - 0.5) * 0.16) * lumpA;
+      // Fine broken ridges: about 31 cm apart, centimetres high, interrupted by
+      // smoother deposits. The warp has analytic slopes, including its curved crests.
+      float rippleW = (1.0 - firm) * (1.0 - 0.55 * trample)
+                    * smoothstep(0.34, 0.68, drift.x);
+      float bend = q.x * 1.05 + drift.x * 4.0;
+      float phase = q.y * 20.0 + (drift.x - 0.5) * 4.5 + 1.4 * sin(bend);
+      vec2 phaseSlope = vec2(0.0, 20.0) + drift.yz * vec2(0.23, 0.37) * 4.5
+                     + 1.4 * cos(bend) * (vec2(1.05, 0.0) + drift.yz * vec2(0.23, 0.37) * 4.0);
+      // Filter the phase from explicit world derivatives (valid inside this branch).
+      vec2 phaseWorld = transpose(wind) * phaseSlope;
+      float phaseFoot = abs(dot(phaseWorld, vec2(triDx.x, -triDx.z)))
+                      + abs(dot(phaseWorld, vec2(triDy.x, -triDy.z)));
+      float rippleKeep = exp(-0.65 * phaseFoot * phaseFoot);
+      float rippleH = sin(phase) + 0.22 * pow(rippleKeep, 3.0) * sin(phase * 2.0);
+      float rippleSlope = cos(phase) + 0.44 * pow(rippleKeep, 3.0) * cos(phase * 2.0);
+      float rippleA = 0.018 * rippleW * rippleKeep;
+      slope += phaseWorld * (rippleA * rippleSlope);
+      lumpH += rippleH * rippleA;
+      sd.color *= 1.0 + (drift.x - 0.5) * 0.18 * (1.0 - firm);
+      // Occluded grain between ridges remains readable under the nearly overhead sun.
+      // The shade follows the same height profile; quieter deposits stay unmarked.
+      float trough = 0.5 - 0.5 * sin(phase);
+      sd.ao *= 1.0 - rippleW * rippleKeep * 0.20 * trough;
+      sd.color *= 1.0 - rippleW * rippleKeep * 0.16 * trough;
+      // Small irregular clods and pores interrupt the ripple crests. They fade
+      // before becoming subpixel speckles; millimetre grain comes from the scans.
+      float microW = (1.0 - smoothstep(0.035, 0.10, fp)) * (1.0 - firm);
+      vec3 grains = tnd(q * vec2(2.7, 4.6) + vec2(3.8, 7.1));
+      slope += transpose(wind) * (grains.yz * vec2(2.7, 4.6)) * (0.040 * microW);
+      lumpH += (grains.x - 0.5) * 0.018 * microW;
+      sd.color *= 1.0 + (grains.x - 0.5) * 0.20 * microW;
+      sd.ao *= 1.0 - 0.17 * (1.0 - grains.x) * microW;
+      // Irregular centimetre hollows survive in the middle-distance material as
+      // accumulated darker pores. Filter the tiny granules, not this deposited pattern.
+      float deposits = (1.0 - firm) * (0.5 + 0.5 * smoothstep(0.25, 0.75, drift.x));
+      float pore = smoothstep(0.52, 0.84, 1.0 - grains.x) * (1.0 - smoothstep(0.06, 0.18, fp));
+      sd.color *= 1.0 - 0.10 * pore * deposits * reliefW;
+      sd.ao *= 1.0 - 0.15 * pore * deposits * reliefW;
+      sd.rough = clamp(sd.rough + 0.045 * deposits * (grains.x - 0.5), 0.75, 1.0);
+      // A few coral/shell chips among fine grains. Their 1–3 cm size is filtered,
+      // and their density follows deposits rather than filling the whole beach.
+      float fragmentW = (1.0 - smoothstep(0.012, 0.035, fp)) * (1.0 - firm);
+      if (fragmentW > 0.01) {
+        vec2 cell = floor(g * 9.0), f = fract(g * 9.0);
+        float seed = th12(cell + 13.7);
+        vec2 centre = 0.25 + 0.5 * vec2(th12(cell + 2.8), th12(cell + 8.3));
+        vec2 d = (f - centre) * vec2(0.8, 1.3);
+        float radius = mix(0.065, 0.14, th12(cell + 4.1));
+        float aa = max(0.015, fp * 9.0);
+        float chip = (1.0 - smoothstep(radius - aa, radius + aa, length(d)))
+                   * step(0.965 - 0.018 * drift.x, seed) * fragmentW;
+        sd.color *= mix(vec3(1.0), vec3(1.12, 1.09, 1.025), chip);
+        sd.ao *= 1.0 - 0.16 * chip;
+        slope += d * (0.30 * chip);
+      }
       float cav = 0.0;
       // At arm's length the five walking lines have individual heel-sized hollows. Fade their
       // relief as each print becomes smaller than a few pixels from the stairs.
