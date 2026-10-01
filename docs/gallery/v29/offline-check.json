@@ -1,0 +1,17 @@
+{
+  "file": "kelingking-local.html",
+  "command": "node tools/test-standalone.mjs --file=kelingking-local.html --offline",
+  "network": "blocked",
+  "loadedSeconds": 20.1,
+  "terrain": "generated",
+  "textureFallbacks": true,
+  "scrollStops": [
+    0.3,
+    1,
+    2.6,
+    4.6
+  ],
+  "consoleErrors": 0,
+  "modules": 55,
+  "classicScriptParse": "passed"
+}

@@ -2978,3 +2978,57 @@ than discarding the first. Final paired medians are −6.9% to +4.7% across all 
 No new performance exception is needed; the original v25-to-v26 close water-level cost
 exception remains. The material is an authored approximation, judged from the matched
 cameras and approach, without a claim of perfect photographic realism.
+
+
+### v29 — Lower cliff texture and sand contact (2026-09-30, 21:15 report)
+
+Sam reports a residual odd lower-wall shape in the opposite cove and an unclean sand
+contact beside the last stairs. Five fixed cameras, with textured and plant-free clay
+pairs, reproduce the reported directions and adjacent contacts. Terrain ray readbacks
+identify an exposed original-grid ramp between shortened carved windows; its normals
+and material inputs differ from the strip behind it. Different column start heights
+also leave the isolated ochre fin beside a blue vertical gap. The stair-side edge comes
+from the ground staying recessed where the strip's carving fades out.
+
+The local cove corner now continues from a shared 23 m bedding level into a rounded
+lower recess. The beach floor closes the foreground ramp. At low beach strip ends,
+the ground recession and culling fade with the face carving. A shallow bank follows
+line segments on the final carved toe, rising at most 0.95 m over a three metre shoulder.
+It clears the stair tread and leaves the packed wet sand unchanged. Existing adaptive
+contact refinement supplies the curved shoulder; deposit masks use its final height.
+Weathering now continues through the gully without stamping carving-attribute islands.
+
+Several intermediate approaches were rejected. Extending the profile opened a gully
+hole; widening the smoothing did not remove the underlying overlap. A broad material
+mask painted sand up the wall. The final mask ends within 25 cm of the deposited bank,
+and the ground's recess fade matches the strip. The first gully geometry pass also moved
+buried vertices used to derive the coast map. The final correction is applied after the
+existing smoothing and protects every sea-level crossing triangle. Coast, wave, shoreline
+direction, breaker, rock-site, vegetation, trail and original field arrays now match
+accepted v28 checkpoint `3f1978c` exactly, including non-finite values in breaker data.
+
+### Verification
+
+Five textured/clay pairs, two 73-frame moving-camera tracks at 24 fps, the earlier 28 m
+closure camera, and all nine hero frames have zero console errors. Inspected approach
+frames retain a seated contact without reopening the earlier terrain hole. The closure
+ray still hits terrain 3.161 m away. Reproduction, comparisons, clips and ray evidence
+are in `docs/gallery/v29/`, with `tools/cliff-contact-review.mjs` retaining the poses.
+The sea stays at 17 s while those camera tracks review the geometry.
+
+The mesh adds 17,476 triangles (+1.48%) and 8,814 vertices (+0.73%), for 1,197,848 triangles
+and 1,214,235 vertices. The terrain bake is current at 13,561,329 bytes; round-trip errors
+are at most 12.2 mm for positions and 1.9 mm for field heights, with exact indices and
+water data. The overview land mask differs at one of 505,927 pixels (0.00020%); viewpoint
+has no changed pixels. Reference photos remain unavailable, so this verifies regression
+without a new photographic-match claim.
+
+All nine paired median timing gates pass against `3f1978c`: 12 alternating rounds of
+eight complete frames, −4.0% to +3.8%. There is no new performance exception; the earlier
+v26 close water-level exception remains. The local standalone bundles 55 modules, its
+inline scripts compile as classic scripts, and with networking blocked it loads in 20.1 s.
+All four offline scroll stops (0.3, 1, 2.6, 4.6) render with zero console errors, using
+generated texture fallbacks. The online preview is the scan-material review target.
+ES-module parsing, bake freshness and whitespace checks pass. No downloads or reference
+uploads. The lower geometry and column visibility remain approximations; the check covers
+the specified cameras and approaches rather than a claim of perfect realism everywhere.

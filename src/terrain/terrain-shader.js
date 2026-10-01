@@ -416,8 +416,10 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // wall skirts retain the triangle-slope guard. This prevents a drawn line
     // along every small triangle at a gently sloping sand-to-rock transition.
     float depositSlope = mix(min(upC, upG + 0.08), up, bankDeposit);
+    // The authored deposit mask ends on the rounded supporting bank, before the
+    // vertical wall. Its thin sand cover must survive the bank's curved shoulder.
     float underSand = smoothstep(0.16, 0.76, vRock.x + (tn(g * 1.1 + h * 0.3) - 0.5) * 0.22)
-                    * smoothstep(0.78, 0.90, depositSlope);
+                    * mix(smoothstep(0.78, 0.90, depositSlope), 1.0, bankDeposit);
     sand = max(sand, underSand);
   }
 
@@ -570,7 +572,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // the rock stained ochre and brown.
     float foot = sandZone * (1.0 - smoothstep(uBeachTop + 3.0, uBeachTop + 9.0, h + (n1 - 0.5) * 3.0)) * wallF;
     a.color = mix(a.color, a.color * vec3(0.66, 0.63, 0.58), foot * 0.6);
-    float under = smoothstep(0.8, 5.0, carveM) * sandZone * (1.0 - smoothstep(18.0, 30.0, h));
+    // Weathering belongs to the bed, including the uncarved gully between face
+    // strips. A carving-attribute threshold stamped orange polygon islands here.
+    float beachWall = sandZone * (1.0 - smoothstep(18.0, 30.0, h));
+    float gully = 1.0 - smoothstep(14.0, 30.0, length(g - vec2(114.0, 294.0)));
+    float under = beachWall * mix(0.38 + 0.62 * smoothstep(0.8, 5.0, carveM), 0.65, gully);
     // Staining follows runoff and individual beds instead of filling the
     // entire recess with one orange stripe. Fresh worn patches stay grey-beige.
     float stain = 0.35 + 0.65 * smoothstep(0.32, 0.7, 0.55 * streaky + 0.3 * n2 + 0.15 * SA.a);

@@ -276,6 +276,34 @@ export function buildTerrainMesh(hf, layout, M) {
           bands.pos[v + 1] = lerp(h, sy / sw, 0.8 * blend * heightBlend);
         }
       }
+      // A buried beach toe also feeds the sea-level contact map. Preserve every
+      // vertex on a crossing triangle so the accepted surf retains its coast.
+      const seaContact = new Set();
+      for (let t = 0; t < bands.idx.length; t += 3) {
+        const ids = bands.idx.slice(t, t + 3);
+        const hs = ids.map(v => bands.pos[v * 3 + 1]);
+        if (Math.min(...hs) <= 0 && Math.max(...hs) > 0) for (const v of ids) seaContact.add(v);
+      }
+      // At the tight cove gully, shortened radial windows used different toe
+      // heights. Continue the exposed wall from one shared bedding level into
+      // a rounded recess instead of leaving an isolated hanging fin.
+      for (const col of cols) {
+        const corner = 1 - smooth(10, 27, Math.hypot(col.x - 116, col.y - 305));
+        if (corner < 0.001 || col.P.feat.onSand < 0.5) continue;
+        let r = 0;
+        while (r < col.R - 2 && bands.pos[(col.first + r + 1) * 3 + 1] < 23) r++;
+        const a = (col.first + r) * 3, b = a + 3;
+        const u = Math.min(Math.max((23 - bands.pos[a + 1]) / Math.max(bands.pos[b + 1] - bands.pos[a + 1], 1e-5), 0), 1);
+        const x = lerp(bands.pos[a], bands.pos[b], u), z = lerp(bands.pos[a + 2], bands.pos[b + 2], u);
+        for (let j = 0; j < col.R; j++) {
+          const v = (col.first + j) * 3, h = bands.pos[v + 1];
+          if (seaContact.has(col.first + j)) continue;
+          const w = corner * col.fade * smooth(1.8, 3, h) * (1 - smooth(13, 23, h));
+          const recess = 1.8 * (1 - smooth(3, 16, h));
+          bands.pos[v] = lerp(bands.pos[v], x + col.gx * recess, w);
+          bands.pos[v + 2] = lerp(bands.pos[v + 2], z - col.gy * recess, w);
+        }
+      }
     }
     const pa = [0, 0, 0], pb = [0, 0, 0];
     for (let k = 0; k < n; k++) {
@@ -476,7 +504,7 @@ export function buildTerrainMesh(hf, layout, M) {
   function groundAt(x, y, out) {
     let px = x, py = y, h = heightAt(x, y), covered = 0, contact = 0;
     const sandZone = smooth(0.7, 0.95, sample(f.sand, x, y));
-    const sandH = sandZone > 0 && h > 0 ? sandHeightAt(x, y) : h;
+    const sandH = sandZone > 0 && h > 0 ? beachHeightAt(x, y) : h;
     // The beach floor continues beneath the carved wall, but the stair bank is
     // carried by the original grid: face windows are cut back around the route.
     // The narrow carving mask (2–5 m) is insufficient here. Lowering that bank
@@ -500,6 +528,12 @@ export function buildTerrainMesh(hf, layout, M) {
         gx /= gl * 2 * e; gy /= gl * 2 * e;
         const Fx = x - psi * gx, Fy = y - psi * gy;
         const col = nearestColumn(Fx, Fy);
+        // Short concave windows still close the wall behind the foreground ramp.
+        // Carry the continuous beach floor across that ramp instead of exposing it.
+        if (col && psi <= col.P.a && psi > col.P.feat.tFoot - 4
+          && h < col.P.floorStart + 1 && h < 40) {
+          contact = col.P.feat.onSand * col.P.feat.wall * col.fade * support;
+        }
         if (col && psi > col.P.a && psi < col.P.b) {
           // (Beside the path the strips are cut back and the grid carries the ground (v6):
           // not pushed in right beside it, and never left out within 10 m of it, where a
@@ -510,7 +544,11 @@ export function buildTerrainMesh(hf, layout, M) {
           // out, plus a margin; and down a little, but only on flat ground: under a ceiling
           // down is out into the cave.
           const sl = Math.abs(heightAt(x + 1.2 * gx, y + 1.2 * gy) - heightAt(x - 1.2 * gx, y - 1.2 * gy)) / 2.4;
-          const w = w0 * (1 - beachFloor);
+          // The face's carving fades at its ends. Fade the supporting grid's
+          // recess and culling with it, or the first face column stands in front
+          // of a displaced bank and exposes a straight vertical seam.
+          const endFade = lerp(1, col.fade, col.P.feat.onSand * (1 - smooth(18, 32, h)));
+          const w = w0 * (1 - beachFloor) * endFade;
           // A shortened profile is seated below the beach as well. Its original
           // start height must not leave a second, triangular grid wall exposed.
           contact = w0 * col.P.feat.onSand * col.P.feat.wall * col.fade * support;
@@ -530,6 +568,65 @@ export function buildTerrainMesh(hf, layout, M) {
       * (1 - smooth(sandH + 0.15, sandH + 0.8, h));
     out[0] = px; out[1] = h; out[2] = -py;
     out[3] = covered; out[4] = contact; out[5] = beachFloor; out[6] = deposit;
+  }
+  // A shallow deposited bank seats the beach against the actual carved toe.
+  // Use the final rock contour, not the uncarved heightfield's displaced edge.
+  const toeHash = new Map();
+  for (const cols of bands.strips) {
+    let previous = null;
+    for (const col of cols) {
+      if (col.P.feat.onSand < 0.5) { previous = null; continue; }
+      let r = 0;
+      while (r < col.R - 2) {
+        const v = (col.first + r + 1) * 3;
+        if (bands.pos[v + 1] > sandHeightAt(bands.pos[v], -bands.pos[v + 2]) + 0.65) break;
+        r++;
+      }
+      const a = (col.first + r) * 3, b = a + 3;
+      const h = sandHeightAt(bands.pos[a], -bands.pos[a + 2]) + 0.65;
+      const u = Math.min(Math.max((h - bands.pos[a + 1]) / Math.max(bands.pos[b + 1] - bands.pos[a + 1], 1e-5), 0), 1);
+      const point = [lerp(bands.pos[a], bands.pos[b], u), -lerp(bands.pos[a + 2], bands.pos[b + 2], u)];
+      if (previous && Math.hypot(point[0] - previous[0], point[1] - previous[1]) < 8) {
+        const key = hashKey((point[0] + previous[0]) / 2, (point[1] + previous[1]) / 2);
+        if (!toeHash.has(key)) toeHash.set(key, []);
+        toeHash.get(key).push([...previous, ...point]);
+      }
+      previous = point;
+    }
+  }
+  function beachHeightAt(x, y) {
+    const h = sandHeightAt(x, y);
+    if (h < 1.8) return h;
+    const path = route?.nearest(x, y, 3);
+    const clear = path ? smooth(route.lerpAt(route.w, path) / 2 + 0.25, 2.3, path.d) : 1;
+    if (clear < 0.001) return h;
+    const ci = Math.floor(x / 2), cj = Math.floor(y / 2);
+    let d2 = 9;
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+      const segments = toeHash.get((ci + di) * 65536 + cj + dj);
+      if (segments) for (const p of segments) {
+        const dx = p[2] - p[0], dy = p[3] - p[1];
+        const u = Math.min(Math.max(((x - p[0]) * dx + (y - p[1]) * dy) / Math.max(dx * dx + dy * dy, 1e-6), 0), 1);
+        d2 = Math.min(d2, (x - p[0] - u * dx) ** 2 + (y - p[1] - u * dy) ** 2);
+      }
+    }
+    return h + clear * 0.95 * Math.exp(-d2 / 2.8) * (1 - smooth(2.2, 3, Math.sqrt(d2)));
+  }
+  // At the strip ends, a thin sand veneer joins the same deposited bank.
+  // Its mask is measured against the final bank height, never against the
+  // original rising terrain, so it cannot paint pale streaks up the wall.
+  for (const cols of bands.strips) for (const col of cols) {
+    if (col.fade > 0.8 || col.P.feat.onSand < 0.5) continue;
+    for (let r = 0; r < col.R; r++) {
+      const v = col.first + r, o = v * 3, h = bands.pos[o + 1];
+      if (h > 6) continue;
+      const bankH = beachHeightAt(bands.pos[o], -bands.pos[o + 2]);
+      const w = (1 - col.fade) * (1 - smooth(bankH - 0.02, bankH + 0.25, h));
+      bands.rock[o] = w;
+      bands.rock[o + 1] = lerp(bands.rock[o + 1], 1, w);
+      bands.lit[v] = lerp(bands.lit[v], 1, w);
+      bands.hor[v] = lerp(bands.hor[v], 1, w);
+    }
   }
   const point = new Float64Array(7);
   for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
@@ -570,7 +667,7 @@ export function buildTerrainMesh(hf, layout, M) {
   // Reusing a rising cell's vertices would leave a hole beside its flat neighbour;
   // these shared floor vertices close that junction without filling the cave with rock.
   const floorVertices = new Map();
-  const floorHeight = (x, y) => Math.min(heightAt(x, y), sandHeightAt(x, y));
+  const floorHeight = (x, y) => Math.min(heightAt(x, y), beachHeightAt(x, y));
   const floorVertex = (v) => {
     if (floorWeight[v] > 0.999) return v;
     if (floorVertices.has(v)) return floorVertices.get(v);
