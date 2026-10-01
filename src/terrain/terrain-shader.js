@@ -456,6 +456,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   float wet = smoothstep(1.1, 0.35, h) * sandZone;
   float detail = smoothstep(0.6, 0.15, fp);               // close-range layers fade out by here
 
+  // The north/right beach wall: salt-weathered bedding and pits at their physical
+  // scale. Fade by world position and height, so head turns never change its material.
+  float rightFoot = sandZone * (1.0 - smoothstep(14.0, 25.0, h))
+                  * (1.0 - smoothstep(0.6, 1.05, length((g - vec2(145.0, 274.0)) / vec2(60.0, 82.0))));
+
   Surf s = Surf(vec3(0.5), vec3(0.0), 0.85, 1.0);
 
   // ---------------------------------------------------------------- limestone
@@ -482,16 +487,19 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // (v10) At arm's length: the layered scan at its own size (1.8 m), and the pitted grain of
     // the rough rock scan, for the relief the face's big scans are too coarse to have there.
     // The marble scan's crack network, which reads as marble up close, pulled further to grey.
-    float closeR = max(wallF, footDust) * smoothstep(0.02, 0.006, fp);
+    float closeR = max(wallF, footDust) * max(smoothstep(0.02, 0.006, fp), rightFoot * smoothstep(0.14, 0.035, fp));
 #ifdef SKIP_CLOSER
     closeR = 0.0;
 #endif
     if (closeR > 0.01) {
       Surf fine = triplanar(L_BEDS, uTile[L_BEDS] / 3.0, vec2(0.23, 0.57));
-      Surf grain = triplanar(L_WET, 0.8, vec2(0.61, 0.19));
+      Surf grain = triplanar(L_WET, mix(0.8, 1.6, rightFoot), vec2(0.61, 0.19));
       float lf = luma(fine.color) / luma(uGain[L_BEDS] * lin(vec3(0.482, 0.322, 0.194)));
       float lg = luma(grain.color) / luma(uGain[L_WET] * lin(vec3(0.271, 0.251, 0.215)));
       a.color = mix(a.color, vec3(luma(a.color)) * uGain[L_LIMESTONE] / luma(uGain[L_LIMESTONE]), 0.5 * closeR);
+      // The worn toe is granular limestone; pull back the large marble-like
+      // crack colour while retaining the scanned pores, seams and relief.
+      a.color = mix(a.color, uGain[L_LIMESTONE] * lin(vec3(0.578, 0.550, 0.513)), 0.42 * rightFoot * closeR);
       a.color *= mix(1.0, clamp(lf, 0.5, 1.4) * clamp(lg, 0.7, 1.25), 0.7 * closeR);
       a.dn = mix(a.dn, a.dn * 0.5 + fine.dn * 1.1 + grain.dn * 1.2, closeR);
       a.ao *= mix(1.0, fine.ao * grain.ao, 0.7 * closeR);
@@ -563,6 +571,10 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float foot = sandZone * (1.0 - smoothstep(uBeachTop + 3.0, uBeachTop + 9.0, h + (n1 - 0.5) * 3.0)) * wallF;
     a.color = mix(a.color, a.color * vec3(0.66, 0.63, 0.58), foot * 0.6);
     float under = smoothstep(0.8, 5.0, carveM) * sandZone * (1.0 - smoothstep(18.0, 30.0, h));
+    // Staining follows runoff and individual beds instead of filling the
+    // entire recess with one orange stripe. Fresh worn patches stay grey-beige.
+    float stain = 0.35 + 0.65 * smoothstep(0.32, 0.7, 0.55 * streaky + 0.3 * n2 + 0.15 * SA.a);
+    under *= mix(1.0, stain, rightFoot);
     a.color = mix(a.color, a.color * vec3(1.02, 0.78, 0.52), under * 0.75);
     // The wave-cut notch and the dark wet band at the waterline, from the wet rock scan.
     if (notch > 0.0) {

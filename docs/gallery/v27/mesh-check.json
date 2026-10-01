@@ -1,0 +1,19 @@
+{
+  "baseline": "e31c8b0",
+  "triangles": 1180372,
+  "vertices": 1205421,
+  "positionsIdentical": true,
+  "normalsIdentical": true,
+  "indicesIdentical": true,
+  "heightfieldIdentical": true,
+  "plantsIdentical": true,
+  "waterDataIdentical": true,
+  "coastDataIdentical": true,
+  "lightingVerticesChanged": 18133,
+  "lightingChangedAbove32m": 0,
+  "lightingHeightRange": [
+    -7.788741111755371,
+    31.5739803314209
+  ],
+  "bakeBytes": 13493108
+}

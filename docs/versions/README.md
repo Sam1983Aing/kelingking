@@ -32,6 +32,7 @@ version. A session works on its element only, and goes deep on it.
 | v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | ready for review |
 | v25 | Curved cliff toes and beach relief | [v25-cliff-sand-polish.md](v25-cliff-sand-polish.md) | ready for review |
 | v26 | Continuous swell, falling lip and whitewater | [v26-wave-continuity.md](v26-wave-continuity.md) | ready for review; water-level performance exception |
+| v27 | Right beach wall foot and rock weathering | [v27-right-cliff-foot.md](v27-right-cliff-foot.md) | ready for review |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

@@ -2875,3 +2875,57 @@ median timing gates, ranging from −3.4% to +5.9%. This polish adds no performa
 The original v25-to-v26 water-level exception above remains. The authored surf and existing
 underwater-camera limits also remain; verification covers the recorded cameras and sea
 state rather than every possible wave.
+
+
+### v27 — Right beach wall foot (2026-09-30, 18:40 report)
+
+Sam reports that the bottom of the right beach wall looks much less natural than the
+left, with an artificial blue stepped region and a broad ochre shelf. Four matched
+beach cameras, with textured and plant-free clay pairs, reproduced the defect.
+Unlit, shadow, sky-horizon and ground-bounce readbacks separated lighting from geometry:
+disabling the sun shadow left the staircase, while the unlit mesh had a continuous curve.
+
+The wall-column lighting pass skipped rows with no outward-projecting overhang. Those
+vertices retained full sky, ground and sun-horizon defaults next to rows with occluded
+cave lighting. Low beach rows now include inward rock above them in the sky horizon and
+receive ground bounce from the actual continuous sand floor past the drip line. The old
+uncarved heightfield toe was several metres above that floor. The correction fades out
+between 18 and 32 m. An intermediate version recomputed open-wall ground values at the
+upper blend edge; the final version preserves the original open defaults there.
+
+The lower right wall uses a world-fixed, softly bounded region for finer surface detail.
+Existing CC0 scans supply 1.83 m bedding and pitted grain up to 1.6 m, retaining pores,
+normal relief, roughness and occlusion. Oversized marble-like crack colour is subdued.
+Ochre weathering follows runoff and individual beds, leaving grey-beige worn patches
+instead of one uniform orange stripe. Triplanar projection and footprint filtering
+keep these details fixed to the rock across head turns. No new textures were downloaded
+or allocated; existing colour maps are 2048², normal/mask maps 1024² with mipmaps and
+anisotropy 8.
+
+### Verification
+
+Final close-up and clay pairs cover the reported beach direction, the opposite cove,
+the formerly stepped recess and the sand contact. All have zero console errors. The
+nine final hero renders also have zero console messages. Camera poses and terrain ray
+readbacks are reproducible with `tools/cliff-foot-review.mjs`; before/after panels and
+measurements are in `docs/gallery/v27/`.
+
+Decoded bake comparisons against accepted checkpoint `e31c8b0` show identical positions,
+normals, indices, heightfield, plants, water and coast data. The mesh remains 1,180,372
+triangles and 1,205,421 vertices. Only 18,133 lighting vertices change; none is above
+32 m. Water-hidden land-label masks at 1400 × 788 have zero changed pixels at overview
+and viewpoint. Local photographs remain unavailable, so these are regression checks
+without a new photo-match claim.
+
+The final terrain bake is current at 13,493,108 bytes. The rebuilt local standalone
+bundles 55 modules and parses as classic scripts. With networking blocked, it loaded
+in 23.7 s, generated terrain and texture fallbacks, and rendered scroll stops 0.3, 1,
+2.6 and 4.6 with zero console errors. The online preview remains the scan-material
+review target. No assets or reference photographs were downloaded or uploaded.
+
+Twelve alternating paired rounds of eight complete frames against `e31c8b0` pass all
+nine hero median timing gates, from −2.5% to +5.3%. This pass adds no performance
+exception; the original v25-to-v26 close water-level exception remains. The original
+curved geometry is retained: this fixes its misleading lighting and refines weathering,
+not a new geological reconstruction. The visibility approximation remains column-based,
+and verification covers the specified cameras rather than every possible view.

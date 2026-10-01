@@ -305,14 +305,19 @@ export function buildTerrainMesh(hf, layout, M) {
       for (let r = 0; r < col.R; r++) {
         const v = col.first + r;
         const or0 = o(v), h0 = bands.pos[v * 3 + 1];
-        if (above[r + 1] <= or0 + 0.05) continue;
-        let lowest = Math.PI;
+        // Low beach walls also see inward rock above them. Skipping those rows
+        // jumped straight from an occluded ceiling to full sky/ground light and
+        // drew a blue staircase through an otherwise smooth surface (v27).
+        const lowBeach = col.P.feat.onSand * (1 - smooth(18, 32, h0));
+        if (above[r + 1] <= or0 + 0.05 && lowBeach < 0.001) continue;
+        let lowest = Math.PI, beachHorizon = Math.PI;
         for (let r2 = r + 1; r2 < col.R; r2++) {
           const v2 = col.first + r2;
           const dout = o(v2) - or0, dh = bands.pos[v2 * 3 + 1] - h0;
           if (dout > 0.05 && dh > 0) lowest = Math.min(lowest, Math.atan2(dh, dout));
+          if (lowBeach > 0.001 && dh > 0.03) beachHorizon = Math.min(beachHorizon, Math.atan2(dh, dout));
         }
-        if (lowest >= Math.PI) continue;
+        if (lowest >= Math.PI && lowBeach < 0.001) continue;
         const n = v * 3;
         const nOut = -(bands.nrm[n] * col.gx - bands.nrm[n + 2] * col.gy), nUp = bands.nrm[n + 1];
         const nu = Math.atan2(nUp, nOut);
@@ -321,15 +326,27 @@ export function buildTerrainMesh(hf, layout, M) {
           return b > a ? Math.sin(b - nu) - Math.sin(a - nu) : 0;
         };
         const full = arc(0, Math.PI);
-        bands.rock[n + 1] = full > 1e-3 ? Math.min(1, arc(0, lowest) / full) : 0.2;
-        // The sunlit ground it can see: only out past the drip line (the furthest out the
-        // rock above it reaches), below the horizon. Half the cosine-weighted arc, so an
-        // open wall comes out at 0.5 and an open ceiling at 1, as for open ground.
-        const beta = Math.atan2(Math.max(h0 - col.P.feat.hFoot, 0.3), above[r + 1] - or0);
-        bands.lit[v] = 0.5 * arc(-beta, 0);
-        // And the angle itself, for the sun: rock overhead hides everything from `lowest`
-        // (measured up from straight out) over to straight in.
-        bands.hor[v] = lowest / Math.PI;
+        if (lowest < Math.PI) {
+          bands.rock[n + 1] = full > 1e-3 ? Math.min(1, arc(0, lowest) / full) : 0.2;
+          // Sunlit ground past the drip line. Half the cosine-weighted arc:
+          // an open wall sees 0.5 and an open ceiling sees 1.
+          const beta = Math.atan2(Math.max(h0 - col.P.feat.hFoot, 0.3), above[r + 1] - or0);
+          bands.lit[v] = 0.5 * arc(-beta, 0);
+          bands.hor[v] = lowest / Math.PI;
+        }
+        // Retain the open defaults when there is no overhang, including through
+        // the upper end of the beach-lighting blend below.
+        if (lowBeach > 0.001) {
+          const sky = full > 1e-3 ? Math.min(1, arc(0, beachHorizon) / full) : 0.2;
+          // The uncarved heightfield toe is several metres above the actual sand.
+          // Bounce comes from the continuous beach floor past the drip line.
+          const reach = Math.max(above[r + 1] - or0, 0);
+          const floor = sandHeightAt(bands.pos[n] - col.gx * (reach + 3), -bands.pos[n + 2] - col.gy * (reach + 3));
+          const groundAngle = Math.atan2(Math.max(h0 - floor, 0.3), reach);
+          bands.rock[n + 1] = lerp(bands.rock[n + 1], sky, lowBeach);
+          bands.lit[v] = lerp(bands.lit[v], 0.5 * arc(-groundAngle, 0), lowBeach);
+          bands.hor[v] = lerp(bands.hor[v], beachHorizon / Math.PI, lowBeach);
+        }
       }
     }
   }
