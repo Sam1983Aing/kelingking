@@ -39,6 +39,7 @@ version. A session works on its element only, and goes deep on it.
 | v31 | Beach camera and selectable time of day | [v31-beach-camera-light.md](v31-beach-camera-light.md) | ready for review |
 | v32 | Clean foliage edges and pixelation | [v32-foliage-edge-cleanup.md](v32-foliage-edge-cleanup.md) | ready for review |
 | v33 | Correct the artificial cliff shadow line | [v33-cliff-line.md](v33-cliff-line.md) | ready for review |
+| v34 | Remove remaining foliage coverage patterns | [v34-foliage-coverage.md](v34-foliage-coverage.md) | ready for review |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

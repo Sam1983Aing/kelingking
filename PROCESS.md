@@ -3256,3 +3256,56 @@ The online preview remains the texture target. No assets, downloads, uploads or 
 The fine ledge shadows still use the existing precomputed relief approximation. This fix
 corrects its units; it does not claim a full ray-traced rock surface. Gallery and raw
 readbacks are in docs/gallery/v33; the local sweep is captures/v33/cliff-sweep.mp4.
+
+
+## v34 — Remove remaining foliage coverage patterns (2026-10-01)
+
+Sam still saw pixelation after v32, especially in close plants during evening descent.
+Matched the three supplied views by camera height: 27 m at tau 3.690, 63 m at tau 2.823,
+and 95 m at tau 2.076. The first showed a fine transparent grid in the naupaka and dotted
+thin grass. All had a valid drawing buffer and four MSAA samples.
+
+### Diagnosis and correction
+
+Removing impostors left the pattern intact; forcing full near-plant coverage removed it.
+The remaining problem was the uniform MSAA opacity fade, not a missing source texture.
+With only four samples, overlapping leaves used correlated partial sample masks, so the
+crown stayed patterned and translucent rather than accumulating solid leaf coverage.
+A regular transparent-blending trial dulled the foliage and was not retained.
+
+Near foliage now assigns a stable value to each leaf or blade from its existing seed and
+plant position. The same LOD/lens intervals select groups of complete leaves instead of
+attenuating every pixel. A narrow boundary reveals/retracts a leaf along its length;
+its interior remains opaque, and MSAA smooths the silhouette. The selection follows the
+plant through wind and camera motion without a screen-space mask. Full solid instances
+retain their efficient no-discard shaders.
+
+The lighter grass level was three crossed painted cards. It now retains a quarter of
+the same curved blades, 2.8× wider, with two segments instead of four, plus seed stalks.
+Both levels consume the same random sequence so corresponding blades share their phase.
+This removes reliance on a tuft-wide alpha mask at medium distance without drawing full
+near-detail geometry everywhere. The scatter, original high-detail plants, texture assets,
+terrain, water, camera, lighting and automatic resolution policy are unchanged.
+
+### Verification
+
+Matched stills cover all three views at 0.85×, 1× and 2×; four lighting settings are also
+inspected. At 2× the 1587 × 1000 CSS viewport has a 3174 × 2000 buffer. An independent
+DPR=2 resize produces 2048 × 1280 for 1024 × 640 CSS pixels. The camera approaches have
+animated wind: 216 frames at 1× and 144 at 2×, at 24 fps. Inspected frames show solid
+leaf interiors and curved grass through the transitions, with zero console errors.
+
+All nine noon heroes render without errors. Twelve alternating paired timing rounds of
+eight completed frames against accepted `af278c3` pass all incremental hero limits
+(−9.5% to +6.6%). No new performance exception. Overview and viewpoint land labels with
+water hidden have zero changed pixels; unavailable reference photos were not downloaded.
+The bake is current, the modified ES modules parse, and the local standalone rebuild
+contains 56 modules whose inline scripts compile as classic scripts. With networking
+blocked it loads in 20.8 s, generates terrain and texture fallbacks, and renders four
+scroll stops without console errors. The online preview remains the texture target.
+
+Actual leaf edges still have finite sample coverage. Blades narrower than a pixel can
+soften at reduced resolution; distant impostors retain discrete baked directions and their
+existing coverage treatment. This fixes the reported near-foliage breakup without claiming
+infinite detail or adding a temporal post-processing pass. Own-render evidence is in
+`docs/gallery/v34`; raw PNG buffers and clips remain local in `captures/v34/`.

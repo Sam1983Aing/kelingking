@@ -4,8 +4,8 @@
 //
 // Each instance carries a coverage interval (lo, hi): the full plant up close, a lighter
 // one (fewer leaves, a little bigger) further off, and the impostor beyond that. The interval's
-// width controls a continuous alpha-to-coverage fade, resolved in MSAA samples rather than
-// randomly discarded pixels (which broke thin grass blades into dots).
+// width selects stable groups of complete leaves/blades. A narrow soft boundary avoids
+// replacement pops without a translucent MSAA grid across the whole plant.
 //
 // A plant the lens is inside (or nearly: within LENS of its crown's ellipsoid, in crown radii)
 // dissolves the same way, rather than filling the frame with a few leaves (v8: the scroll's
@@ -36,7 +36,7 @@ export function createNearPlants({ species, shared, leafTex }) {
     g.setAttribute('iPosScale', posScale);
     g.setAttribute('iYawTint', yawTint);
     g.instanceCount = 0;
-    // Lit per vertex: the lightest level (cards), and grass, whose blades are a few
+    // Lit per vertex: the lightest level, and grass, whose blades are a few
     // millimetres wide.
     const vertexLight = (level > 0 && level === (sp.lod.detail?.length ?? 0)) || sp.id === 'grass';
     const mesh = new THREE.Mesh(g, plantMaterial(shared, v.info, leafTex, { vertexLight, solid, alpha: geometry.userData.alphaLeaves !== false }));
