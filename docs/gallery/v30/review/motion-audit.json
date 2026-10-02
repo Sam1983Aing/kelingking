@@ -1,0 +1,22 @@
+[
+  {
+    "camera": "beach",
+    "samples": 73,
+    "frames": 433,
+    "finiteValuesCompared": 467354,
+    "changedValues": 0,
+    "maxDelta": 0,
+    "nullMismatch": 0,
+    "console": []
+  },
+  {
+    "camera": "stairs",
+    "samples": 73,
+    "frames": 433,
+    "finiteValuesCompared": 466622,
+    "changedValues": 0,
+    "maxDelta": 0,
+    "nullMismatch": 0,
+    "console": []
+  }
+]

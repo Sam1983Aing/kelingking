@@ -1,3 +1,4 @@
+import { sandRelief } from './sand-relief.js';
 // Builds the Kelingking heightfield from the OSM outlines (geo.js) and the hand-tuned
 // shape (layout.js). Pure data in, typed arrays out, so it runs in the page or in node.
 //
@@ -207,7 +208,12 @@ export function makeHeightAt(f, layout, noise) {
       // steepest at the bottom), so the top edge is rounded, not a rim.
       const rise = 1 - (1 - Math.min(dc / 14, 1)) ** 2;
       const h = islet.h * (sheer * rise + (1 - sheer) * crown);
-      return h + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
+      // The small islet has a high, uneven crest instead of a level green lid. Keep the
+      // shoreline fixed and ease the shoulder down toward the far exposed face.
+      const shoulder = islet.summit
+        ? 1 - islet.crownDrop * smooth(11, 44, Math.hypot(x - islet.summit[0], y - islet.summit[1])) * smooth(7, 23, dc)
+        : 1;
+      return h * shoulder + noise(x * 0.05, y * 0.05) * 1.5 * smooth(0, 8, dc);
     }
 
     const top = at(f.TOP);
@@ -222,7 +228,10 @@ export function makeHeightAt(f, layout, noise) {
     let faceC = face, pfC = pf;
     const wb = f.WB ? at(f.WB) * sandW : 0;
     if (wb > 0) {
-      const db = at(f.DB) + noise(x / 9 + 7, y / 9 - 2) * 1.2;
+      // The wall toe undulates in broad sections. Metre-scale displacement here used to
+      // make isolated pointed fans of sand where adjacent face columns met the beach.
+      const db = at(f.DB) + noise(x / 24 + 7, y / 24 - 2) * 0.65
+                 + noise(x / 8 - 4, y / 8 + 5) * 0.22;
       faceC = lerp(face, Math.max(-dk - db, 3), wb);
       pfC = lerp(pf, Math.min(pf, beach.backProfile), wb);
     }
@@ -238,8 +247,14 @@ export function makeHeightAt(f, layout, noise) {
       // The beach face: steep up to the berm (the highest the swash usually runs), then a
       // gentler rise behind it to the top of the beach.
       const hb = Math.min(beach.berm, btop), xs = Math.max(dc + s, 0);
-      const sand = hb * (1 - Math.exp(-xs / beach.face)) + (btop - hb) * (1 - Math.exp(-xs / beach.spread));
-      cove = Math.max(cove, sand);
+      const sandLevel = hb * (1 - Math.exp(-xs / beach.face)) + (btop - hb) * (1 - Math.exp(-xs / beach.spread));
+      const sand = sandLevel + (sandW > 0 && cove < sandLevel + 1 ? sandRelief(x, y, sandLevel) : 0);
+      // A thin accumulation of sand rounds the toe of the wall. A hard maximum makes the
+      // beach intersect the limestone at a sharp, faceted crease when the grid and face
+      // strip sample it at different positions. Keep this within ~20 cm of the old profile.
+      const toeBlend = 0.8 * wb;
+      const gap = Math.abs(cove - sand);
+      cove = Math.max(cove, sand) + Math.max(toeBlend - gap, 0) ** 2 / Math.max(4 * toeBlend, 1e-6);
       return Math.min(lerp(rock, cove, sandW), (dc + s) * 40); // meet the water
     };
     // Rims and the feet of the walls are creases in that profile. Averaged over a couple

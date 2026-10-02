@@ -19,6 +19,27 @@ version. A session works on its element only, and goes deep on it.
 | v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | done, tag `v11` |
 | v12 | The breaking wave, and the clouds (Sam's notes after v11) | [v12-surf.md](v12-surf.md) | done, tag `v12` |
 | v13 | The dirt steps and the bamboo handrail (Sam's notes after v12) | [v13-stairs.md](v13-stairs.md) | done, tag `v13` |
+| v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | in progress |
+| v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | in progress |
+| v16 | Batu Satu shape and greenery | [v16-islet-shape-greenery.md](v16-islet-shape-greenery.md) | in progress |
+| v17 | More natural clouds | [v17-cloud-realism.md](v17-cloud-realism.md) | in progress |
+| v18 | Natural shore break | [v18-shore-wave-rebuild.md](v18-shore-wave-rebuild.md) | in progress |
+| v19 | Stair path and blue rail lashings | [v19-stair-path-rail.md](v19-stair-path-rail.md) | in progress |
+| v20 | Last bamboo joints and beach sand | [v20-last-rail-sand.md](v20-last-rail-sand.md) | in progress |
+| v21 | Cliff foot and sand contact | [v21-cliff-foot.md](v21-cliff-foot.md) | in progress |
+| v22 | Continuous lower cliff and beach junction | [v22-cliff-junction.md](v22-cliff-junction.md) | in progress |
+| v23 | Clouds, clifftop platform, persistent grass and attached blue cord | [v23-cloud-detail.md](v23-cloud-detail.md) | ready for review |
+| v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | ready for review |
+| v25 | Curved cliff toes and beach relief | [v25-cliff-sand-polish.md](v25-cliff-sand-polish.md) | ready for review |
+| v26 | Continuous swell, falling lip and whitewater | [v26-wave-continuity.md](v26-wave-continuity.md) | ready for review; water-level performance exception |
+| v27 | Right beach wall foot and rock weathering | [v27-right-cliff-foot.md](v27-right-cliff-foot.md) | ready for review |
+| v28 | Natural beach sand texture and surface relief | [v28-natural-sand.md](v28-natural-sand.md) | ready for review |
+| v29 | Lower cliff texture and seamless sand contact | [v29-cliff-contact.md](v29-cliff-contact.md) | ready for review |
+| v30 | Final water texture and continuous wave polish | [v30-water-polish.md](v30-water-polish.md) | ready for review |
+| v31 | Beach camera and selectable time of day | [v31-beach-camera-light.md](v31-beach-camera-light.md) | ready for review |
+| v32 | Clean foliage edges and pixelation | [v32-foliage-edge-cleanup.md](v32-foliage-edge-cleanup.md) | ready for review |
+| v33 | Correct the artificial cliff shadow line | [v33-cliff-line.md](v33-cliff-line.md) | ready for review |
+| v34 | Remove remaining foliage coverage patterns | [v34-foliage-coverage.md](v34-foliage-coverage.md) | ready for review |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the
@@ -35,8 +56,8 @@ Open a new chat in this folder and paste (with the version you want):
 
 > Read docs/versions/README.md and docs/versions/v11-speed.md, then start v11.
 
-v11 was the last version planned. A v12 needs a brief first: copy the shape of the others
-(the goal, what to judge it against, and a "Found by other versions" section).
+For any new version, write a brief first: copy the shape of the others (the goal, what to
+judge it against, and a "Found by other versions" section).
 
 ## Rules for every version
 
@@ -115,7 +136,10 @@ node tools/capture.mjs viewpoint --set="hour=17"     # any page switch, ; betwee
 node tools/capture.mjs viewpoint --eval="expr"       # read from the page (a PNG data URL is saved)
 node tools/hero.mjs v2                               # finish a version
 node tools/ab.mjs beach --rounds=16                  # this build against the previous tag, side by side
+node tools/hero.mjs v15 --url=http://localhost:5180/ # target a separate worktree preview
+node tools/ab.mjs --hero --url=http://localhost:5180/ # pair that preview with an older build
 node tools/parts.mjs beach --parts=none,SKIP_SANDNEAR,WSKIP_SWASH   # what parts of a frame cost
+node tools/wave-cycle.mjs wave-stairs clip 13 18 http://localhost:5183/ stairs # fixed-clock swell → impact → foam
 node tools/capture.mjs cove --console                # print the page's shader errors and warnings
 node tools/capture.mjs cove --set="w.surge=0.8"      # water (w.), wave spectrum (o.), foam sim (s.) settings
 node tools/preview-height.mjs 1024                   # top-down shaded height map

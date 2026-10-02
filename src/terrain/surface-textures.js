@@ -3,13 +3,10 @@
 
 import * as THREE from 'three';
 import { SURFACES } from './surfaces.js';
-import { trampleNormal } from './trample.js';
 
-// A layer made in code (v10): its normal from the generator, colour and mask flat. Also what a
-// scan that will not load becomes (v11, the standalone file offline): flat, in the scan's own
+// A scan that will not load becomes (v11, the standalone file offline) flat, in the scan's own
 // average colour, so the shader's target / avg still lands on the island's colour.
 function generated(s, kind, size) {
-  if (kind === 'normal' && s.gen === 'trampled') return trampleNormal(size);
   const px = new Uint8Array(size * size * 4);
   const v = kind === 'mask' ? [235, 255, 0, 255] : kind === 'color' && s.avg ? [...s.avg.map((c) => Math.round(c * 255)), 255] : [128, 128, 128, 255];
   for (let i = 0; i < px.length; i += 4) px.set(v, i);

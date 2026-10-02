@@ -2212,3 +2212,1100 @@ table in the gallery, which times the two builds minutes apart, said trailTop +7
 - The lower rail's lashing at a post where the lanes swap: the cord of the outer lane is
   only the spiral on its own rail.
 - The bamboo's nodes are shaded, not modelled: seen edge on, a pole is a clean cylinder.
+
+## v14: the T-Rex head silhouette (2026-09-28)
+
+Sam's landing-page screenshot showed the head as a rounded block from the clifftop. His
+reference screenshots show a pointed crown, a brow that holds its height before the vertical
+sea face, and a lower, separate beak over the beach arch. This pass changed shape only.
+
+### What changed
+
+- The distal spine in `layout.js` has a sharper cross-section. Its crown peaks just behind
+  the sea face and the outer ridge falls away less abruptly. A first pass held the outer brow
+  too high; the viewpoint outline caught it, so its last two heights came back down.
+- The jaw spur is narrower and tapers toward the beach. The old five-metre face width made
+  its green ridge drop almost vertically into the same pale wall as the head. A 24 m face
+  profile, centered on the jaw tip, lets that ridge descend into a distinct triangular beak
+  while leaving the main head's sea face sheer. The first, broader jaw profile pulled the
+  beach overhang into a blocky cone. Confining it to a 20 m radius restored the cave.
+- The revised layout is included in the 1024 terrain bake.
+
+### How it was judged
+
+`viewpoint` was rendered beside and outlined over `viewpoint-midday-a.jpg`. The top-down
+`overview` outline checks the land and beach footprint, while `stairs` and `sideFromSea`
+check that the edit still reads from the other cameras. The reference photographs stayed
+local and are not part of the gallery or the commit.
+
+### Speed
+
+With the final v13 merge as the base and the jaw's profile confined to its tip, the paired
+`ab.mjs --hero --a=v13 --rounds=8` run completed all nine views: overview 0%, viewpoint
++3%, stairs +6%, trailTop -3%, trailLow +2%, beach 0%, swash -3%, shoreBreak -2%, and
+sideFromSea +1%. All are within the 10% frame budget. `hero.mjs v14` refreshed the gallery
+but its second swash timing page did not become ready within two minutes, so that sequence
+stopped before writing its table. A separate swash timing retry loaded normally. The gallery
+uses its one complete timed round for absolute milliseconds and the paired run for changes.
+
+### Still weak
+
+The photographed head has much denser fine vegetation on its sloping jaw than this render.
+The material and vegetation were intentionally outside this shape pass. The background
+sea-facing wall also remains paler and flatter than the reference at the stairs camera.
+
+## v15: continuous breaking wave and shore foam (2026-09-28)
+
+Sam asked for a smoother, more convincing shore break after the head pass. The opening of his
+linked demo supplied the motion cue: a broad crest runs toward reflective shallow sand and
+leaves an uneven lacy edge. The local Kelingking beach photographs remain the place and scale
+reference.
+
+### What changed
+
+- The breaker keeps its open incoming face longer and pitches its lip through a smaller arc.
+  Broad variation along the cove makes different parts of the lip spill at slightly different
+  stages, and small changes along its foot soften the previously straight mesh intersection.
+- The broad white strip on the early crest came from the breaker's lip rim, as a temporary
+  foam-mask diagnostic showed. Narrowing that rim revealed the translucent face before the
+  lip lands. Its whitewater now grows from broken billows as the lip falls, leaving pockets
+  of water between them instead of covering the face as one slab.
+- The breaker's foot and visible edge now share an irregular profile, so the edge follows
+  the same place where the mesh submerges into the sea. Extending the sea's lace pattern up
+  the face produced large cell outlines in the close camera and was discarded.
+- The uprush receives a softer, scalloped foam front. Bubble cover thins into patches on the
+  sand, with the simulation leaving less opaque foam at the leading edge. The wave then
+  retreats and the next crest follows in the same cycle.
+- `ab.mjs` and `hero.mjs` accept `--url` so a managed worktree preview can be measured and
+  rendered from its own server.
+
+### How it was judged
+
+The `shoreBreak` and `swash` cameras were captured before and after the change. A ten-second
+`swash` clip from 18 s shows the breaker arriving, spreading up the sand, draining away and
+the next crest forming; the later preview used a 1280 px, 15 fps capture after a 2048-quality
+Chrome preview timed out. An eight-second `shoreBreak` clip checks the steepening face, the
+lip landing, and the handoff to the sea. The `viewpoint` and `overview` outline captures keep
+the v14 headland silhouette. The terrain bake is up to date. The standalone HTML was rebuilt
+without fetching assets and loaded with the network disabled, with no console errors.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=735a8a6 --rounds=8` comparison against the v14 head
+checkpoint reports overview +2%, stairs +4%, trailTop +2%, trailLow -1%, beach 0%, swash
+-5%, shoreBreak -10%, and sideFromSea 0%. The viewpoint first read +21% with a wide spread;
+24 alternating rounds put it at +2%. All nine views are within the 10% frame budget.
+`hero.mjs v15 --prev=v14 --url=http://localhost:5180/` rendered all nine final frames and
+the local photo comparisons. v14 has no tag yet, so the gallery shows absolute timings; the
+paired check above supplies the before-and-after budget measurement.
+
+### Still weak
+
+From the close `shoreBreak` camera, the clear face remains unusually smooth and the splash
+has less fine spray than the photograph. A bright boundary is still visible where the breaker
+returns to the sea at some stages. The sharp tan triangle visible through the shallows
+is a terrain or sand material feature: hiding water leaves it in place. It is recorded in the
+v5 sand brief and remains outside this wave pass.
+
+## v16: Batu Satu shape and greenery (2026-09-28)
+
+Sam's close screenshot showed the little offshore rock as a peaked, uneven mass with green
+running down its left shoulder and a layered pale face on its right. In v15 it read as a
+mostly level green cap over a bare cylinder.
+
+### What changed
+
+- The first islet alone has a less sheer south-east shoulder, a more sheer north-west face,
+  and an off-centre crest. Its summit is slightly higher to better meet the viewpoint
+  photo's outline; its mapped shoreline stays fixed.
+- A restrained, irregular ground-cover layer continues down that shoulder between the
+  existing face shrubs. It fades before the wave-cut foot and does not paint over the pale
+  limestone wall. The 1024 terrain bake includes the new shape.
+
+### How it was judged
+
+The clifftop and overview shots were checked with `--outline` against the local reference
+photos, and the clifftop was compared with Sam's tighter islet screenshot. The new peak
+lands close to the photo's summit height, although the model's footprint is slightly
+narrower in the clifftop photo. An early attempt to scatter extra face shrubs changed the
+shared random stream and placed unrelated plants elsewhere in the scene; that attempt was
+removed. The final cover uses the existing vegetation material and local islet coordinates.
+`hero.mjs v16` rendered all nine frames and local photo comparisons. The bake check passed;
+the rebuilt standalone generated terrain offline and loaded without console errors.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=f64598a --rounds=8` run was within the 10% budget on
+overview (-2%), viewpoint (-1%), stairs (-13%), trailLow (+4%), beach (+3%), swash (+2%)
+and sideFromSea (-8%). TrailTop first rounded to +10% and a steadier 18-round repeat read
++1%. ShoreBreak first read +31% with a wide spread even though this islet is out of frame;
+a 24-round repeat read 0%. These paired checks are more useful than separate absolute
+`hero.mjs` frame times while background GPU load changes.
+
+### Still weak
+
+The source image has a more continuous mix of low foliage and limestone across the small
+rock's face than the distant procedural scrub can fully reproduce. The islet's plan-view
+outline comes from OSM and remains a little narrow in the clifftop photo.
+
+## v17: more natural clouds (2026-09-28)
+
+The v16 sky had a large, slab-like cloud near the east-cove lens and white flecks along the
+clifftop horizon. The reference photos have broad clear intervals, a partial cumulus at the
+edge of the east view, and subdued distant clouds. The first still-image pass fixed the east
+view but missed two oversized clouds directly over the ridge path; watching the scroll exposed
+them. The trail photo is mostly clear, with cloud only at the far left edge.
+
+### What changed
+
+- The weather field is sparser and uses a seed that leaves a clear band over the sea. The
+  authored cumulus east of the island has a narrower footprint and stays near the photo's
+  left edge. A southwest clearing is shaped in the weather texture itself, so the sky and
+  the cloud shadows use the same field as the camera travels down the trail.
+- The cloud base varies across broad billows rather than sitting on a uniformly straight
+  slab. Medium-distance edge detail survives farther from the camera; tiny puffs fade before
+  becoming hard white pixels. Distant coverage tapers into haze.
+- The high veil has less directional stretch and a softer, more visible broken pattern.
+
+### How it was judged
+
+The `eastCove`, `sideFromSea`, `viewpoint`, and `trailTop` cameras were rendered beside their
+local reference photos. The scrolling page was also walked from the aerial opening to the
+ridge. The first seed and coverage alone still produced a pair of cotton-like clouds over
+the path; putting the southwest clear interval into the weather map removed them without
+changing the east-cove cloud or separating cloud shadows from visible clouds.
+
+`hero.mjs v17` refreshed all nine hero frames and local photo comparisons. The final bake
+check passed, and the rebuilt standalone loaded offline without console errors. The cloud
+pass alone measured 1.17 ms in `eastCove` and 0.86 ms in `viewpoint` in a short local run;
+whole-frame times vary substantially with other GPU work.
+
+### Speed
+
+The final paired `ab.mjs --hero --a=b74593f --rounds=8` run had three noisy readings:
+overview +10%, stairs +12%, and sideFromSea +14%. A 20-round repeat of those cameras
+settled at +1%, +3%, and -1%. The other hero frames were within the 10% budget; trailTop
+and trailLow, the views most affected by the southwest clearing, read -3% each in the
+eight-round run.
+
+### Still weak
+
+The partial cloud in the east view remains more rounded and shaded than the wind-sheared
+white edge in the photo. The thin high veil is procedural and can read as streaks at certain
+angles. Cloud movement remains slow, matching the trade-wind speed set by the scene.
+
+## v18: natural shore break (2026-09-28)
+
+Sam found the first moments of the beach break unnatural from both the beach and the
+aerial scroll. The v17 cross-section curled into a long, uniform blue tube, then handed
+off to a broad white stripe. The water colour and small surface detail were already in
+the right direction, so this version changes the geometry and foam's large-scale birth.
+
+### What changed
+
+- The breaking ribbon now throws a thin spilling lip down an open sloping face instead
+  of forming an elliptical hollow tube. Its shape develops more gradually along the
+  crest; the approaching face is a little broader before the lip forms.
+- Fresh foam begins as the lip lands. Gaps in its source vary with the wave, and the
+  source is less intense. The existing foam simulation still carries those patches
+  toward shore and draws the same fine bubble texture; the shader no longer fills
+  peak-density foam with a solid white override.
+
+### How it was judged
+
+Matched five-second `shoreBreak` clips from v17 and v18, both from 16 s on the sea clock,
+show the old dark tube holding its shape before collapse. The v18 crest spills sooner
+and the new white water separates into smaller patches. The five-second `swash` clip
+shows the wash continuing onto and off the sand. The `shoreBreak`, `swash`, `beach` and
+`surfTop` still cameras compiled without console errors. Two attempts to straighten the
+whole cove wavefront were removed: an incoming phase skew caused a large white sweep on
+the sand, while a smoothed shore-distance field and run-end taper had little visible
+effect on the aerial corner.
+
+### Speed
+
+An alternating eight-round check against v17 commit `80b450a` measured `shoreBreak`
+at -12%, `swash` at +6%, `beach` at -6% and `viewpoint` at -3%. The spread varied with
+GPU load; all four median results are within the 10% frame budget. A full nine-view
+eight-round pass also stayed within budget except `trailLow` at +13%. A focused
+20-round repeat of that view measured +1%, so the isolated overage was not stable.
+The gallery records the paired results.
+
+### 2026-09-29: the break spreading sideways
+
+Sam liked the approaching crest from the beach scroll, but the left and right sections
+seemed to break on a different beat. The ribbon had its own alongshore stage offset of
+up to 0.30 while the sea foam and spray used `surfAt`'s unshifted stage. That could put
+the lip roughly three quarters of a second ahead of its white water at one end. The
+ribbon now uses the same stage as the sea, foam and spray. A smaller broad peel uses the
+crest's existing wave-specific wobble inside `surfAt`, so all four effects move together.
+The ribbon's direction also blends toward the smoothed waterline normal where the
+distance field fans around the headland. Landing spray is shorter, lower and less opaque;
+the old tall puffs looked detached from the moving break.
+
+Matched 9.1-second clips at the sand chapter's scroll camera (`tau` about 4.05) show one
+wave cycle before and after these edits. Five-second fixed `shoreBreak` and `swash`
+clips check the eye-level collapse and runup. The captured clips are local under
+`captures/v18-feedback-*` and are not committed. The existing water colour and fine
+surface texture were left alone.
+
+An alternating eight-round, nine-camera frame check against the first v18 commit
+`1092e1a` put every median change between -1% and +4%. The beach frame was +1%,
+swash -1%, and shoreBreak +2%, within the 10% frame budget.
+
+The 4 m beach camera exposed two further edge problems. The large diagonal lobe at the
+left remained when the breaker mesh was hidden: the shore-distance field folds round
+the rock, and a crest could cross that fold twice. A local, seaward-offset guide now
+sets only the incoming wave's phase across the south end of the cove. It fades out
+before the waterline, so depth, breaking strength and the swash still use the real
+shore distance. The column-by-column ribbon then grows from a small fold while the
+heightfield gradually hands over its crest, instead of exposing a full-height lip in
+the first metre of the peel.
+
+On the right, thin white hooks stayed visible with both spray and ribbon hidden and
+disappeared when the foam simulation was disabled. Older simulated foam is now
+thinned on the rising face; the direct fresh break and the simulation's sediment and
+flow are still present. A matched nine-second capture at the sand chapter now shows
+the left crest forming without the diagonal lobe, with a smoother spreading lip and
+no tall foam hooks on the right. The fixed clip is `captures/v18-feedback-final-wave.mp4`.
+The final alternating eight-round check against `1092e1a` kept all nine hero cameras
+within the 10% frame budget: paired changes ranged from -3% to +7% (`beach` +5%,
+`swash` -3%, `shoreBreak` +1%).
+
+### Still weak
+
+The wave remains a procedural surf model rather than a fluid simulation, and the
+collapse can still read as a bright strip from some aerial moments. The old tan sand
+triangle, visible with water hidden, remains the separate terrain/material issue
+recorded under v5.
+## v19: the stair path and blue rail lashings (2026-09-29)
+
+Sam showed a close frame of the lower steps: the blue cord read as separate decorative loops,
+and the stone path and first stair flight were too straight and clean. His photos show a wider,
+weathered concrete start, then a narrow brown-earth route with uneven log risers, stones,
+and grasses cutting into the margins. A close photo from [Let's Venture Out](https://www.letsventureout.com/kelingking-beach-hike-nusa-penida/)
+shows the blue twine gripping intersecting poles with diagonal strands and small ends.
+
+### What changed
+
+- The paved flight starts about 1.85 m wide and tapers toward the 1.3 m ridge path. Its
+  treads have modestly varied going and rise, rounded damage at some corners, settled top
+  surfaces, and shorter exposed side walls. The concrete scan is darker, with broad dirt
+  staining and a different weathering value for each tread instead of uniformly white
+  aggregate. More corners break away than in v18, but the central walking line stays intact.
+- The dirt track drifts slightly within the mapped route and gets shallow foot ruts, uneven
+  verge reach, and patches of packed brown earth among the exposed limestone grit. It keeps
+  its rounded nosings, heaped riser feet, and scattered logs from v13.
+- Each bamboo rail end now has thin cord wrapping the post and rail, with two taut crossing
+  strands over the actual interface. Both overlapping rail lanes have a post connection.
+  The knot is compact, the tail is 2–4 cm, and the blue and bamboo colours are weathered.
+  The old 7.5 cm arched ends are gone. The near-only lashing cull still keeps the rope cost
+  out of distant hero views.
+
+### Checks
+
+Close contact sheets at four paved positions and four lower trail positions were compared
+against the supplied photos. The terrain bake was rebuilt for the normal preview. All nine
+hero frames rendered with zero console messages. Side-by-side timing against v18 commit
+`11eabdd`, six rounds of six frames, came in between -6% and +3%; every hero view stays
+within the 10% budget. The local standalone also loaded offline with no console errors,
+generating its own terrain. The dark terrain patch beside the top stairs is present in the
+v18 baseline contact sheet as well; this pass does not change that terrain surface.
+
+## v20: final blue ties and sparse beach prints (2026-09-29)
+
+Sam's last-stair closeups exposed a blue oval apparently hovering beside the bamboo post.
+The original crossing strands made the projected loop, and the high upper rail allowed a
+band to silhouette above the angled post cut near the beach. The cord now makes two short,
+taut bridges between the post and snug rail turns. Over the final 20 m the upper rail eases
+down 14 cm, and a broken stump carries a rail only when its cut leaves enough room for the
+tie. Earlier stairs retain their layout.
+
+The six-metre normal tile had repeated hundreds of overlapping footprints over the dry
+beach. Five world-space walking lines now place alternating prints with varying stride,
+size and lateral drift. The dry sand scan stays, with a little fine colour and roughness
+variation at eye height. Removing the unused print texture also avoids its load-time
+generation and texture-array layer.
+
+Four close rail views from both sides and scroll stills at the last stairs and sand were
+checked against Sam's screenshots. The bake was rebuilt and checked. All nine hero views
+rendered without console messages; the standalone opened offline without errors. A paired
+16-round beach timing check against `a245aee` measured +3% median, below the 10% frame
+limit. The v20 gallery holds the close rail and sand views.
+
+## v21: cliff foot and sand contact (2026-09-29)
+
+Sam's beach and last-stair frames showed pale sand climbing the limestone in sharp wedges,
+and a row of disconnected-looking rock triangles several metres in front of the wall. The
+view from above also showed the south-end overhang breaking into stretched tan fins.
+
+The traced beach wall now varies over broader distances, and the heightfield softly joins
+the sand profile to the rock toe within about 20 cm of its previous height. The south-end
+cave retains its lip but has a shallower, shorter recess. On the beach, the flat ground grid
+now owns the floor while the face strip fades under it; the strip takes over as the wall
+rises. The contact material keeps sand off steep triangles, lowers the painted sand bank,
+and gives the toe a restrained dusty tint with scattered limestone chips rather than a
+uniform field of bright pebbles. Ground-cover paint fades from the low beach wall.
+
+The close camera at the last stair, the broad beach camera and overhead views were checked
+in clay and finished lighting. The long exposed strip on the sand is no longer visible;
+some attached limestone rubble remains at the base. The revised cave reads more clearly
+from the beach, with the headland silhouette preserved.
+
+All nine hero frames rendered without console messages. The viewpoint and overview outline
+checks showed no new silhouette change. Alternating performance checks against the previous
+`b3d3c8c` checkpoint kept eight hero views between -4% and +1%; a 20-round repeat of the
+noisy stair result measured +2%. The bake is current, and the local standalone opened
+offline with no console errors. The v21 gallery includes close and overhead contact sheets.
+
+## v22: continuous lower cliff and beach junction (2026-09-29)
+
+Sam's next screenshots showed that v21 still left a blue sawtooth band beneath the beach
+overhang and a broad faceted limestone apron beside the sand. Rendering the ground grid
+and the cliff strips separately traced the teeth to partially covered grid cells crossing
+the recessed cliff face. Concave corners also shortened some face profiles above beach
+height; using that first height as the cliff foot lifted their undercuts into hanging shelves.
+
+The sand floor is now evaluated independently of the uncarved cliff ramp and continues
+beneath the cave. Rising grid cells covered by a beach wall are replaced with shared floor
+vertices; the submerged beach retains its sloping seabed. The rock strip is seated below
+that floor, rather than carrying a second sand-painted surface across it. Lower strip rows
+join by physical elevation and their positions are smoothed across neighbouring columns,
+with the buried toe retained. Short profiles find the actual beach foot outside their window
+before carving.
+
+Walking-height views now show a continuous lower wall instead of the blue triangular comb,
+and the near wall meets the beach without the detached pale apron. The inspection includes
+both ends of the cove and the same contact from the trail above. Small geological ledges
+remain, and the last stair's cut bank is retained around the walking route.
+
+The preview mesh has 1,202,293 vertices and 1,175,130 triangles (+1.0% and +0.4% against
+v21). The bake is 13.35 MB compressed; its round trip has at most 12.2 mm position error
+and exact indices. The local standalone was rebuilt from the same source.
+
+All nine final hero frames rendered without console messages. The viewpoint and overview
+outline captures were generated, but the local reference photos were unavailable; the
+established silhouette was checked against the stored v21 renders instead. Eight alternating
+rounds of six full frames against `e03424b` measured median paired changes between -5% and
++5%, within the 10% limit at every hero camera. The v22 gallery records those timings.
+The rebuilt local standalone opened offline with generated terrain and no console errors;
+four scroll stops were captured, including the beach chapter.
+
+
+## v23: connected blue cord, persistent grass and cloud detail (2026-09-30)
+
+Sam accepted the larger cloud shapes but showed blurry edges and separate white dots. During
+this pass he also reported a black platform at the clifftop, sparse vegetation from above,
+and blue cord that appeared detached from the stair rails. These additions are recorded in
+the same brief.
+
+### Blue cord and wood contact
+
+The previous outer rail lane was offset from its post, and a generic lashing did not follow
+the poles’ bowed, tapered surfaces. Adjacent rail spans now alternate vertically against
+the same post side. A shared bamboo cross-section function matches their rendered shape.
+Joint descriptors identify the actual wood pair and contact heights. Their cord follows the
+combined cross section, with two winding families, short leads into a compact locking knot,
+and short gravity tails. The shader resolves braided carriers, fine fibres, subtle relief,
+blue fading and roughness. Every one of 502 wood interfaces has about 0.5 mm of seating;
+the measured range is -0.516 to -0.485 mm.
+
+Full rope geometry initially added too much work. A shared vertex pool now submits nearby
+joints in one draw call, with coarser ring indices beyond arm’s length and a distant fade.
+Both sides, the lowest landing and the final scrolling descent were reviewed. The walking
+path and irregular treads remain as they were. At extreme macro distance the bamboo still
+reads as procedural; the cord texture is generated rather than scanned.
+
+### Clouds, platform and vegetation
+
+Clouds now resolve at three quarters of the drawing buffer, capped at 1920 px. Bounded
+cubic temporal reconstruction refreshes detail sooner during motion. Small cloud bodies
+retain their parent height and receive a continuous density core instead of isolated bright
+sites. Secondary billows and internal light contrast retain the accepted larger shapes.
+An early opaque-fleck filter also affected thin cirrus and produced visible contours; its
+support filter is now blended only into opaque cloud pixels. Fine outside wisps stay soft.
+
+The black clifftop patch came from marking the concrete platform as a stair tread: zero
+riser distance removed sunlight across the whole pad. It now has its own concrete face tag,
+verified at five adjacent actual scroll positions, including tau 1.012.
+
+Grass had no distant representation and only occupied a 22 m route corridor. Its existing
+43,365 positions are retained, with matched distant impostors and 5,927 extra seeded tussocks
+in open headland ground. Path clearances, bare rock and sand are excluded. The first grass
+impostor shader exceeded the frame budget at trailTop; averaging its matte blades instead
+of applying a costly single-leaf sky reflection brought that view back under the limit.
+
+### Checks
+
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against `6463322` measured paired median changes from -7.9% to
++7.1%; all pass the 10% limit. After the final knot leads were added, a sixteen-round
+trailLow repeat measured +1.5% (middle half +0.3% to +5.1%). Moving-cloud comparisons measured
++4.8% for the large-cloud view and -3.2% for the horizon. Timings and images are in v23’s
+gallery, with a 4.8 s clip of the final stairs retained locally for review.
+
+The 13.38 MB terrain bake is current. The headland’s decoded positions, normals and triangle
+indices are unchanged from v22. The local reference photographs were unavailable, so shape
+verification uses numerical identity and stored v22 renders, with no new photo-match claim.
+No assets were downloaded. The local standalone was rebuilt and loaded with network access
+blocked; it generated terrain and reached four scroll stops with no console errors.
+
+
+## v24: solid supporting terrain beside the stairs (2026-09-30)
+
+Sam showed a see-through opening beside the lower stairs at roughly 28 m elevation.
+The terrain material was already opaque and double-sided. The defect came from the v22
+beach-floor pass: it lowered the grid outside the narrow 2–5 m trail carving mask while
+face-strip windows stopped short of the walking bank. Rock stayed above the lowered grid,
+exposing the distant cliff and water beneath its edge.
+
+Beach-floor lowering and rising-cell replacement now preserve the complete authored bank
+reach plus mesh overlap (10 m from the route, transitioning into the floor over 6 m).
+This follows the whole route and leaves the beach recess intact. The screenshot location
+was reproduced at tau 3.665, height 28.03 m, then checked with and without vegetation.
+A ray through the opening previously struck distant rock at 27.77 m; it now strikes the
+supporting bank at 3.56 m. Five neighbouring rays also hit the near ground.
+
+38 plant-free clay views cover the walking descent from tau 1.0 through 4.2, including
+±35° head turns at seven lower-stair positions. No remaining see-through openings were
+observed in those views. A 4.8 s actual scrolling clip includes a 25° turn through the
+reported area. The gallery records before/after renders, both inspection sheets and
+stills from that clip. The clip remains local in captures/v24-closure-motion.mp4.
+
+The heightfield, 141,677 authored face-strip vertices, vegetation arrays, route line and
+stair mesh arrays are identical to v23. Only 973 grid vertices change by more than 25 mm,
+within the lower stair-bank region below 48.3 m. The mesh has 1,202,066 vertices and
+1,175,084 triangles, 227 and 46 fewer respectively. Shape verification uses those numeric
+checks and stored v23 renders: local reference photographs remain unavailable.
+
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against v23 checkpoint bfafc01 measured paired median changes
+from -6.5% to +7.2%; every hero camera passes the 10% limit. Raw timing ratios and
+middle-half ranges are in docs/gallery/v24/bench.json. The 13.38 MB bake is current, with
+exact triangle indices and at most 12.2 mm position error after packing. The local
+standalone was rebuilt; with the network blocked it generated terrain, reached four
+scroll stops and produced no console errors.
+
+
+## v25: curved cliff toes and beach relief (2026-09-30)
+
+Sam accepted the blue cord and asked for another close pass on the lower cliff: blue
+angular facets, a pale rock apron, straight sand ribbons and flat-looking sand. The four
+supplied screenshots were reproduced with fixed cameras looking into both ends of the
+cove, back up the last stairs and down at the sand.
+
+### Geometry and contact
+
+A shortened cliff profile was still leaving its original grid ramp exposed. Its lower
+carving taper now stays active only near beach level, and the seated profile owns that
+rising surface. The original ramp continues beneath it as beach floor. Lower face
+columns use a wider Gaussian smoothing window, with physical elevation matching and a
+buried toe retained. This removes the pointed fan at the concave corner without changing
+the upper cliff taper.
+
+The v24 supporting bank remains around the higher descent. At beach level the ground
+outside the actual tread can settle into the sand; keeping the entire 10 m bank there
+had left the pale apron and a narrow terrace beside the last steps. A smooth, height-limited
+relaxation removes that low terrace while preserving the higher support.
+
+Only low rising beach-contact cells are subdivided into a 4 by 4 patch. Finite-difference
+normals round the surface. An initial linear boundary with T junctions showed hairline
+seams after the bake quantized positions. The final boundary uses shared vertex indices
+and conforming fans in its coarse neighbours, and keeps clear of floor-cap ownership
+changes. All packed vertices therefore meet at the same position. The mesh increases
+from 1,175,084 to 1,180,372 triangles (+0.45%) and from 1,202,066 to 1,205,421 vertices.
+
+### Sand and light
+
+A shared dry-sand relief function adds broad, shallow wind-sorted drifts, fading out
+before the wet sand. The exposed floor uses the same formula as the heightfield. The
+heightfield changes by at most 16.7 cm. The route's horizontal coordinates, arc length
+and width are identical; its settled elevations change by at most 27.4 mm. The five
+walking lines are unchanged.
+
+The sand shader adds filtered centimetre-scale slope, subtle colour and cavity variation
+above the geometric relief, while reducing the old metre-scale shader lumps. Existing
+CC0 scans remain in use. Deposited sand follows the smooth bank normal; the triangle-slope
+cutoff had painted straight bands on that bank. Beach bounce under low overhangs now reads
+the exposed beach floor instead of the high uncarved ramp. Actual sky-lit shade on rock
+retains its cooler colour.
+
+### Verification
+
+The final 42 textured and plant-free clay views cover tau 3.665–4.3 and head turns up to
+90 degrees in either direction. No new openings or contact seams were observed. The six
+rays through the v24 opening still strike near supporting ground, at 2.89–3.51 m, rather
+than the distant cliff. A 5.3 s scrolling recording crosses the last descent and turns
+60 degrees toward the cove. Fixed-camera before/after images, clay views, audit sheets,
+geometry measurements and motion stills are in the v25 gallery.
+
+A dark rectangle in the first audit was a capture-script defect: a scripted pose change
+had not refreshed the camera-centred ocean wedge. Refreshing the water after each head
+turn removed the rectangle. The corrected audit was then rerun; the production ocean
+was not changed.
+
+Upper-grid positions above 100 m differ by no more than 7.6 mm after packing, below the
+25 mm reporting threshold. Stored overview and viewpoint comparisons retain the outline.
+Reference photographs remain unavailable, so this is a regression comparison, not a new
+photo-match claim. Strong midday light still makes subtle sand drifts less visible when
+looking straight down; their surface slope is clearer at grazing angles.
+
+The terrain bake is current: 13,450,447 bytes, exact triangle indices after packing,
+12.2 mm maximum position error and 1.9 mm maximum height error. No assets were downloaded.
+All nine final hero frames rendered with zero console messages. Twelve alternating rounds
+of eight complete frames against v24 checkpoint 5fa4370 measured median changes from
+-7.3% to +7.9%; every camera passes the 10% limit. The local standalone was rebuilt
+with the final material and opened with network access blocked. It generated terrain,
+reached four scroll stops and produced no console errors.
+
+
+## v26: one continuous incoming wave, falling lip and whitewater (2026-09-30)
+
+Sam accepted the approaching water and asked for a major pass on the crest and break.
+The screenshots showed clear blue sections separating from the incoming wave, followed by
+foam with a different motion. This pass changes only the near-shore wave, lip, impact spray
+and foam transport. The FFT ocean spectrum and accepted scene elements stay intact.
+
+### Geometry and timing
+
+The main surface previously lowered its crest while a separate ribbon rose over it.
+That produced a trench around the ribbon and cut the incoming swell away from its break.
+The swell now remains the solid body beneath a thin forward-pitching lip. A cubic outer
+profile and a short underside take that lip down to its trough, then settle it into a
+lower bore displaced shoreward. The root uses the actual swell crest height, rather than
+an interpolated pair of trough heights. Impact starts around stage 0.76, shared with spray.
+
+The old distance-gradient crest solver could find different waves in neighbouring sections
+at the curved cove end. Five bounded Newton steps now use the wrapped phase gradient of the
+actual incoming swell. The ribbon direction follows that gradient with a small contribution
+from the smoothed waterline normal. This removed both the spatial cracks and the temporal
+jumps in active crest columns.
+
+Foam begins at the spilling crest, spreads down the falling lip and is born at the forward
+landing point. The main surface's old impact source was behind the lip. It now follows the
+same forward offset as the collapsing body. Persistent foam transport and ballistic spray
+use the local wavelength and derivative of the existing irregular wave clock. The foam's
+trail therefore advances with the bore instead of moving at a fixed unrelated speed.
+
+### Iteration and overlap
+
+Early versions raised impact heaps on the rear shoulder, leaving clear polygon-shaped caps
+above the solid crest. The heaps now sit only on the landing water. The root is seated inside
+the swell, and the sheet remains buried until its pitch and aeration are established. This
+removed blue patches at 17 s and a premature dark sliver at 24 s in the close audit. Impact
+foam retains its lace instead of becoming a completely opaque white pane.
+
+Geometry derivatives provide the normal through onset and collapse, with the analytic
+profile tangent smoothing the folded lip. This replaced four extra surf evaluations per
+vertex from an intermediate version. Its ocean slope perturbation uses the same sign as the
+main water. Narrow Gaussian sources also skip insignificant work outside their windows.
+
+### Verification
+
+Matched 18 s recordings, clock 13–31 s at 24 fps, cover incoming waves, peak, fall, impact,
+advancing foam and the next incoming crest from the screenshot's roughly 20 m stair view
+and from 4.8 m above the sand. A 3.5 m close view was inspected at quarter-second intervals.
+Every sample explicitly updates the water after setting the clock before drawing: an early
+capture that only set time had frozen geometry, and was discarded. The final clips and
+one-second contact sheets are in the v26 gallery. The clips are simulation-time recordings,
+not a claim of real-time frame pacing. All three final captures have zero console errors.
+
+Across the matched 73 quarter-second samples, the largest gap between adjacent active
+columns falls from 6.404 to 1.384 m, with gaps over 4 m falling from 19 to zero. The largest
+same-wave column travel between samples falls from 6.000 to 1.457 m; steps over 2 m fall
+from 239 to zero. Wave resets are excluded by the stage criterion. No active column contains
+non-finite data. These are continuity checks, not a physical fluid simulation validation.
+
+All nine final hero frames were rendered. Land-label comparisons at 1400 × 788 with water
+hidden have zero changed pixels at both overview and viewpoint. Local reference photographs
+are unavailable; this verifies regression against v25, with no new photo-match claim.
+The terrain bake remains current. No assets were downloaded. The final local standalone
+contains 55 bundled modules and parses as a classic script. With network access blocked it
+loaded in 22.2 s, generated terrain, rendered all four validation scroll stops and produced
+no console errors.
+
+### Performance and remaining limits
+
+The eight normal overview, trail, beach and swash heroes stay inside the 10% frame-time gate
+against `51e68d3` (paired medians −7.7% to +6.8%, twelve alternating rounds of eight frames).
+The close water-level hero is an explicit realism exception: +131.6%, middle half +90.4%
+to +164.0%, separate medians 9.95 → 25.61 ms. The intact wave body exposes much more of the
+main water shader at this camera. Diagnostics confirmed that restoring the old sink makes it
+cheaper while also restoring the visual defect. A depth prepass did not help; simplifying
+foam detail only recovered part of the cost. The wave and detail are retained, and this
+remaining cost is recorded in the v11 speed brief. Absolute times vary with background load.
+
+This is an authored continuous surf model, not a resolved fluid simulation. The 1.3 m
+water-level camera can enter a tall crest; underwater rendering is outside this pass.
+Verification covers the specified fixed-time range and cameras, not every possible sea state.
+
+
+### v26 review polish: restrain the forming lip (2026-09-30, 18:39 report)
+
+Sam accepts the wave's continuous motion and asks to polish an intermittent bubble-like
+shape near the peeling crest. A matched beach camera at about 4.55 m reproduced it in the
+larger incoming wave around clock 5–8 s. Thinner underside and normal diagnostics did not
+resolve the shape. The actual profile developed its full forward reach while the tip was
+still high, and its penultimate outer control overshot the tip. This made an inflated cap
+and a rounded turnback along the crest.
+
+Forward reach now grows with the squared fall envelope. The penultimate control remains
+behind the tip, keeping all outer horizontal controls in order. At impact stage 0.76 the
+reach and tip height are identical to accepted v26. Only these two profile expressions
+change in production; the same profile also supplies the lip tangent and spray geometry.
+No underside or shading diagnostic was retained. The clock, crest solver, incoming water,
+foam transport and open ocean are unchanged.
+
+Matched 18 s beach recordings at 24 fps, clock 1–19 s, show the refined forming lip and its
+collapse. A second stair cycle at clock 13–31 s and a close quarter-second audit at 1–19 s
+retain the continuous swell, fall and advancing foam. All three captures have zero console
+errors. Across 73 paired beach samples, the crest and stage readbacks match `1e1cc0d` exactly:
+zero changed components, maximum difference zero and no non-finite active columns.
+Comparison clips, frames and measurements are in `docs/gallery/v26/polish/`.
+
+All nine hero views were refreshed with zero console messages. Water-hidden land-label
+masks at overview and viewpoint have zero changed pixels against `1e1cc0d`. References
+remain unavailable, so this checks regression without a new photo-match claim. The terrain
+bake is current. The local standalone was rebuilt with 55 modules, its scripts parse, and
+it passed all four offline scroll stops with zero console errors after loading in 20.3 s.
+No assets were downloaded.
+
+Twelve alternating rounds of eight complete frames against `1e1cc0d` pass all nine paired
+median timing gates, ranging from −3.4% to +5.9%. This polish adds no performance exception.
+The original v25-to-v26 water-level exception above remains. The authored surf and existing
+underwater-camera limits also remain; verification covers the recorded cameras and sea
+state rather than every possible wave.
+
+
+### v27 — Right beach wall foot (2026-09-30, 18:40 report)
+
+Sam reports that the bottom of the right beach wall looks much less natural than the
+left, with an artificial blue stepped region and a broad ochre shelf. Four matched
+beach cameras, with textured and plant-free clay pairs, reproduced the defect.
+Unlit, shadow, sky-horizon and ground-bounce readbacks separated lighting from geometry:
+disabling the sun shadow left the staircase, while the unlit mesh had a continuous curve.
+
+The wall-column lighting pass skipped rows with no outward-projecting overhang. Those
+vertices retained full sky, ground and sun-horizon defaults next to rows with occluded
+cave lighting. Low beach rows now include inward rock above them in the sky horizon and
+receive ground bounce from the actual continuous sand floor past the drip line. The old
+uncarved heightfield toe was several metres above that floor. The correction fades out
+between 18 and 32 m. An intermediate version recomputed open-wall ground values at the
+upper blend edge; the final version preserves the original open defaults there.
+
+The lower right wall uses a world-fixed, softly bounded region for finer surface detail.
+Existing CC0 scans supply 1.83 m bedding and pitted grain up to 1.6 m, retaining pores,
+normal relief, roughness and occlusion. Oversized marble-like crack colour is subdued.
+Ochre weathering follows runoff and individual beds, leaving grey-beige worn patches
+instead of one uniform orange stripe. Triplanar projection and footprint filtering
+keep these details fixed to the rock across head turns. No new textures were downloaded
+or allocated; existing colour maps are 2048², normal/mask maps 1024² with mipmaps and
+anisotropy 8.
+
+### Verification
+
+Final close-up and clay pairs cover the reported beach direction, the opposite cove,
+the formerly stepped recess and the sand contact. All have zero console errors. The
+nine final hero renders also have zero console messages. Camera poses and terrain ray
+readbacks are reproducible with `tools/cliff-foot-review.mjs`; before/after panels and
+measurements are in `docs/gallery/v27/`.
+
+Decoded bake comparisons against accepted checkpoint `e31c8b0` show identical positions,
+normals, indices, heightfield, plants, water and coast data. The mesh remains 1,180,372
+triangles and 1,205,421 vertices. Only 18,133 lighting vertices change; none is above
+32 m. Water-hidden land-label masks at 1400 × 788 have zero changed pixels at overview
+and viewpoint. Local photographs remain unavailable, so these are regression checks
+without a new photo-match claim.
+
+The final terrain bake is current at 13,493,108 bytes. The rebuilt local standalone
+bundles 55 modules and parses as classic scripts. With networking blocked, it loaded
+in 23.7 s, generated terrain and texture fallbacks, and rendered scroll stops 0.3, 1,
+2.6 and 4.6 with zero console errors. The online preview remains the scan-material
+review target. No assets or reference photographs were downloaded or uploaded.
+
+Twelve alternating paired rounds of eight complete frames against `e31c8b0` pass all
+nine hero median timing gates, from −2.5% to +5.3%. This pass adds no performance
+exception; the original v25-to-v26 close water-level exception remains. The original
+curved geometry is retained: this fixes its misleading lighting and refines weathering,
+not a new geological reconstruction. The visibility approximation remains column-based,
+and verification covers the specified cameras rather than every possible view.
+
+
+### v28 — Natural beach sand (2026-09-30, 18:41 report)
+
+Sam reports that the sand feels flat and perfect from the lower stairs and requests a
+pass grounded in real beaches. Browser-viewed sand references showed interrupted,
+curved ripple ridges, quiet patches between deposits and mixed grain sizes. NPS beach
+profile information informed the distinction between dry backshore and smoother packed
+sand beside the swash. No reference images or other assets were downloaded or shipped.
+
+The first shader revision strengthened surface normals and added broader relief, but
+it remained too faint. Shader diagnostics from a close camera confirmed dry sand
+(firm = 0), nonzero surface detail and the actual nearly overhead sun direction. The
+final material combines elongated metre-scale hummocks and hollows with interrupted
+31 cm ripples and shallow micro relief. Ridge shading follows the same profile as its
+normal slope. An intermediate pore tint looked smudged; the final pass reduces it and
+filters it into the middle distance. The second ripple harmonic filters earlier than
+the main ridge, preventing fine stripes from persisting below a pixel.
+
+Existing CC0 sand scans supply grain normals, roughness and occlusion; the dry normal
+is stronger. Sparse 1–3 cm coral/shell chips appear only close enough to resolve them.
+Patterns use world coordinates and a shared deposition field, leaving smoother patches.
+The five walking lines, broad geometric drifts, wet-material transition and accepted
+swash clock remain unchanged. This is material surface relief, not extra granular mesh
+geometry. Existing 2048² colour and 1024² normal/mask arrays with mipmaps and anisotropy 8
+are reused; there are no added texture allocations.
+
+Four matched cameras cover the lower stairs, beach level, a grazing view and close sand.
+A 145-frame, 24 fps approach with a head turn keeps the sea fixed at 17 s for the sand
+review. The inspected approach frames retain world-fixed ridges and quiet deposits.
+These captures and all nine final hero renders have zero console errors. Before/after
+panels, cameras, clip and readbacks are in docs/gallery/v28/. The existing thin blue
+swash-film join visible in the grazing camera is recorded in the v26 water brief.
+
+Water-hidden land-label masks at overview and viewpoint (1400 × 788) have zero changed
+pixels against 7ca785b. Geometry, scatter, coast, wave solver and bake are unchanged;
+the bake check passes. Local photo references remain unavailable, so the outline check
+is a regression check without a new photo-match claim. The local standalone was rebuilt
+with 55 modules and its inline scripts compile as classic scripts. With networking
+blocked, it loaded in 23.0 s, generated its terrain/texture fallbacks and rendered four
+scroll stops with zero console errors. The online preview is the scan-material target.
+
+Twelve alternating paired rounds of eight frames against 7ca785b pass eight heroes.
+Beach was marginally over the gate at +10.14%; the required focused repeat (16 rounds)
+measured −0.28%, with its middle half −9.5% to +6.4%. Both records are retained rather
+than discarding the first. Final paired medians are −6.9% to +4.7% across all nine views.
+No new performance exception is needed; the original v25-to-v26 close water-level cost
+exception remains. The material is an authored approximation, judged from the matched
+cameras and approach, without a claim of perfect photographic realism.
+
+
+### v29 — Lower cliff texture and sand contact (2026-09-30, 21:15 report)
+
+Sam reports a residual odd lower-wall shape in the opposite cove and an unclean sand
+contact beside the last stairs. Five fixed cameras, with textured and plant-free clay
+pairs, reproduce the reported directions and adjacent contacts. Terrain ray readbacks
+identify an exposed original-grid ramp between shortened carved windows; its normals
+and material inputs differ from the strip behind it. Different column start heights
+also leave the isolated ochre fin beside a blue vertical gap. The stair-side edge comes
+from the ground staying recessed where the strip's carving fades out.
+
+The local cove corner now continues from a shared 23 m bedding level into a rounded
+lower recess. The beach floor closes the foreground ramp. At low beach strip ends,
+the ground recession and culling fade with the face carving. A shallow bank follows
+line segments on the final carved toe, rising at most 0.95 m over a three metre shoulder.
+It clears the stair tread and leaves the packed wet sand unchanged. Existing adaptive
+contact refinement supplies the curved shoulder; deposit masks use its final height.
+Weathering now continues through the gully without stamping carving-attribute islands.
+
+Several intermediate approaches were rejected. Extending the profile opened a gully
+hole; widening the smoothing did not remove the underlying overlap. A broad material
+mask painted sand up the wall. The final mask ends within 25 cm of the deposited bank,
+and the ground's recess fade matches the strip. The first gully geometry pass also moved
+buried vertices used to derive the coast map. The final correction is applied after the
+existing smoothing and protects every sea-level crossing triangle. Coast, wave, shoreline
+direction, breaker, rock-site, vegetation, trail and original field arrays now match
+accepted v28 checkpoint `3f1978c` exactly, including non-finite values in breaker data.
+
+### Verification
+
+Five textured/clay pairs, two 73-frame moving-camera tracks at 24 fps, the earlier 28 m
+closure camera, and all nine hero frames have zero console errors. Inspected approach
+frames retain a seated contact without reopening the earlier terrain hole. The closure
+ray still hits terrain 3.161 m away. Reproduction, comparisons, clips and ray evidence
+are in `docs/gallery/v29/`, with `tools/cliff-contact-review.mjs` retaining the poses.
+The sea stays at 17 s while those camera tracks review the geometry.
+
+The mesh adds 17,476 triangles (+1.48%) and 8,814 vertices (+0.73%), for 1,197,848 triangles
+and 1,214,235 vertices. The terrain bake is current at 13,561,329 bytes; round-trip errors
+are at most 12.2 mm for positions and 1.9 mm for field heights, with exact indices and
+water data. The overview land mask differs at one of 505,927 pixels (0.00020%); viewpoint
+has no changed pixels. Reference photos remain unavailable, so this verifies regression
+without a new photographic-match claim.
+
+All nine paired median timing gates pass against `3f1978c`: 12 alternating rounds of
+eight complete frames, −4.0% to +3.8%. There is no new performance exception; the earlier
+v26 close water-level exception remains. The local standalone bundles 55 modules, its
+inline scripts compile as classic scripts, and with networking blocked it loads in 20.1 s.
+All four offline scroll stops (0.3, 1, 2.6, 4.6) render with zero console errors, using
+generated texture fallbacks. The online preview is the scan-material review target.
+ES-module parsing, bake freshness and whitespace checks pass. No downloads or reference
+uploads. The lower geometry and column visibility remain approximations; the check covers
+the specified cameras and approaches rather than a claim of perfect realism everywhere.
+
+
+### v30 — Final water texture and continuous wave polish (2026-09-30)
+
+Sam approves the latest wave's motion and asks for one final texture and smoothness
+pass. Matched beach and lower-stair cycles reproduce a thin blue stripe across the
+shallow wash. Disabling ripple detail does not remove it; disabling the wash does.
+The surface's neighbor slopes omitted the sheet, and its bed map carries a narrow
+shoreline shoulder. The low-variance reflection path also mirrored below-horizon
+facets into the sky, unlike the rough path.
+
+The bore and sheet now join with a smooth maximum over 12 cm, adding at most 3 cm.
+Neighbor samples use the same displaced surface, including the wash. A four metre
+bed-normal filter and small unresolved ripple variance soften the coarse shoulder.
+The low-variance reflection path applies the same horizon mask as the rough path.
+Matched beach frames show the blue stripe replaced by a softer reflective wash.
+A flat wash normal removed the line but looked artificial; a sea-level floor and
+smoothstep height interpolation introduced unwanted edges or a trough. None remains.
+
+Ripple and caustic coordinates now follow the simulation's accumulated transport.
+Instantaneous speed times the absolute clock made them race when the wash slowed or
+reversed. Two fixed-coordinate uprush/backwash fields blend during the turn, avoiding
+a global stretch of the texture. The shared film thickness blends its laws as well;
+its previous centimetre drop at reversal was a separate temporal discontinuity.
+Foam detail fades to its mean before distance cutoffs. Crest feathering uses a soft
+threshold and face foam filters by pixel footprint. Crest solve, lip shape, impact
+timing and spectrum are unchanged; there are no added maps or texture allocations.
+
+### Verification
+
+Two 18-second matched cycles contain 433 frames each at 24 fps. The beach spans 1–19 s,
+the lower stairs 13–31 s, with 73 close review frames from 13–31 s. Inspected sequences
+preserve the translucent wave face, break and foam handoff. All cycles and nine heroes
+have zero console errors. Quarter-second crest-column readbacks compare 933,976 finite
+values against `fe00f69`, with zero changes and matching inactive values. Readbacks,
+clips and visual comparisons are retained in `docs/gallery/v30/`.
+
+A GPU audit of the actual shared GLSL samples the reversal at 0.5 ms intervals for
+three bed heights, runup 1 m and turn time 3.2 s. Maximum adjacent film steps fall
+from 10.04–11.00 mm to 0.0115–0.0348 mm. All data are finite, velocity behavior is
+unchanged, and the final diagnostic compiles without errors.
+
+Twelve alternating paired rounds of eight complete frames pass all nine incremental
+hero limits against `fe00f69`: −2.5% to +7.6%. No new exception; the original v26
+close water-level performance exception remains documented. Water-hidden land masks
+at overview and viewpoint have zero changed pixels at 1400 × 788. Reference photos
+remain unavailable, so this is an accepted-outline regression check.
+
+The terrain bake is current. The local standalone bundles 55 modules and its inline
+scripts compile as classic scripts. Its optional local asset base points to port 5183.
+With networking blocked it loads in 20.7 s and renders four scroll stops (0.3, 1, 2.6,
+4.6) with zero console errors, using generated texture fallbacks. The online preview
+is the material target. ES-module syntax and whitespace checks pass. No asset downloads,
+uploads or publication. The shore wash still has a broad reflective shoulder; water
+and foam are authored approximations verified in the recorded views and cycles.
+
+
+### v31 — Beach camera and selectable time of day (2026-10-01)
+
+Sam asks for a better view after the stairs and morning, noon, evening and night options.
+The previous beach view continued looking down along the walking direction, and dragging
+returned to that direction. The new composition keeps every pose through tau 4, eases
+into a level 64° view across the cove, then settles toward the surf at 58°. Walking arrays,
+positions, terrain, stair geometry and accepted v30 water are unchanged. Dragging on the
+beach holds an absolute world heading until reset or returning onto the stairs. A reset
+button, stage arrow keys/Escape and touch handling provide the same control; vertical
+swipes continue scrolling without releasing the chosen heading.
+
+Four native radio controls coordinate the existing physical atmosphere, source direction,
+SH sky light, cloud lighting, terrain shadows, water reflections and exposure. Noon keeps
+the accepted photo sun. Morning uses 08:00, evening 17:00 on the same reference date. Night
+uses one authored moon direction and a dim blue source, a moon disk and filtered procedural
+stars occluded by the clouds. Night is an authored moonlit view, not a lunar ephemeris.
+A temporary canvas dissolves the previous frame over 850 ms; it is removed on navigation,
+rapid selection or resize. Reduced motion switches immediately. Selection is stored in
+the URL. Morning/night beach text uses cream; noon/evening use dark ink on the bright sand.
+
+The first path edit reused an existing variable name; standalone compilation caught it
+and the beach sample was renamed. Initial evening light/text was too harsh, so evening
+was moved to 17:00 and its sand chapter uses dark text. Mobile review led to retaining the
+route beat on rotation, rather than retaining its pixel scroll offset. The test then
+waited for native swipe momentum to end before comparing rotation positions: measuring
+mid-fling had mistaken continuing scroll for a resize error.
+
+### Verification
+
+Eight matched approach stills and a 377-frame clip at 24 fps cover the final stairs,
+widening panorama and water approach. The inspected sequence lifts and turns continuously.
+All nine noon hero frames, four lighting reviews, moon view and phone screenshot have no
+console errors. Desktop input verifies drag/scroll holding a world heading, reset, return
+to stairs and eight rapid lighting choices (maximum one dissolve canvas). At 390 × 844,
+controls retain 44 px targets without overflow. URL night restoration, native radio arrow
+keys, reduced-motion reset, vertical touch scroll with the heading held and portrait /
+landscape route position and selection retention pass.
+
+A 1,001-sample path comparison against `8310f05` reports zero differences in stair poses
+and camera positions. Sampled ground clearance is at least 1.498 m. Nine rays at each
+reviewed beach pose have no terrain hit closer than 0.6 m; nearest is 3.103 m. These checks
+cover the specified route and cameras, not arbitrary free camera travel.
+
+Twelve alternating paired rounds of eight complete frames pass all nine incremental
+hero limits: −0.4% to +5.1% against `8310f05`. No new exception; the original v26 close
+water-level exception remains. Water-hidden land labels at overview and viewpoint have
+zero changed pixels. Reference photos remain unavailable, so this is an accepted-outline
+regression check. Raw timing, outline, input and clearance readbacks accompany the gallery.
+
+The terrain bake is current. Six changed ES modules parse; the local standalone contains
+56 modules and its inline scripts compile as classic scripts. With networking blocked,
+the standalone loads in 20.4 s, renders four scroll stops and switches to night without
+console errors, using generated terrain and texture fallbacks. The online preview is the
+scan-material target. No downloads, uploads or publication. The moonlit treatment and
+clouds remain authored approximations; the controlled switch dissolves between settings
+rather than simulating hours of changing daylight.
+
+
+### v32 — Clean foliage edges and pixelation (2026-10-01)
+
+Sam reports pixelated plants along the ridge and switchbacks, most obvious in evening light
+at 94, 88 and 61 m. The main renderer already has multisampling. Matched diagnostic views
+showed that whole-pixel random discard in near plant and impostor LOD transitions, also
+used when the camera approaches a crown, was breaking blades into dots and punching noise
+into nearby leaves. Turning that discard off restored continuous blades; changing render
+scale does not remove that screen-space discard.
+
+Both representations now send their coverage weight to MSAA instead of deleting random
+pixels. A gentle square-root coverage bias limits thinning where the two representations
+do not overlap exactly. The near picker excludes empty intervals created by the lens fade.
+The full-coverage shaders, plant geometry, species distribution, texture assets, camera,
+lighting controls and accepted water are unchanged. The existing adaptive pixel ratio
+policy is preserved. Camera-proximity clearance remains and plants still dissolve before
+filling the lens.
+
+The first diagnostic script treated the pose's north coordinate as altitude; correcting
+it to the third coordinate reproduced the screenshots. A linear coverage trial made
+handover crowns too faint, so a biased coverage trial was selected after comparing grass
+and leaf silhouettes. The first full timing run put stairs just over the limit (+10.4%)
+with a broad noise range. A targeted 24-round, 12-frame recheck measured +4.6%, with its
+middle half +0.2% to +9.5%; the first result is retained alongside the recheck. An initial
+standalone command supplied the wrong local flag and reached the existing stale-CDN guard.
+The corrected local build uses the active localhost assets and does not publish anything.
+
+### Verification
+
+All nine noon hero renders have zero console errors. The three matched evening views were
+rendered at 0.75×, 1× and 2×. Readbacks confirm four MSAA samples and a 3174 × 2000 buffer
+for a 1587 × 1000 CSS canvas at 2×. A resize to 1024 × 640 retains a 2048 × 1280 buffer and
+the correct camera aspect. Morning, noon, evening and night selection/readback agree and
+render without errors. No foliage material retains the random screen-pixel discard and
+no near fading instance has an empty interval.
+
+A 144-frame, 24 fps recording reviews two moving approaches through the reported views,
+with animated wind; 72 further frames check the same approaches at Retina resolution.
+Inspected sequences retain continuous leaf edges and grass blades. Same-camera 1× and 2×
+measurements confirm actual target scaling; they include cold-target overhead and are
+not the paired performance gate.
+
+Twelve alternating paired rounds of eight complete frames compare every hero with accepted
+`5cd561d`. Using the targeted stairs recheck, all incremental limits pass (−2.8% to +4.6%).
+No new exception; the historical v26 close-water-level exception remains. Water-hidden
+land labels have zero changed pixels at overview and viewpoint. Reference photos are still
+unavailable, so this verifies the accepted outline rather than a new photographic match.
+
+The terrain bake is current. Three changed ES modules parse as modules; whitespace checks
+pass. The local standalone contains 56 modules, its inline scripts compile as classic
+scripts, and its offline load takes 21.0 s. It renders four scroll stops and the night
+option without console errors, using generated terrain and texture fallbacks. The online
+preview remains the material target. No new asset files, uploads or publication.
+
+The fade is still an authored LOD approximation with four-sample coverage on the checked
+renderer. Very thin blades soften at reduced resolution; distant cards still use discrete
+baked directions. This pass removes the conspicuous stochastic pixel breakup without
+adding temporal post-processing or changing the accepted scene.
+
+
+## v33 — Correct the artificial cliff shadow line (2026-10-01)
+
+Sam reported a long thin dark line across the rock behind the final stairs, in evening
+light at beach level. Reproduced from local position (124.091, 189.952, 4.209), looking
+130° at a 3° pitch and 64° field of view. The line crossed both sides of the stair bank.
+
+### Diagnosis and correction
+
+The initial depth-prepass hypothesis was wrong. Independent material clones showed that
+hiding the prepass, enabling invariant position output, or disabling bounce lighting did
+not remove it. Disabling direct terrain shadowing did. Isolating the factors narrowed it
+to `tFineShadow`: ground/overhang shadows and canopy shadowing rendered a continuous wall,
+while fine ledge shadows alone reproduced the line.
+
+The strata table's shadow margin is in unscaled relief metres. The lookup's sun-steepness
+parameter already includes local relief strength, but the returned margin was compared
+against world-space bias and softness without applying that strength. A readback on the
+line gave roughly 0.08 m of table margin and 0.114 local strength: the actual margin was
+about 9 mm, below the existing 10 mm lit bias, instead of a fully dark ledge.
+
+One functional expression changes in terrain-shader.js: `margin * m` restores world-space
+units before the shadow comparison. A separate opacity-fade trial was unnecessary and
+was not retained. The correction applies throughout the terrain material. The original
+depth pass, textures, mesh, coast, plants, trail, sand contact, camera, lights and water
+are unchanged.
+
+### Verification
+
+Matched before/after stills show the line removed. Three beach headings (50°, 90°, 130°)
+in morning, noon, evening and night have no reported line in the inspected views and zero
+console errors. A 2× Retina render is 3200 × 2000 for 1600 × 1000 CSS pixels, with four
+MSAA samples. A 72-frame / 24 fps sweep moves four metres and turns from 110° to 148°;
+inspected frames keep the wall continuous without the seam reappearing.
+
+Nine noon hero renders have zero console errors. Twelve alternating paired timing rounds
+of eight completed frames against accepted `6cf2940` pass every incremental hero limit
+(−12.8% to +3.1%). The apparent speed variation is background timing noise, not a claimed
+optimization. No new exception; the historical v26 close-water exception remains.
+Overview and viewpoint land labels with water hidden have zero changed pixels.
+Reference photos remain unavailable; this compares the accepted scene outline.
+
+The terrain bake is current. The modified ES module parses and whitespace checks pass.
+The local standalone rebuild contains 56 modules and its inline scripts parse as classic
+scripts. With networking disabled it loads in 21.3 s, generates terrain and texture
+fallbacks, and renders four scroll stops (0.3, 1, 2.6, 4.6) without console errors.
+The online preview remains the texture target. No assets, downloads, uploads or publication.
+
+The fine ledge shadows still use the existing precomputed relief approximation. This fix
+corrects its units; it does not claim a full ray-traced rock surface. Gallery and raw
+readbacks are in docs/gallery/v33; the local sweep is captures/v33/cliff-sweep.mp4.
+
+
+## v34 — Remove remaining foliage coverage patterns (2026-10-01)
+
+Sam still saw pixelation after v32, especially in close plants during evening descent.
+Matched the three supplied views by camera height: 27 m at tau 3.690, 63 m at tau 2.823,
+and 95 m at tau 2.076. The first showed a fine transparent grid in the naupaka and dotted
+thin grass. All had a valid drawing buffer and four MSAA samples.
+
+### Diagnosis and correction
+
+Removing impostors left the pattern intact; forcing full near-plant coverage removed it.
+The remaining problem was the uniform MSAA opacity fade, not a missing source texture.
+With only four samples, overlapping leaves used correlated partial sample masks, so the
+crown stayed patterned and translucent rather than accumulating solid leaf coverage.
+A regular transparent-blending trial dulled the foliage and was not retained.
+
+Near foliage now assigns a stable value to each leaf or blade from its existing seed and
+plant position. The same LOD/lens intervals select groups of complete leaves instead of
+attenuating every pixel. A narrow boundary reveals/retracts a leaf along its length;
+its interior remains opaque, and MSAA smooths the silhouette. The selection follows the
+plant through wind and camera motion without a screen-space mask. Full solid instances
+retain their efficient no-discard shaders.
+
+The lighter grass level was three crossed painted cards. It now retains a quarter of
+the same curved blades, 2.8× wider, with two segments instead of four, plus seed stalks.
+Both levels consume the same random sequence so corresponding blades share their phase.
+This removes reliance on a tuft-wide alpha mask at medium distance without drawing full
+near-detail geometry everywhere. The scatter, original high-detail plants, texture assets,
+terrain, water, camera, lighting and automatic resolution policy are unchanged.
+
+### Verification
+
+Matched stills cover all three views at 0.85×, 1× and 2×; four lighting settings are also
+inspected. At 2× the 1587 × 1000 CSS viewport has a 3174 × 2000 buffer. An independent
+DPR=2 resize produces 2048 × 1280 for 1024 × 640 CSS pixels. The camera approaches have
+animated wind: 216 frames at 1× and 144 at 2×, at 24 fps. Inspected frames show solid
+leaf interiors and curved grass through the transitions, with zero console errors.
+
+All nine noon heroes render without errors. Twelve alternating paired timing rounds of
+eight completed frames against accepted `af278c3` pass all incremental hero limits
+(−9.5% to +6.6%). No new performance exception. Overview and viewpoint land labels with
+water hidden have zero changed pixels; unavailable reference photos were not downloaded.
+The bake is current, the modified ES modules parse, and the local standalone rebuild
+contains 56 modules whose inline scripts compile as classic scripts. With networking
+blocked it loads in 20.8 s, generates terrain and texture fallbacks, and renders four
+scroll stops without console errors. The online preview remains the texture target.
+
+Actual leaf edges still have finite sample coverage. Blades narrower than a pixel can
+soften at reduced resolution; distant impostors retain discrete baked directions and their
+existing coverage treatment. This fixes the reported near-foliage breakup without claiming
+infinite detail or adding a temporal post-processing pass. Own-render evidence is in
+`docs/gallery/v34`; raw PNG buffers and clips remain local in `captures/v34/`.

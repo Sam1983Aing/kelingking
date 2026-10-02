@@ -88,8 +88,15 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
   if (rising) o.frontZ = max(o.frontZ, zeta);
   // The sheet: thin at its edge, thicker behind; thick at first (the bore), thinning as it
   // runs out of speed, and thin in the backwash.
-  float cap = rising ? mix(0.3, 0.06, tau / tu) : mix(0.05, 0.008, (tau - tu) / td);
-  float h = zeta > 0.0 ? min(rising ? 0.16 * zeta + 0.3 * zeta * zeta : 0.07 * zeta + 0.1 * zeta * zeta, cap) : zeta;
+  // The uprush and backwash share one surface through the turn. Switching their
+  // thickness laws at tu dropped a centimetre instantly during the reversal.
+  float turn = smoothstep(tu - 0.35, tu + 0.45, tau);
+  float capUp = mix(0.3, 0.06, clamp(tau / tu, 0.0, 1.0));
+  float capDown = mix(0.06, 0.008, clamp((tau - tu) / td, 0.0, 1.0));
+  float cap = mix(capUp, capDown, turn);
+  float riseH = 0.16 * zeta + 0.3 * zeta * zeta;
+  float drainH = 0.07 * zeta + 0.1 * zeta * zeta;
+  float h = zeta > 0.0 ? min(mix(riseH, drainH, turn), cap) : zeta;
   if (z + h > o.surf) {
     o.surf = z + h;
     // Speed along the slope (about 1 in 7): the edge's own speed, and the water behind it a
@@ -98,7 +105,7 @@ void swashWave(float z, float lobe, float tau, float R, float tu, inout Swash o,
     o.vel = clamp(dZ / 0.14 * (rising ? 0.85 : 1.0), -3.5, 5.0);
     o.up = rising ? 1.0 : 0.0;
   }
-  if (rising && zeta > 0.0) o.front = max(o.front, smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)) * (1.0 - smoothstep(0.7, 1.0, tau / tu) * 0.6));
+  if (rising && zeta > 0.0) o.front = max(o.front, smoothstep(0.0, 0.008, zeta) * (1.0 - smoothstep(0.025, 0.19, zeta)) * (1.0 - smoothstep(0.7, 1.0, tau / tu) * 0.6));
 }
 
 // The swash at map position p (x east, y north), with bed height z (m), at time t. back: how
@@ -133,7 +140,7 @@ Swash swashAt(vec2 p, float z, float t, float period, int back) {
 }
 
 // The foamy front of an uprush, from how far its edge is above this spot (frontZ).
-float swashFront(float zeta) { return smoothstep(0.0, 0.006, zeta) * (1.0 - smoothstep(0.03, 0.13, zeta)); }
+float swashFront(float zeta) { return smoothstep(0.0, 0.008, zeta) * (1.0 - smoothstep(0.025, 0.19, zeta)); }
 
 // The swash as worked out for this frame over the beach (swash-map.js): edge, front edge,
 // thickness or minus the seconds since it was dry, speed up the beach. Outside the map, dry.

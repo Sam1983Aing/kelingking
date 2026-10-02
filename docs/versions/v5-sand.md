@@ -96,3 +96,8 @@ settings in `src/terrain/layout.js`, the swash parts of `src/water/water-shader.
 - At noon the bore and the foam on the sand clip to white under the photo's exposure, as they
   do in `beach-white-sand-surf.jpg`. Only the shadowed crevices give foam any shape.
 
+**From v15 (shore wave).**
+
+- At the `swash` camera, a sharp tan triangular patch remains visible through the shallow
+  water and in a `--hide=water` render. It belongs to the beach terrain or sand material,
+  not the moving wave. Check the wet and dry sand transition there in a future sand pass.

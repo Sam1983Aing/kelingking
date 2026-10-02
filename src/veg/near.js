@@ -2,10 +2,10 @@
 // reach are picked from a grid over the island, checked against the view, and written into
 // one instanced mesh per species, variant and level of detail.
 //
-// Each instance carries the band of a stipple pattern it keeps (lo <= hash < hi, in the
-// shader): the full plant up close, a lighter one (fewer leaves, a little bigger) further
-// off, and the impostor beyond that (impostors.js keeps the rest of the pattern), so every
-// hand-over is a dissolve and each pixel belongs to one of them.
+// Each instance carries a coverage interval (lo, hi): the full plant up close, a lighter
+// one (fewer leaves, a little bigger) further off, and the impostor beyond that. The interval's
+// width selects stable groups of complete leaves/blades. A narrow soft boundary avoids
+// replacement pops without a translucent MSAA grid across the whole plant.
 //
 // A plant the lens is inside (or nearly: within LENS of its crown's ellipsoid, in crown radii)
 // dissolves the same way, rather than filling the frame with a few leaves (v8: the scroll's
@@ -23,9 +23,9 @@ export function createNearPlants({ species, shared, leafTex }) {
   const group = new THREE.Group();
   // species[k] = { id, lod: { near, far, detail }, variants: [{ info, levels: [geometry, ...] }] }
   // detail: where each level hands over to the next (a 2 m band ending there).
-  // Each level of each variant is two meshes: the plants fully in (no stipple, and no
+  // Each level of each variant is two meshes: the plants fully in (no fade, and no
   // cut-out at all where the leaves are built to their outline, so the GPU can skip hidden
-  // leaves before shading them), and the plants handing over (stippled).
+  // leaves before shading them), and the plants handing over (antialiased coverage).
   const part = (sp, v, geometry, level, solid) => {
     const cap = solid ? sp.capacity ?? 2048 : Math.ceil((sp.capacity ?? 2048) / 2);
     const g = new THREE.InstancedBufferGeometry();
@@ -36,7 +36,7 @@ export function createNearPlants({ species, shared, leafTex }) {
     g.setAttribute('iPosScale', posScale);
     g.setAttribute('iYawTint', yawTint);
     g.instanceCount = 0;
-    // Lit per vertex: the lightest level (cards), and grass, whose blades are a few
+    // Lit per vertex: the lightest level, and grass, whose blades are a few
     // millimetres wide.
     const vertexLight = (level > 0 && level === (sp.lod.detail?.length ?? 0)) || sp.id === 'grass';
     const mesh = new THREE.Mesh(g, plantMaterial(shared, v.info, leafTex, { vertexLight, solid, alpha: geometry.userData.alphaLeaves !== false }));
@@ -86,6 +86,7 @@ export function createNearPlants({ species, shared, leafTex }) {
   // discard keep the GPU from doing that itself).
   const picks = [];
   const put = (L, o, lo, hi, d) => {
+    if (hi - lo <= 0.001) return; // Lens fade can empty the further detail level's interval.
     const M = L.parts[lo <= 0.001 && hi >= 0.999 ? 0 : 1];
     if (M.n < M.cap) { M.n++; picks.push({ M, o, lo, hi, d }); }
   };
@@ -143,7 +144,7 @@ export function createNearPlants({ species, shared, leafTex }) {
         sphere.center.set(data[o], cy, data[o + 2]);
         sphere.radius = Math.max(M.radius, M.height * 0.6) * s * 1.3;
         if (!frustum.intersectsSphere(sphere)) continue;
-        // The impostor keeps the pattern from 1 - fade up; the 3D plant below it.
+        // The impostor's coverage increases as the 3D plant's decreases.
         let top = 1 - smoothstep(S.lod.near, S.lod.far, d);
         // The lens in or at the crown: the plant dissolves (nobody keeps the rest of the band).
         if (M.crownC && d2 < (M.radius * s + 1) ** 2 * 4) {
@@ -155,9 +156,8 @@ export function createNearPlants({ species, shared, leafTex }) {
           top = Math.min(top, smoothstep(LENS[0], LENS[1], e));
           if (top <= 0.001) continue;
         }
-        // Which level, and across a hand-over band the two either side of it: the nearer
-        // keeps the pattern below 1 - t, the further from there up (and nothing past `top`,
-        // which the impostor keeps).
+        // The coverage intervals of the levels either side of a hand-over. Their widths
+        // sum to top; the impostor takes the remaining weight.
         const D = S.lod.detail ?? [];
         let lv = 0;
         while (lv < D.length && d > D[lv]) lv++;

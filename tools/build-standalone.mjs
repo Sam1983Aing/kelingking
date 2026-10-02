@@ -15,6 +15,7 @@
 //
 //   node tools/build-standalone.mjs            kelingking.html, assets from the CDN
 //   node tools/build-standalone.mjs --local    kelingking-local.html, assets from localhost:5178
+//   node tools/build-standalone.mjs --local --asset-base=http://localhost:5183/assets/
 //                                              (for testing before the assets are pushed)
 //
 // The assets repo: see README.md, "The standalone file".
@@ -33,7 +34,8 @@ const LOCAL = process.argv.includes('--local');
 // in the world must not change because something was pushed later.
 export const TAG = '1.10.0';
 const CDN = `https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@${TAG}/kelingking/`;
-const BASE = LOCAL ? 'http://localhost:5178/assets/' : CDN;
+const assetBase = process.argv.find((arg) => arg.startsWith('--asset-base='))?.slice(13);
+const BASE = LOCAL ? (assetBase ?? 'http://localhost:5178/assets/').replace(/\/?$/, '/') : CDN;
 const ASSETS = { textures: `${BASE}textures/`, bake: `${BASE}terrain/terrain-1024.bin` };
 const OUT = join(root, LOCAL ? 'kelingking-local.html' : 'kelingking.html');
 

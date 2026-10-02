@@ -1,0 +1,47 @@
+{
+  "heroCommand": "node tools/hero.mjs v30 --url=http://localhost:5183/ --q=1024 --rounds=0 --no-compare",
+  "heroes": [
+    "overview",
+    "viewpoint",
+    "stairs",
+    "trailTop",
+    "trailLow",
+    "beach",
+    "swash",
+    "shoreBreak",
+    "sideFromSea"
+  ],
+  "heroConsoleMessages": 0,
+  "cycleCommand": "node tools/wave-cycle.mjs <label> clip <start> 18 http://localhost:5183/ <beach|stairs>",
+  "cycles": [
+    {
+      "camera": "beach",
+      "start": 1,
+      "end": 19,
+      "fps": 24,
+      "frames": 433,
+      "consoleErrors": 0
+    },
+    {
+      "camera": "stairs",
+      "start": 13,
+      "end": 31,
+      "fps": 24,
+      "frames": 433,
+      "consoleErrors": 0
+    }
+  ],
+  "closeReview": {
+    "camera": "near",
+    "start": 13,
+    "end": 31,
+    "fps": 4,
+    "frames": 73,
+    "consoleErrors": 0
+  },
+  "baseline": "fe00f69",
+  "motionAudit": "review/motion-audit.json",
+  "moduleParse": "passed",
+  "bakeCheck": "current",
+  "diffCheck": "passed"
+}

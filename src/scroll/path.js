@@ -283,9 +283,26 @@ export function buildDescent({ walk, groundAt, shots, eye = 1.6, view = { aspect
     const k = Math.min(Math.max(Math.floor(tau) - 1, 0), 3), u = Math.min(Math.max(tau - 1 - k, 0), 1);
     return wAtCost(cBounds[k] + (cBounds[k + 1] - cBounds[k]) * u);
   }
+  // Only the beach composition changes. Keeping the walking arrays and their cost
+  // untouched preserves every stair pose, the carved path and the eye clearance.
+  const beachFoot = walkPose(W.foot);
+  const beachViews = [
+    [4, beachFoot.yaw, beachFoot.pitch, beachFoot.fov],
+    [4.32, 232, 3, 64], // look across the cove, lifting the frame off the sand
+    [4.68, 244, 0, 62],
+    [5, 257, -3, 58],  // settle toward the open water and its approaching surf
+  ];
   function poseAt(tau) {
     if (tau <= 1) return airPose(Math.max(tau, 0));
-    return walkPose(wAt(tau));
+    const p = walkPose(wAt(tau));
+    if (tau <= 4) return p;
+    const keys = beachViews;
+    let i = 0;
+    while (i < keys.length - 2 && tau > keys[i + 1][0]) i++;
+    const a = keys[i], b = keys[i + 1];
+    const u = smoother01((tau - a[0]) / (b[0] - a[0]));
+    return { ...p, yaw: a[1] + wrap(b[1] - a[1]) * u,
+      pitch: a[2] + (b[2] - a[2]) * u, fov: a[3] + (b[3] - a[3]) * u };
   }
   // tau for a distance walked (the inverse of wAt).
   function tauAtW(w) {

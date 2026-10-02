@@ -1,0 +1,24 @@
+{
+  "heroCommand": "node tools/hero.mjs v29 --url=http://localhost:5183/ --q=1024 --rounds=0 --no-compare",
+  "heroes": [
+    "overview",
+    "viewpoint",
+    "stairs",
+    "trailTop",
+    "trailLow",
+    "beach",
+    "swash",
+    "shoreBreak",
+    "sideFromSea"
+  ],
+  "heroConsoleMessages": 0,
+  "contactCommand": "node tools/cliff-contact-review.mjs checked http://localhost:5183/ --motion",
+  "contactCameras": 5,
+  "clayPairs": 5,
+  "motionTracks": 2,
+  "motionFramesPerTrack": 73,
+  "contactConsoleErrors": 0,
+  "moduleParse": "passed",
+  "bakeCheck": "current",
+  "diffCheck": "passed"
+}

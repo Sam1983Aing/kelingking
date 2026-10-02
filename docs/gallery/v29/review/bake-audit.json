@@ -1,0 +1,326 @@
+{
+  "baseline": "3f1978c",
+  "bakeBytes": 13561329,
+  "before": {
+    "triangles": 1180372,
+    "vertices": 1205421,
+    "gridTris": 927452
+  },
+  "after": {
+    "triangles": 1197848,
+    "vertices": 1214235,
+    "gridTris": 944928
+  },
+  "originalVertices": {
+    "gridVertices": 1050625,
+    "stripEndBefore": 1189587,
+    "stripEndAfter": 1189587,
+    "changed": 1980,
+    "minH": 1.8543503284454346,
+    "maxH": 48.28110885620117,
+    "maxShift": 11.01069977883516
+  },
+  "arrays": [
+    {
+      "path": "heights",
+      "before": 1048576,
+      "after": 1048576,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "normals",
+      "before": 4194304,
+      "after": 4194304,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "water",
+      "before": 4194304,
+      "after": 4194304,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "shoreDir",
+      "before": 4194304,
+      "after": 4194304,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "coast",
+      "before": 4194304,
+      "after": 4194304,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "breakers",
+      "before": 4110,
+      "after": 4110,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "rockSites",
+      "before": 7010,
+      "after": 7010,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "plants.data",
+      "before": 1678488,
+      "after": 1678488,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.x",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.y",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.s",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.hd",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.ht",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.line.w",
+      "before": 1218,
+      "after": 1218,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.concrete.position",
+      "before": 116976,
+      "after": 116976,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.concrete.normal",
+      "before": 116976,
+      "after": 116976,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.concrete.trail",
+      "before": 155968,
+      "after": 155968,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.concrete.wear",
+      "before": 38992,
+      "after": 38992,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.concrete.index",
+      "before": 58488,
+      "after": 58488,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.dirt.position",
+      "before": 240834,
+      "after": 240834,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.dirt.normal",
+      "before": 240834,
+      "after": 240834,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.dirt.trail",
+      "before": 321112,
+      "after": 321112,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.dirt.wear",
+      "before": 80278,
+      "after": 80278,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.meshes.dirt.index",
+      "before": 311808,
+      "after": 311808,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.logs.matrices",
+      "before": 5536,
+      "after": 5536,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.logs.rand",
+      "before": 346,
+      "after": 346,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.stones.matrices",
+      "before": 17664,
+      "after": 17664,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.stones.rand",
+      "before": 1104,
+      "after": 1104,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.timberPosts.matrices",
+      "before": 2672,
+      "after": 2672,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.timberPosts.rand",
+      "before": 167,
+      "after": 167,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.timberRails.matrices",
+      "before": 4544,
+      "after": 4544,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.timberRails.rand",
+      "before": 284,
+      "after": 284,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.bambooPosts.matrices",
+      "before": 2288,
+      "after": 2288,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.bambooPosts.rand",
+      "before": 143,
+      "after": 143,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.bambooRails.matrices",
+      "before": 4016,
+      "after": 4016,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.inst.bambooRails.rand",
+      "before": 251,
+      "after": 251,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.lashings",
+      "before": 2510,
+      "after": 2510,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "trail.mask.data",
+      "before": 1255136,
+      "after": 1255136,
+      "changed": 0,
+      "maxDelta": 0
+    },
+    {
+      "path": "mesh.positions",
+      "before": 3616263,
+      "after": 3642705,
+      "changed": 43375,
+      "maxDelta": 356.4751510620117
+    },
+    {
+      "path": "mesh.normals",
+      "before": 3616263,
+      "after": 3642705,
+      "changed": 48169,
+      "maxDelta": 1.604125201702118
+    },
+    {
+      "path": "mesh.index",
+      "before": 3541116,
+      "after": 3593544,
+      "changed": 2972080,
+      "maxDelta": 658553
+    },
+    {
+      "path": "mesh.rock",
+      "before": 4821684,
+      "after": 4856940,
+      "changed": 7281,
+      "maxDelta": 255
+    },
+    {
+      "path": "mesh.horizon",
+      "before": 4821684,
+      "after": 4856940,
+      "changed": 14064,
+      "maxDelta": 255
+    }
+  ]
+}

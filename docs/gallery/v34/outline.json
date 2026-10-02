@@ -1,0 +1,20 @@
+[
+  {
+    "name": "overview",
+    "width": 1400,
+    "height": 788,
+    "landPixels": 505926,
+    "changedPixels": 0,
+    "mode": "land labels with water hidden",
+    "baseline": "af278c3"
+  },
+  {
+    "name": "viewpoint",
+    "width": 1400,
+    "height": 788,
+    "landPixels": 385134,
+    "changedPixels": 0,
+    "mode": "land labels with water hidden",
+    "baseline": "af278c3"
+  }
+]

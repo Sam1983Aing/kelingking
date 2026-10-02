@@ -143,7 +143,7 @@ export function grass(seed, o = {}) {
   const dryShare = o.dry ?? rand.range(0.25, 0.45);
   const lean = [rand.gauss() * 0.1, 0, rand.gauss() * 0.1];   // the whole tuft leans a little
   const b = new PlantBuilder({ lod: o.lod ?? 0 });
-  const blade = (base, out, L, el0, droop, w0, colAt, phase, segs = 4) => {
+  const blade = (base, out, L, el0, droop, w0, colAt, phase, segs = 4, draw = true) => {
     const pts = [], widths = [], faces = [], colors = [], wind = [];
     let p = base;
     for (let s = 0; s <= segs; s++) {
@@ -160,29 +160,17 @@ export function grass(seed, o = {}) {
       colors.push(colAt(t));
       wind.push([Math.pow(t, 1.4) * (L / H), phase]);
     }
+    // Consume the same seed for both detail levels, including omitted blades.
+    const leafPhase = rand();
+    if (!draw) return;
     b.strap(pts, widths, faces, {
-      colors, wind, leafPhase: rand(), shade: pts.map((_, s) => 0.3 + 0.7 * smooth(0, 0.7, s / segs)),
+      colors, wind, leafPhase, shade: pts.map((_, s) => 0.3 + 0.7 * smooth(0, 0.7, s / segs)),
       gloss: 0.3, trans: 0.55, flat: true, cup: 0.45,
     });
   };
-  if (b.lod >= 1) {
-    // The lighter level: three crossed cards with a painted tuft (grow/leaves.js).
-    const Hc = H * 1.35, Wc = Hc * 0.5;
-    const c0 = scalec(mixc(baseCol, green, 0.6), 0.55), c1 = scalec(mixc(mixc(green, green2, 0.5), dry, dryShare * 0.8), 0.55);
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI + rand() * 0.3;
-      const u = [Math.cos(a) * Wc / 2, 0, Math.sin(a) * Wc / 2];
-      const f = [-Math.sin(a), 0, Math.cos(a)];
-      b.card(add([0, 0, 0], mul(lean, 0)), u, add([0, Hc, 0], mul(lean, Hc)), {
-        cell: dryShare > 0.35 ? LEAF.TUFT_DRY : LEAF.TUFT, vr: [0, 1], nb: norm(add(f, [0, 0.8, 0])), nt: norm(add(f, [0, 2.5, 0])),
-        c0: [...c0, 0.55], c1: [...c1, 0.55], w0: [0, k / 3], w1: [1.2, k / 3 + 0.1], leafPhase: rand(), shade: 0.8, gloss: 0.3,
-      });
-    }
-    return {
-      builder: b, height: H * 1.3, radius: H * 1.1, crownC: [0, H * 0.4, 0], crownR: [H * 0.75, H * 0.5, H * 0.75], density: 3.0,
-      wind: { freq: 2.1, stiff: 0.22, branchAmp: 0.07, branchFreq: 2.8, leafAmp: 0.006, leafFreq: 9 },
-    };
-  }
+  // The lighter level keeps a quarter of the same curved blades, wider and with fewer
+  // segments. Painted crossed cards made millimetre-wide strands depend on texture
+  // thresholds and put a coverage pattern across the whole tuft during its hand-over.
   for (let i = 0; i < n; i++) {
     const az = rand() * Math.PI * 2;
     const out = [Math.cos(az), 0, Math.sin(az)];
@@ -192,7 +180,7 @@ export function grass(seed, o = {}) {
     const L = H * rand.range(0.7, 1.3) * (1.1 - 0.3 * outer) * 1.3;
     const el0 = (84 - 40 * outer - rand() * 12) * Math.PI / 180;
     const droop = rand.range(0.6, 1.5) * (0.5 + 1.1 * outer);
-    const w0 = rand.range(0.006, 0.01);
+    const w0 = rand.range(0.006, 0.01) * (b.lod >= 1 ? 2.8 : 1);
     const dryTip = rand() < dryShare ? rand.range(0.2, 0.75) : 0;
     const deadBlade = rand() < 0.08;
     const hue = rand();
@@ -202,7 +190,7 @@ export function grass(seed, o = {}) {
       if (dryTip) c = mixc(c, dry, smooth(1 - dryTip, 1 - dryTip + 0.25, t));
       if (deadBlade) c = mixc(c, dead, 0.9);
       return c;
-    }, i / n + rand.range(0, 0.1));
+    }, i / n + rand.range(0, 0.1), b.lod >= 1 ? 2 : 4, b.lod === 0 || i % 4 === 0);
   }
   // Seed stalks.
   const stalks = Math.round(rand.range(2, 7));

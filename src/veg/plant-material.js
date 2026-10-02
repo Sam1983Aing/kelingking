@@ -1,7 +1,7 @@
 // The material for plants drawn as real geometry (near the camera): bark, leaves on the leaf
 // atlas, and strap leaves and grass blades coloured per vertex. Instanced: each instance is
-// a plant at a world position with a size, a heading, a colour shift, and the band of a
-// stipple pattern it keeps (for the hand-overs, near.js).
+// a plant at a world position with a size, a heading, a colour shift, and the stable groups
+// of leaves/blades it keeps during a hand-over (near.js).
 //
 // It moves in the wind in three layers: the whole plant leans and sways with the push of the
 // wind where it stands (gusts included), each branch sways on its own, and leaves flutter.
@@ -9,7 +9,7 @@
 // is an ellipsoid, and the path from each vertex out of it toward the sun sets how much
 // sunlight gets there.
 //
-// SOLID (plants not handing over) leaves out the stipple, and NO_ALPHA (plants whose leaves
+// SOLID (plants not handing over) leaves out the transition, and NO_ALPHA (plants whose leaves
 // are built to their outline) every cut-out: a shader that can discard a pixel keeps a
 // tile-based GPU from skipping hidden leaves before shading them, and a bush is many layers
 // of leaves deep (measured in v7: that, not the lighting, was most of the plants' cost).
@@ -60,7 +60,7 @@ attribute vec4 aColor;
 attribute vec4 aWind;
 attribute vec4 aLeaf;
 attribute vec4 iPosScale;    // world x, y, z of the foot, scale
-attribute vec4 iYawTint;     // heading, colour shift (-1..1), the band of the stipple pattern kept (near.js)
+attribute vec4 iYawTint;     // heading, colour shift (-1..1), the coverage interval kept (near.js)
 uniform float uHeight;       // the plant's height at scale 1
 uniform vec3 uCrownC;        // the crown's ellipsoid, plant space
 uniform vec3 uCrownR;
@@ -74,6 +74,9 @@ varying vec3 vWorld;
 varying mediump vec4 vCol;
 varying mediump vec4 vLeaf;
 varying mediump vec2 vKeep;
+#ifndef SOLID
+varying mediump float vPart;
+#endif
 varying mediump float vSelf;         // sunlight left after the crown
 varying mediump float vTint;
 varying mediump float vGust;         // a gust turning the leaves over (foliage-glsl.js)
@@ -124,6 +127,10 @@ void main() {
   vCol = aColor;
   vLeaf = aLeaf;
   vKeep = iYawTint.zw;
+#ifndef SOLID
+  // One stable value for the whole leaf/blade, independent of screen pixels and wind.
+  vPart = fract((floor(aLeaf.x * 255.0 + 0.5) == 0.0 ? aWind.y : aWind.w) * 31.37 + seed);
+#endif
   vTint = iYawTint.y;
   // (Leaves only; the flicker from each leaf's own phase.)
   vGust = floor(aLeaf.x * 255.0 + 0.5) == 0.0 ? 0.0 : windGust(iPosScale.xz) * uWind.z * uWind.w * (0.3 + 0.7 * (0.5 + 0.5 * sin(t * 7.0 + aWind.w * 40.0)));
@@ -156,6 +163,9 @@ varying vec3 vWorld;
 varying mediump vec4 vCol;
 varying mediump vec4 vLeaf;
 varying mediump vec2 vKeep;
+#ifndef SOLID
+varying mediump float vPart;
+#endif
 varying mediump float vSelf;
 varying mediump float vTint;
 varying mediump float vGust;
@@ -177,13 +187,16 @@ float pHash(vec2 p) {
 }
 
 void main() {
+  float coverage = 1.0;
 #ifndef SOLID
-  // Handing over (to the impostor, or between levels of detail): a stipple, each side keeps
-  // its band of it.
-  if (vKeep.x > 0.001 || vKeep.y < 0.999) {
-    float hsh = pHash(gl_FragCoord.xy);
-    if (hsh < vKeep.x || hsh >= vKeep.y) discard;
-  }
+  // Hand over complete leaves/blades, rather than making the whole crown translucent.
+  // Four MSAA samples cannot represent a smooth whole-plant opacity: their correlated
+  // masks showed as a grid through overlapping leaves and dotted thin grass. Only the
+  // narrow boundary between leaf groups is soft; most leaves retain full depth/coverage.
+  float enter = vKeep.x <= 0.001 ? 1.0 : smoothstep(vKeep.x - 0.015, vKeep.x + 0.015, vPart);
+  float leave = vKeep.y >= 0.999 ? 1.0 : 1.0 - smoothstep(vKeep.y - 0.015, vKeep.y + 0.015, vPart);
+  coverage = enter * leave;
+  if (coverage <= 0.001) discard;
 #endif
   float kind = floor(vLeaf.x * 255.0 + 0.5);
   vec3 alb = vCol.rgb * vCol.rgb;
@@ -238,6 +251,15 @@ void main() {
   float lit = sunVis * max(dot(N, uSunDir), 0.0);
 #endif
 
+#ifndef SOLID
+  // The boundary leaf grows/retracts along its length. Its interior stays opaque; MSAA
+  // is reserved for the actual silhouette, never the opacity of an entire blade.
+  if (coverage < 0.999) {
+    if (kind == 0.0) { if (coverage < 0.5) discard; }
+    else alpha *= clamp((coverage - vUv.y) / max(fwidth(vUv.y), 1e-4) + 0.5, 0.0, 1.0);
+    if (alpha < 0.02) discard;
+  }
+#endif
   gl_FragColor = vec4(col * vAp.a + vAp.rgb, clamp(alpha, 0.0, 1.0));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -249,7 +271,7 @@ void main() {
 `;
 
 // shared: uniforms shared by every plant material (light, haze, wind, shadow).
-// solid: for plants not handing over (no stipple); alpha: whether any leaf is cut out by its
+// solid: for plants not handing over (full coverage); alpha: whether any leaf is cut out by its
 // texture. A shader without discard lets the GPU skip what is hidden before shading it.
 export function plantMaterial(shared, info, leafTex, { vertexLight = false, solid = false, alpha = true } = {}) {
   const defines = {};

@@ -47,7 +47,6 @@ varying float vFoot;      // metres out from the foot of a wall on the beach (0 
 #define L_GROUND 4
 #define L_SAND_DRY 5
 #define L_SAND_FIRM 6
-#define L_TRAMPLE 7
 
 ${SUN_SHADOW_GLSL}
 ${SWASH_GLSL}
@@ -105,10 +104,9 @@ float tfbm(vec2 p, float scale, float fp) {
   return 0.5 + s / 0.96875;
 }
 
-// ---------------------------------------------------------------- trampled sand (v10)
-// The scan alone read as a flat, even surface from eye height (Sam, on the sand). The footprints
-// and small lumps are a layer made at load (trample.js), read here like a scan; the lumps and
-// hollows of a metre or so are worked out here, with their slope.
+// ---------------------------------------------------------------- sand relief
+// The dry scan carries small texture; the broader lumps and their slopes come from this noise.
+// Individual prints are placed in world space below so they do not tile across the beach.
 
 // Value noise and its slope.
 vec3 tnd(vec2 p) {
@@ -165,9 +163,15 @@ vec3 groundBounce(vec3 P, vec3 N) {
       vec2 q = vec2(P.x, -P.z) + dir * (vRock.z * 32.0 + reach * (i == 0 ? 0.5 : 1.3));
       vec4 D = tData(q);
       float sea = smoothstep(-0.5, 1.0, D.g);
-      float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, D.r));
+      // The raw heightfield still contains the ramp carved out of this wall.
+      // Near the toe, its beach zone identifies the exposed sand below; using
+      // that raw ramp height misclassified the warm bounce as dark land light.
+      float toeFloor = smoothstep(0.5, 0.9, D.b) * (1.0 - sea)
+                     * (1.0 - smoothstep(uBeachTop + 2.0, uBeachTop + 8.0, P.y));
+      float floorH = mix(D.r, min(D.r, uBeachTop), toeFloor);
+      float sandW = smoothstep(0.4, 0.75, D.b) * (1.0 - smoothstep(uBeachTop, uBeachTop + 3.0, floorH));
       vec3 alb = mix(mix(uBounceAlb[2], uBounceAlb[1], sandW), uBounceAlb[0], sea);
-      float lit = bakedShadow(vec3(q.x, max(D.r, 0.0) + 0.3, -q.y), 0.3);
+      float lit = bakedShadow(vec3(q.x, max(floorH, 0.0) + 0.3, -q.y), 0.3);
       sum += alb * (uSunIrr * max(uSunDirW.y, 0.0) * lit + uSkyUp);
     }
     // And a second bounce: the rock overhead (the part of the view the sky share leaves) is
@@ -256,18 +260,44 @@ Surf topLayer(int layer, float tile, vec2 rot, vec2 off, bool withColor) {
   return s;
 }
 
-// The trampled layer at this pixel: its tilt (world x, z) and how deep in a print (0..1), read
-// turned by rot and scaled, as topLayer reads a scan.
-vec3 trampleAt(vec2 rot, float scale, vec2 off) {
-  mat2 R = mat2(rot.x, rot.y, -rot.y, rot.x);
-  float tile = uTile[L_TRAMPLE] * scale;
-  vec2 q = R * triP.xz / tile + off;
-  // (Filtered a level sharper than the pixel asks for: averaged down, the prints go flat
-  // well before they are too small to see.)
-  vec3 n = textureGrad(uSurfNormal, vec3(q, float(L_TRAMPLE)), 0.5 * R * triDx.xz / tile, 0.5 * R * triDy.xz / tile).xyz;
-  vec2 t = n.xy * 2.0 - 1.0;
-  vec3 dn = vec3(rot.x, 0.0, -rot.y) * t.x + vec3(-rot.y, 0.0, -rot.x) * t.y;
-  return vec3(dn.x, dn.z, n.z);
+// Five lightly used routes across the upper beach. Each walker leaves alternating, spaced
+// impressions along a gently wandering line. World coordinates keep them from repeating with
+// the sand scans, and the rest of the beach stays undisturbed.
+vec3 beachPrints(vec2 g) {
+  vec2 uv = vec2(g.x + g.y, g.x - g.y) * 0.70710678;
+  vec3 mark = vec3(0.0); // normal tilt x/z, cavity
+  if (uv.x < 179.0 || uv.x > 242.0 || uv.y < -77.0 || uv.y > -28.0) return mark;
+  for (int i = 0; i < 5; i++) {
+    vec4 walk = i == 0 ? vec4(-44.15, 0.050, 185.0, 228.0)
+      : i == 1 ? vec4(-50.5, 0.065, 181.0, 222.0)
+      : i == 2 ? vec4(-34.0, -0.050, 185.0, 225.0)
+      : i == 3 ? vec4(-62.0, 0.030, 188.0, 230.0)
+      : vec4(-72.0, -0.075, 185.0, 241.0);
+    if (abs(uv.y - walk.x - walk.y * (uv.x - 200.0)) > 0.9) continue;
+    float stride = 0.63 + 0.028 * float(i);
+    float stepNo = floor((uv.x - walk.z) / stride + 0.5);
+    float at = walk.z + stepNo * stride;
+    if (at < walk.z || at > walk.w || abs(uv.x - at) > 0.25) continue;
+    float rnd = th12(vec2(stepNo + 31.0, float(i) * 17.0 + 7.0));
+    float u = uv.x - at + (rnd - 0.5) * 0.075;
+    float side = mod(stepNo, 2.0) < 1.0 ? -0.135 : 0.135;
+    float line = walk.x + walk.y * (at - 200.0) + 0.46 * sin(at * 0.11 + float(i) * 1.7);
+    float v = uv.y - line - side - (rnd - 0.5) * 0.065;
+    if (abs(v) > 0.16) continue;
+    float a = 0.145 * (0.92 + 0.15 * rnd);
+    float b = 0.075 * (0.9 + 0.2 * rnd) * (1.0 + 0.16 * smoothstep(-a, a, u));
+    float r2 = u * u / (a * a) + v * v / (b * b);
+    if (r2 >= 1.0) continue;
+    float core = 1.0 - r2;
+    float fade = smoothstep(walk.z, walk.z + 1.2, at) * (1.0 - smoothstep(walk.w - 1.2, walk.w, at));
+    float depth = (0.026 + 0.013 * rnd) * fade;
+    // Height -depth*(1-r²)²: its derivative makes a rounded wall, not a stamped outline.
+    float dhdu = 4.0 * depth * core * u / (a * a);
+    float dhdv = 4.0 * depth * core * v / (b * b);
+    mark.xy += vec2(-dhdu - dhdv, dhdu - dhdv) * 0.70710678;
+    mark.z = max(mark.z, core * core * fade);
+  }
+  return mark;
 }
 
 vec3 lin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -339,7 +369,17 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // facets of the rock and drew them.)
   float upG = abs(Ng.y);
   float upC = mix(up, upG, 0.4) + (tn(g * 1.9 + 4.0) - 0.5) * 0.1;
-  float sand = sandZone * smoothstep(0.64, 0.72, upC) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
+  // Near a cliff foot the interpolated vertex normal can point upward on a wall triangle.
+  // The triangle's own slope keeps a thin sand veneer from climbing that wall.
+  // A tagged beach deposit is continuous ground. Let its smooth slope carry
+  // the sand transition; applying a triangle-slope cutoff painted straight
+  // white bands across the small bank beside the final stairs.
+  float bankDeposit = smoothstep(0.98, 1.0, vRock.w)
+                    * (1.0 - smoothstep(0.0, 0.02, vRock.z)) * step(0.005, vRock.x);
+  float sandSlope = mix(min(upC, upG + 0.08), up, bankDeposit);
+  float toeNear = 1.0 - smoothstep(0.2, 2.4, vFoot);
+  float slopeMin = mix(0.65, 0.9, toeNear) + (n1 - 0.5) * 0.035;
+  float sand = sandZone * smoothstep(slopeMin - 0.05, slopeMin + 0.08, sandSlope) * (1.0 - smoothstep(uBeachTop + 0.8, uBeachTop + 3.5, h + (n1 - 0.5) * 2.0));
   // Sand banked against the foot of the rock: up to a metre and more above the beach just in
   // front of the wall, in drifts along it, its top edge ragged. It covers the line where the
   // rock's strips cross the sand (which the triangles drew as a jagged line), and reads as sand
@@ -354,10 +394,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   if (sandZone > 0.05 && up < 0.72 && h < uBeachTop + 6.0 && h > -0.3 && length(nhB) > 0.3 && carveM < 0.3) {
 #endif
     float front = tData(g + normalize(nhB) * 3.0).r;
-    float bankTop = 0.2 + 1.3 * tn(vec2(along * 0.16, 2.3))
-                  + (tn(g * 1.1 + h * 0.7) - 0.5) * 0.8 + (tn(g * 3.7 - h * 1.3) - 0.5) * 0.35
-                  + 1.4 * smoothstep(0.2, 0.55, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
-    banked = sandZone * (1.0 - smoothstep(bankTop - 0.05, bankTop + 0.1, h - front)) * smoothstep(-3.0, -1.0, h - front + 3.0);
+    float bankTop = 0.12 + 0.5 * tn(vec2(along * 0.12, 2.3))
+                  + (tn(g * 0.7 + h * 0.3) - 0.5) * 0.24
+                  + 0.75 * smoothstep(0.25, 0.6, up) * (0.6 + 0.4 * tn(vec2(along * 0.1, 8.8)));
+    banked = sandZone * smoothstep(0.42, 0.74, mix(upG, up, bankDeposit))
+           * (1.0 - smoothstep(bankTop - 0.18, bankTop + 0.3, h - front))
+           * smoothstep(-2.0, 0.0, h - front + 2.0);
     sand = max(sand, banked);
   }
   tBanked = banked;
@@ -370,8 +412,14 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // out as a white pyramid with a sawtooth top).
   // (Only where there is any: this ran on every pixel of the island.)
   if (vRock.x > 0.005) {
-    float underSand = smoothstep(0.25, 0.6, vRock.x + (tn(g * 1.3 + h) - 0.5) * 0.45 + (tn(g * 4.1) - 0.5) * 0.15)
-                    * smoothstep(0.68, 0.8, upC);
+    // Deposits on the supporting bank follow its smooth slope, while carved
+    // wall skirts retain the triangle-slope guard. This prevents a drawn line
+    // along every small triangle at a gently sloping sand-to-rock transition.
+    float depositSlope = mix(min(upC, upG + 0.08), up, bankDeposit);
+    // The authored deposit mask ends on the rounded supporting bank, before the
+    // vertical wall. Its thin sand cover must survive the bank's curved shoulder.
+    float underSand = smoothstep(0.16, 0.76, vRock.x + (tn(g * 1.1 + h * 0.3) - 0.5) * 0.22)
+                    * mix(smoothstep(0.78, 0.90, depositSlope), 1.0, bankDeposit);
     sand = max(sand, underSand);
   }
 
@@ -381,9 +429,21 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   // (A narrow band: where it is part rock and part cover both are worked out, the dearest
   // thing this shader does.)
   float veg = smoothstep(0.41, 0.47, up + (n1 - 0.5) * 0.25);
+  // On Batu Satu the wooded shoulder carries a thin, patchy understory down between
+  // the rooted face shrubs. Fade it into the beds before the pale north-west wall and
+  // leave the wave-cut foot as limestone.
+  if (g.x > 35.0 && g.x < 125.0 && g.y > -155.0 && g.y < -50.0 && h < 68.0) {
+    vec2 delta = g - vec2(80.0, -100.0);
+    float island = 1.0 - smoothstep(0.77, 1.03, length(delta / vec2(48.0, 57.0)));
+    float flank = smoothstep(-18.0, 18.0, delta.x - 0.2 * delta.y);
+    float lower = smoothstep(16.0, 28.0, h) * (1.0 - smoothstep(55.0, 68.0, h));
+    float coverPatch = 0.3 + 0.7 * smoothstep(0.38, 0.65, n1 * 0.65 + n2 * 0.35);
+    veg = max(veg, 0.72 * island * flank * lower * coverPatch);
+  }
   // (v7: no longer painted. The plants on the ledges are real now, src/veg/scatter.js.)
   veg *= 1.0 - smoothstep(0.6, 2.5, carveM);   // nothing grows under an overhang
   veg *= smoothstep(5.0, 11.0, h + (n1 - 0.5) * 6.0);   // salt spray keeps the foot bare
+  veg *= 1.0 - 0.85 * sandZone * wallF * (1.0 - smoothstep(uBeachTop + 5.0, uBeachTop + 12.0, h));
   veg *= 1.0 - sand;
   tSandW = sand;
   tVegW = veg;
@@ -397,6 +457,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
   float ochre = sandZone * smoothstep(uBeachTop, uBeachTop + 3.0, h) * (1.0 - smoothstep(uBeachTop + 9.0, uBeachTop + 16.0, h));
   float wet = smoothstep(1.1, 0.35, h) * sandZone;
   float detail = smoothstep(0.6, 0.15, fp);               // close-range layers fade out by here
+
+  // The north/right beach wall: salt-weathered bedding and pits at their physical
+  // scale. Fade by world position and height, so head turns never change its material.
+  float rightFoot = sandZone * (1.0 - smoothstep(14.0, 25.0, h))
+                  * (1.0 - smoothstep(0.6, 1.05, length((g - vec2(145.0, 274.0)) / vec2(60.0, 82.0))));
 
   Surf s = Surf(vec3(0.5), vec3(0.0), 0.85, 1.0);
 
@@ -424,16 +489,19 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // (v10) At arm's length: the layered scan at its own size (1.8 m), and the pitted grain of
     // the rough rock scan, for the relief the face's big scans are too coarse to have there.
     // The marble scan's crack network, which reads as marble up close, pulled further to grey.
-    float closeR = max(wallF, footDust) * smoothstep(0.02, 0.006, fp);
+    float closeR = max(wallF, footDust) * max(smoothstep(0.02, 0.006, fp), rightFoot * smoothstep(0.14, 0.035, fp));
 #ifdef SKIP_CLOSER
     closeR = 0.0;
 #endif
     if (closeR > 0.01) {
       Surf fine = triplanar(L_BEDS, uTile[L_BEDS] / 3.0, vec2(0.23, 0.57));
-      Surf grain = triplanar(L_WET, 0.8, vec2(0.61, 0.19));
+      Surf grain = triplanar(L_WET, mix(0.8, 1.6, rightFoot), vec2(0.61, 0.19));
       float lf = luma(fine.color) / luma(uGain[L_BEDS] * lin(vec3(0.482, 0.322, 0.194)));
       float lg = luma(grain.color) / luma(uGain[L_WET] * lin(vec3(0.271, 0.251, 0.215)));
       a.color = mix(a.color, vec3(luma(a.color)) * uGain[L_LIMESTONE] / luma(uGain[L_LIMESTONE]), 0.5 * closeR);
+      // The worn toe is granular limestone; pull back the large marble-like
+      // crack colour while retaining the scanned pores, seams and relief.
+      a.color = mix(a.color, uGain[L_LIMESTONE] * lin(vec3(0.578, 0.550, 0.513)), 0.42 * rightFoot * closeR);
       a.color *= mix(1.0, clamp(lf, 0.5, 1.4) * clamp(lg, 0.7, 1.25), 0.7 * closeR);
       a.dn = mix(a.dn, a.dn * 0.5 + fine.dn * 1.1 + grain.dn * 1.2, closeR);
       a.ao *= mix(1.0, fine.ao * grain.ao, 0.7 * closeR);
@@ -468,9 +536,11 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         float row = clamp(log2(K / 0.25) / 0.62, 0.0, SHADOW_ROWS - 1.0);
         float margin = textureGrad(uStrataC, vec2(su, (row + 0.5) / SHADOW_ROWS), sdx, sdy).r;
         float soft = max(0.03, 1.5 * fpz);
-        // A margin of about zero is the face just below, tangent to the sun: lit. (Centring
-        // the soft edge on zero left every face half in shadow.)
-        tFineShadow = mix(1.0, 1.0 - smoothstep(0.01, 0.01 + 2.0 * soft, margin), wallF);
+        // The table is in unscaled relief metres. K accounts for the local strength when
+        // finding the occluder; its margin still needs that same strength to be in world
+        // metres, like the bias and pixel footprint. Otherwise millimetre ledges on smooth
+        // rock cast full black seams. Zero margin is tangent to the sun and remains lit.
+        tFineShadow = mix(1.0, 1.0 - smoothstep(0.01, 0.01 + 2.0 * soft, margin * m), wallF);
       }
     }
 
@@ -504,7 +574,15 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     // the rock stained ochre and brown.
     float foot = sandZone * (1.0 - smoothstep(uBeachTop + 3.0, uBeachTop + 9.0, h + (n1 - 0.5) * 3.0)) * wallF;
     a.color = mix(a.color, a.color * vec3(0.66, 0.63, 0.58), foot * 0.6);
-    float under = smoothstep(0.8, 5.0, carveM) * sandZone * (1.0 - smoothstep(18.0, 30.0, h));
+    // Weathering belongs to the bed, including the uncarved gully between face
+    // strips. A carving-attribute threshold stamped orange polygon islands here.
+    float beachWall = sandZone * (1.0 - smoothstep(18.0, 30.0, h));
+    float gully = 1.0 - smoothstep(14.0, 30.0, length(g - vec2(114.0, 294.0)));
+    float under = beachWall * mix(0.38 + 0.62 * smoothstep(0.8, 5.0, carveM), 0.65, gully);
+    // Staining follows runoff and individual beds instead of filling the
+    // entire recess with one orange stripe. Fresh worn patches stay grey-beige.
+    float stain = 0.35 + 0.65 * smoothstep(0.32, 0.7, 0.55 * streaky + 0.3 * n2 + 0.15 * SA.a);
+    under *= mix(1.0, stain, rightFoot);
     a.color = mix(a.color, a.color * vec3(1.02, 0.78, 0.52), under * 0.75);
     // The wave-cut notch and the dark wet band at the waterline, from the wet rock scan.
     if (notch > 0.0) {
@@ -583,9 +661,8 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     } else if (h < 0.0) wetS = 1.0;
     // (Single octaves of noise here: the sand covers most of the frame on the beach, and at
     // these scales the eye cannot tell them from fbm.)
-    // How trodden it is: above the swash nearly everywhere (it is a busy beach), more in some
-    // stretches; below it the waves smooth it and only fresh prints show.
-    float trample = (1.0 - firm) * (0.45 + 0.55 * smoothstep(0.25, 0.7, 0.65 * tn(g * 0.07 + 5.3) + 0.35 * tn(g * 0.19 + 1.1)));
+    // Wind, weather and a few visitors disturb the dry surface without covering it in prints.
+    float trample = (1.0 - firm) * (0.38 + 0.27 * smoothstep(0.25, 0.7, 0.65 * tn(g * 0.07 + 5.3) + 0.35 * tn(g * 0.19 + 1.1)));
     Surf sd = Surf(uSandAlb, vec3(0.0), 0.92, 1.0);
     // Tone: broad patches, drift lines of paler sand, and the pinkish grains of the
     // foraminifera sorted into streaks. (v10: stronger, and in three colours, whiter, creamier
@@ -596,6 +673,12 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     float cream = smoothstep(0.45, 0.75, n2), dull = smoothstep(0.52, 0.78, n1 * 0.6 + (1.0 - n2) * 0.4);
     sd.color *= mix(vec3(1.0), vec3(1.03, 0.98, 0.9), cream * 0.8) * mix(vec3(1.0), vec3(0.9, 0.88, 0.86), dull * 0.7 * (1.0 - firm));
     sd.color *= mix(vec3(1.0), vec3(1.035, 0.985, 0.95), smoothstep(0.55, 0.8, tn(vec2(g.x * 0.05, g.y * 0.2) + 8.0)));
+    // Coral grains change brightness and pore roughness at close range, while the broad tone
+    // above stays visible as that detail filters away into the distance.
+    float grainW = (1.0 - smoothstep(0.012, 0.055, fp)) * (1.0 - firm * 0.5);
+    float grain = tn(g * 8.5 + 11.7);
+    sd.color *= 1.0 + (grain - 0.5) * 0.075 * grainW;
+    sd.rough = clamp(sd.rough + (grain - 0.5) * 0.09 * grainW, 0.75, 1.0);
     // From further off, the aerial scan's variation in colour (its ripples are too small to
     // see from there; up close they came out half a metre apart, which the photos do not show).
     float farW = smoothstep(0.03, 0.12, fp);
@@ -624,7 +707,7 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
         Surf b = topLayer(L_SAND_DRY, uTile[L_SAND_DRY] * 1.37, vec2(0.8, 0.6), vec2(0.31, 0.77), true);
         mixSurf(a, b, smoothstep(0.3, 0.7, tn(g * 0.33 + 2.0)) * close);
       }
-      a.dn *= mix(0.35, 0.7, trample);
+      a.dn *= mix(0.50, 0.90, trample);
       if (firm > 0.001) {
         if (close > 0.0) {
           Surf fs = topLayer(L_SAND_FIRM, uTile[L_SAND_FIRM], vec2(0.6, -0.8), vec2(0.13, 0.4), true);
@@ -651,34 +734,86 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
     reliefW = 0.0;
 #endif
     if (reliefW > 0.0) {
-      vec3 l1 = tnd(g * 0.85 + 2.1);
-      // (Lumps: 9 cm over a metre or so; the smaller ones are in the trampled layer. Gentler on
-      // the firm sand.)
-      float lumpA = mix(1.0, 0.25, firm) * mix(0.6, 1.0, trample);
-      vec2 slope = l1.yz * 0.85 * 0.13 * lumpA;
-      float lumpH = (l1.x - 0.5) * 0.13 * lumpA;
+      // Deposited sand has interleaved hummocks and hollows, not uniformly round
+      // noise bumps. The elongated field sits above the existing geometric drifts.
+      mat2 wind = mat2(0.83, -0.56, 0.56, 0.83);
+      vec2 q = wind * g;
+      vec3 l1 = tnd(q * vec2(0.65, 1.1) + vec2(2.1, 9.7));
+      vec3 drift = tnd(q * vec2(0.23, 0.37) + vec2(7.3, 3.1));
+      float lumpA = mix(1.0, 0.18, firm) * mix(0.75, 1.0, trample);
+      vec2 slope = transpose(wind) * (l1.yz * vec2(0.65, 1.1)) * (0.10 * lumpA);
+      slope += transpose(wind) * (drift.yz * vec2(0.23, 0.37)) * (0.16 * lumpA);
+      float lumpH = ((l1.x - 0.5) * 0.10 + (drift.x - 0.5) * 0.16) * lumpA;
+      // Fine broken ridges: about 31 cm apart, centimetres high, interrupted by
+      // smoother deposits. The warp has analytic slopes, including its curved crests.
+      float rippleW = (1.0 - firm) * (1.0 - 0.55 * trample)
+                    * smoothstep(0.34, 0.68, drift.x);
+      float bend = q.x * 1.05 + drift.x * 4.0;
+      float phase = q.y * 20.0 + (drift.x - 0.5) * 4.5 + 1.4 * sin(bend);
+      vec2 phaseSlope = vec2(0.0, 20.0) + drift.yz * vec2(0.23, 0.37) * 4.5
+                     + 1.4 * cos(bend) * (vec2(1.05, 0.0) + drift.yz * vec2(0.23, 0.37) * 4.0);
+      // Filter the phase from explicit world derivatives (valid inside this branch).
+      vec2 phaseWorld = transpose(wind) * phaseSlope;
+      float phaseFoot = abs(dot(phaseWorld, vec2(triDx.x, -triDx.z)))
+                      + abs(dot(phaseWorld, vec2(triDy.x, -triDy.z)));
+      float rippleKeep = exp(-0.65 * phaseFoot * phaseFoot);
+      float rippleH = sin(phase) + 0.22 * pow(rippleKeep, 3.0) * sin(phase * 2.0);
+      float rippleSlope = cos(phase) + 0.44 * pow(rippleKeep, 3.0) * cos(phase * 2.0);
+      float rippleA = 0.018 * rippleW * rippleKeep;
+      slope += phaseWorld * (rippleA * rippleSlope);
+      lumpH += rippleH * rippleA;
+      sd.color *= 1.0 + (drift.x - 0.5) * 0.18 * (1.0 - firm);
+      // Occluded grain between ridges remains readable under the nearly overhead sun.
+      // The shade follows the same height profile; quieter deposits stay unmarked.
+      float trough = 0.5 - 0.5 * sin(phase);
+      sd.ao *= 1.0 - rippleW * rippleKeep * 0.20 * trough;
+      sd.color *= 1.0 - rippleW * rippleKeep * 0.16 * trough;
+      // Small irregular clods and pores interrupt the ripple crests. They fade
+      // before becoming subpixel speckles; millimetre grain comes from the scans.
+      float microW = (1.0 - smoothstep(0.035, 0.10, fp)) * (1.0 - firm);
+      vec3 grains = tnd(q * vec2(2.7, 4.6) + vec2(3.8, 7.1));
+      slope += transpose(wind) * (grains.yz * vec2(2.7, 4.6)) * (0.040 * microW);
+      lumpH += (grains.x - 0.5) * 0.018 * microW;
+      sd.color *= 1.0 + (grains.x - 0.5) * 0.20 * microW;
+      sd.ao *= 1.0 - 0.17 * (1.0 - grains.x) * microW;
+      // Irregular centimetre hollows survive in the middle-distance material as
+      // accumulated darker pores. Filter the tiny granules, not this deposited pattern.
+      float deposits = (1.0 - firm) * (0.5 + 0.5 * smoothstep(0.25, 0.75, drift.x));
+      float pore = smoothstep(0.52, 0.84, 1.0 - grains.x) * (1.0 - smoothstep(0.06, 0.18, fp));
+      sd.color *= 1.0 - 0.10 * pore * deposits * reliefW;
+      sd.ao *= 1.0 - 0.15 * pore * deposits * reliefW;
+      sd.rough = clamp(sd.rough + 0.045 * deposits * (grains.x - 0.5), 0.75, 1.0);
+      // A few coral/shell chips among fine grains. Their 1–3 cm size is filtered,
+      // and their density follows deposits rather than filling the whole beach.
+      float fragmentW = (1.0 - smoothstep(0.012, 0.035, fp)) * (1.0 - firm);
+      if (fragmentW > 0.01) {
+        vec2 cell = floor(g * 9.0), f = fract(g * 9.0);
+        float seed = th12(cell + 13.7);
+        vec2 centre = 0.25 + 0.5 * vec2(th12(cell + 2.8), th12(cell + 8.3));
+        vec2 d = (f - centre) * vec2(0.8, 1.3);
+        float radius = mix(0.065, 0.14, th12(cell + 4.1));
+        float aa = max(0.015, fp * 9.0);
+        float chip = (1.0 - smoothstep(radius - aa, radius + aa, length(d)))
+                   * step(0.965 - 0.018 * drift.x, seed) * fragmentW;
+        sd.color *= mix(vec3(1.0), vec3(1.12, 1.09, 1.025), chip);
+        sd.ao *= 1.0 - 0.16 * chip;
+        slope += d * (0.30 * chip);
+      }
       float cav = 0.0;
-      // (Out to where a print is a few pixels: from the switchbacks, 50 m above the beach, the
-      // two reads bought nothing the mottle does not give.)
-      float printW = (1.0 - smoothstep(0.035, 0.08, fp)) * mix(0.1, 1.0, trample);
+      // At arm's length the five walking lines have individual heel-sized hollows. Fade their
+      // relief as each print becomes smaller than a few pixels from the stairs.
+      float printW = (1.0 - smoothstep(0.06, 0.16, fp)) * mix(0.18, 1.0, 1.0 - firm);
       vec3 tr = vec3(0.0);
       if (printW > 0.0) {
-        // Twice, turned and scaled against each other and handed over by a noise, so the tile
-        // does not repeat.
-        vec3 T1 = trampleAt(vec2(1.0, 0.0), 1.0, vec2(0.0));
-        vec3 T2 = trampleAt(vec2(0.6, 0.8), 1.37, vec2(0.41, 0.13));
-        // (A narrow hand-over: two unrelated reliefs averaged half and half cancel out flat.)
-        tr = mix(T1, T2, smoothstep(0.47, 0.53, tn(g * 0.21 + 6.0)));
+        tr = beachPrints(g);
         cav = tr.z * printW;
       }
       slope *= reliefW * 2.0;
-      // (The layer stores the tilt as its sine, which flattens the steep walls of a print: 3.2
-      // brings them back to what the slope worked out in the shader gave.)
-      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * 3.2 * printW * reliefW;
+      sd.dn += vec3(-slope.x, 0.0, slope.y) + vec3(tr.x, 0.0, tr.y) * printW * reliefW;
       // In a print the sand is disturbed, a touch darker and duller, and the pit sees less sky;
       // the pushed-up rims are fresh dry grains, a touch lighter.
-      sd.color *= (1.0 - 0.1 * cav) * (1.0 + lumpH * 1.5 * reliefW);
-      sd.ao *= 1.0 - 0.4 * cav;
+      sd.color *= (1.0 - 0.18 * cav) * (1.0 + lumpH * 1.5 * reliefW);
+      sd.ao *= 1.0 - 0.5 * cav;
       // The pits shade the sun too: grains and the pit's own rim throw tiny shadows the
       // relief is too coarse to cast. And trodden sand seen at a low angle shows more of the
       // shaded sides of its lumps than it does from above (from the clifftop, looking down at
@@ -709,22 +844,27 @@ vec3 terrainSurface(vec3 P, vec3 N, float fp) {
       float reachFoot = 1.0 - smoothstep(top - 0.1, top + 0.5, h);
       float band = (1.0 - smoothstep(0.1, 0.75, fd)) * reachFoot;
       sd.color = mix(sd.color, sd.color * vec3(0.55, 0.3, 0.27), band * 0.75);
-      float grit = 1.0 - smoothstep(-0.5, 3.5, fd);
+      float grit = 1.0 - smoothstep(-0.5, 3.2, fd);
       if (grit > 0.01 && fp < 0.08) {
-        vec2 gc = g * 16.0;
+        // Sparse chips and small fragments of the actual limestone, in short pockets at
+        // the toe rather than a uniform carpet of bright grains.
+        vec2 gc = g * 4.5;
         vec2 ci = floor(gc);
         float r = th12(ci);
         vec2 off = vec2(th12(ci + 17.1), th12(ci + 3.7)) * 0.6 + 0.2;
         float dist = length(fract(gc) - off);
-        float size = 0.12 + 0.3 * th12(ci + 9.3);
-        float stone = (1.0 - smoothstep(size * 0.7, size, dist)) * step(1.0 - grit * 0.55, r) * smoothstep(0.08, 0.03, fp);
-        vec3 stoneCol = uGain[L_LIMESTONE] * mix(vec3(0.3, 0.28, 0.25), vec3(0.62, 0.6, 0.55), th12(ci + 5.5));
+        float size = 0.12 + 0.22 * th12(ci + 9.3);
+        float pocket = 0.55 + 0.45 * tn(g * 0.16);
+        float stone = (1.0 - smoothstep(size * 0.65, size, dist)) * step(1.0 - grit * pocket * 0.36, r) * smoothstep(0.08, 0.025, fp);
+        vec3 stoneCol = sd.color * mix(vec3(0.5, 0.54, 0.56), vec3(0.72, 0.7, 0.67), th12(ci + 5.5));
         sd.color = mix(sd.color, stoneCol, stone);
         sd.dn += vec3(fract(gc) - off, 0.0).xzy * vec3(1.0, 0.0, -1.0) * stone * 2.5;
-        sd.ao *= 1.0 - 0.35 * (1.0 - smoothstep(size, size * 1.6, dist)) * step(1.0 - grit * 0.55, r) * (1.0 - stone);
+        sd.ao *= 1.0 - 0.3 * (1.0 - smoothstep(size, size * 1.6, dist)) * step(1.0 - grit * pocket * 0.36, r) * (1.0 - stone);
       }
       sd.color *= mix(vec3(1.0), vec3(0.97, 0.94, 0.9), grit * 0.6);
+      sd.color *= mix(vec3(1.0), vec3(0.87, 0.88, 0.86), grit * (0.4 + 0.3 * tn(g * 0.45)));
       sd.color *= mix(vec3(1.0), vec3(0.82, 0.8, 0.78), vRock.x);
+      sd.ao *= 1.0 - 0.16 * grit * (1.0 - smoothstep(0.1, 1.3, max(fd, 0.0)));
     }
     // Wet sand: water in the pores, darker and a little more saturated.
     tWet = wetS * sand;

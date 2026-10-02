@@ -289,15 +289,20 @@ function trailData(hf, layout) {
   const transfer = [];
   const take = (a) => { transfer.push(a.buffer); return a; };
   const meshes = {};
-  for (const k of ['concrete', 'dirt']) meshes[k] = { position: take(geo[k].position), normal: take(geo[k].normal), trail: take(geo[k].trail), index: take(geo[k].index) };
+  for (const k of ['concrete', 'dirt']) meshes[k] = {
+    position: take(geo[k].position), normal: take(geo[k].normal), trail: take(geo[k].trail),
+    wear: take(geo[k].wear), index: take(geo[k].index),
+  };
   const inst = {};
-  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails', 'lashPost0', 'lashPost1', 'lashPost2', 'lashRail0', 'lashRail1', 'lashRail2']) inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
+  for (const k of ['logs', 'stones', 'timberPosts', 'timberRails', 'bambooPosts', 'bambooRails']) {
+    inst[k] = { matrices: take(geo[k].matrices), rand: take(geo[k].rand), count: geo[k].count };
+  }
   const line = {};
   for (const k of ['x', 'y', 's', 'hd', 'ht', 'w']) line[k] = Float32Array.from(r[k]);
   for (const k in line) take(line[k]);
   const mask = Uint8Array.from(c.mask);
   take(mask);
-  return { transfer, data: { line, meshes, inst, mask: { data: mask, nx: c.nx, ny: c.ny, x0: c.x0, y0: c.y0, cell: c.cell },
+  return { transfer, data: { line, meshes, inst, lashings: take(geo.lashings), mask: { data: mask, nx: c.nx, ny: c.ny, x0: c.x0, y0: c.y0, cell: c.cell },
     steps: r.steps.length, length: r.length, ms: { carve: c.ms, geometry: geo.ms },
     sectionEnds: [1, 2].map((k) => r.s[Math.max(0, r.sec.indexOf(k))]) } };
 }

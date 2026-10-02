@@ -102,7 +102,8 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     // hardest in the rip channels.
     // (The water in a bore moves at about half the speed of its front, so the foam made at
     // the front is left behind it as a trail.)
-    u -= off * 1.6 * sf.push;
+    float boreSpeed = max(sf.L, 22.0) / uPeriod * waveRate(uTime);
+    u -= off * boreSpeed * 0.55 * sf.push;
     float surfZone = smoothstep(uBreakAt * 1.35 + 25.0, uBreakAt * 0.5, s) * nearBeach;
     float rip = smoothstep(0.5, 0.8, vnoise(p * 0.02 + 3.7));
     u += off * (0.3 + 1.1 * rip) * surfZone * (1.0 - sf.push);
@@ -138,7 +139,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     sand *= exp(-uDt / uLife.z);
 
     // New white water where waves break on the sand...
-    float make = sf.fresh * nearBeach;
+    float make = sf.fresh * nearBeach * 0.72;
     // ...and where a swell crest reaches the foot of the rock. The swell is the ocean's own,
     // so the bursts come with the waves, in sets, and are biggest on the exposed rock.
     float swellH = texture(uSwell0, p / uOceanL.x).y;
@@ -152,7 +153,7 @@ export function createSurfSim(renderer, waterUniforms, opts = {}) {
     make = max(make, max(hit, wash));
     // The front of each uprush is a band of foam and bubbles, which it leaves behind as it
     // slows; foam left on bare sand drains into it and is gone within a few seconds.
-    make = max(make, sw.front * 0.75 * nearBeach);
+    make = max(make, sw.front * 0.58 * nearBeach);
     float bare = onSand * (1.0 - smoothstep(0.0, 0.003, sw.film));
     foam *= exp(-uDt * bare / 2.5);
     // New foam starts its own pattern where it is made.

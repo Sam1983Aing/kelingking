@@ -49,7 +49,7 @@ html.lenis, html.lenis body { height: auto; }
 
 html.scroll.loading { overflow: hidden; }
 .track { position: relative; width: 1px; pointer-events: none; }
-.notext .words, .notext .hud, .notext .rail, .notext .scrim { display: none !important; }
+.notext .words, .notext .hud, .notext .rail, .notext .scrim, .notext .scene-controls { display: none !important; }
 
 .label { margin: 0; font: 500 11px/1.3 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; }
 .display { margin: 0; font: 400 clamp(2.5rem, 1.4rem + 3.6vw, 5.4rem)/0.98 var(--serif); letter-spacing: -0.012em; text-wrap: balance; }
@@ -147,3 +147,28 @@ html.scroll.loading { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .cue i { animation: none; transform: scaleX(1); }
 }
+
+/* Scene choices sit beneath the mark, clear of the chapter and the altimeter. */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.scene-controls { position: fixed; z-index: 11; left: var(--gutter); top: max(54px, calc(env(safe-area-inset-top) + 44px)); opacity: 0; color: var(--cream); }
+.time-of-day { display: flex; margin: 0; padding: 0 7px; border: 1px solid rgba(243,239,230,.2); background: rgba(18,17,14,.58); }
+.time-of-day label { position: relative; cursor: pointer; }
+.time-of-day input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.time-of-day span { display: grid; place-items: center; min-height: 44px; padding: 0 12px; font: 500 11px/1 var(--sans); letter-spacing: .03em; color: rgba(243,239,230,.7); }
+.time-of-day input:checked + span { color: var(--cream); box-shadow: inset 0 -2px var(--accent); }
+.time-of-day input:focus-visible + span { outline: 2px solid var(--cream); outline-offset: -4px; }
+.beach-look { display: flex; align-items: center; gap: 12px; margin-top: 6px; padding-left: 4px; font: 400 11px/1.4 var(--sans); text-shadow: var(--shadow); }
+.beach-look[hidden] { display: none; }
+.look-reset { cursor: pointer; border: 0; border-bottom: 1px solid currentColor; padding: 10px 0; background: none; color: inherit; font: inherit; }
+.look-reset:focus-visible { outline: 2px solid var(--cream); outline-offset: 4px; }
+.lighting-dissolve { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; object-fit: fill; }
+.dim-light .chapter.on-light { color: var(--cream); text-shadow: var(--shadow); }
+.dim-light .chapter.on-light .label { color: var(--cream); }
+.dim-light .chapter.on-light .body { color: var(--cream-dim); }
+.dim-light .chapter.on-light .display em, .dim-light .chapter.on-light .chapter__num { color: var(--accent); }
+@media (max-width: 420px) { .time-of-day span { padding: 0 11px; } .look-reset { min-height: 44px; } }
+
+.look-reset:disabled { opacity: .5; cursor: default; border-bottom-color: transparent; }
+
+html.scroll #stage:focus { outline: none; }
+html.scroll #stage:focus-visible { outline: 2px solid rgba(243,239,230,.65); outline-offset: -2px; }

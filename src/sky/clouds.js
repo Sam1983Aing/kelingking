@@ -19,7 +19,7 @@
 // from above, a little sea light from below, less of both deep inside. The same haze as
 // everything else sits in front of each cloud.
 //
-// Cost. Marched at half resolution for the sky only, into a texture the sky dome blends in.
+// Cost. Marched at three-quarter resolution for the sky only, then blended by the sky dome.
 // On the scrolling page the clock always runs, so the clouds would be marched every frame:
 // there only one pixel in sixteen is marched each frame (a 4 x 4 Bayer cycle), and the others
 // are carried over from the last frame, moved for the camera and the drift (a resolve pass).
@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { ATMO_PARS, AP_LAYOUT, TRANS_LOOKUP, AERIAL_FN } from './atmosphere-glsl.js';
 
 export const CLOUD_DEFAULTS = {
-  coverage: 0.28,     // how much of the sky over the sea has cloud, before the clusters
+  coverage: 0.12,     // scattered trade cumulus, leaving broad clear intervals as in the photos
   base: 0.75,         // km
   top: 3.2,           // km, the tallest a cumulus gets
   density: 60,        // extinction inside a cloud, per km
@@ -41,7 +41,7 @@ export const CLOUD_DEFAULTS = {
   high: 0.5,          // the thin high veil (0 none)
   windHeading: 290,   // compass degrees the clouds drift toward
   windSpeed: 0.006,   // km per second (6 m/s)
-  seed: 7,
+  seed: 8,
 };
 
 const WEATHER_SIZE = 1024;
@@ -77,11 +77,11 @@ function valueNoise2(rand, n) {
 function makeWeather(p) {
   const N = WEATHER_SIZE, km = p.period / N;
   const layerKm = p.top - p.base;
-  const R = new Float32Array(N * N), G = new Float32Array(N * N), B = new Float32Array(N * N);
+  const R = new Float32Array(N * N), G = new Float32Array(N * N), B = new Float32Array(N * N), H = new Float32Array(N * N);
   const rand = mulberry32(p.seed * 9973 + 1);
   // Clusters: a slow field (a lattice every 8 km) that says where the sky is busy.
   const busy = valueNoise2(rand, Math.round(p.period / 8));
-  const blob = (cx, cy, r, h) => {
+  const blob = (cx, cy, r, h, peak = h) => {
     const rr = Math.ceil(r / km) + 1;
     const ci = cx / km, cj = cy / km;
     for (let j = Math.floor(cj - rr); j <= cj + rr; j++) {
@@ -95,6 +95,9 @@ function makeWeather(p) {
         // over a point sets the top there, so a heap of blobs is a heap of rounded turrets.
         const hv = h * Math.sqrt(1 - d * d);
         if (hv > G[k]) G[k] = hv;
+        // The parent height identifies the cloud even at its edge. Using the local dome
+        // height for LOD reduced distant clouds to just their brightest summit pixels.
+        H[k] = Math.max(H[k], peak);
       }
     }
   };
@@ -107,13 +110,17 @@ function makeWeather(p) {
     // (The turret count from the radius as drawn, so the random sequence, and with it every
     // other cloud in the sky, stays where it was.)
     const n = 2 + Math.floor(rand() * 3) + Math.floor(r * 5);
+    // Consume exactly the same turret draws so the accepted large clouds keep their
+    // placement. Discard undersized independent sites instead of magnifying every dot.
+    const active = rMin === 0 || r >= 0.28;
     r = Math.max(r, rMin);
     const k = Math.min(Math.max((r - 0.3) / 0.2, 0), 1);
     h = Math.min(h, r * (1.0 + 5.0 * k * k * (3 - 2 * k)) / layerKm);
-    blob(cx, cy, r, h);
+    if (active) blob(cx, cy, r, h);
     for (let t = 0; t < n; t++) {
       const a = rand() * Math.PI * 2, d = r * (0.3 + 0.55 * rand());
-      blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d, r * (0.3 + 0.35 * rand()), h * (0.45 + 0.5 * rand()));
+      const radius = r * (0.3 + 0.35 * rand()), height = h * (0.45 + 0.5 * rand());
+      if (active) blob(cx + Math.cos(a) * d, cy + Math.sin(a) * d, radius, height, h);
     }
   };
   const cell = 1.2;                       // km between cloud sites
@@ -129,22 +136,36 @@ function makeWeather(p) {
       // couple of kilometres across and high.
       const size = Math.pow(r3, 2.6) * (0.5 + 0.8 * b);
       const r = 0.1 + 1.1 * size * (0.7 + 0.6 * r4), h = Math.min(1, 0.12 + 0.55 * size + 0.35 * r4 * size + 0.1 * r4);
-      // (v12: at least 200 m in radius, where it was 100: the smallest only showed as balls.)
-      cloud(cx, cy, r, h, 0.2);
+      // Keep a minimum body radius; tiny independent sites are discarded inside cloud().
+      cloud(cx, cy, r, h, 0.32);
     }
   }
   // The cumulus of the photo day: a tall heap about 3 km east of the viewpoint (where the
   // `eastCove` photo shows it, over the cliff), drifting in with the wind.
-  cloud(3.3, 0.35, 1.25, 1.0);
+  // The reference only catches the edge of this heap. Keep its centre just outside the
+  // east-cove lens and narrow the weather footprint so its billows do not fill the sky.
+  cloud(3.3, 0.2, 0.8, 0.85);
   // The bank's sheets: two octaves of value noise, lumpy at a kilometre or two.
   const s1 = valueNoise2(rand, Math.round(p.period / 3)), s2 = valueNoise2(rand, Math.round(p.period / 0.9));
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) B[j * N + i] = 0.68 * s1(i / N, j / N) + 0.32 * s2(i / N, j / N);
   const data = new Uint8Array(N * N * 4);
   for (let k = 0; k < N * N; k++) {
+    // The south-west sea is in the clear interval visible from the ridge path. Sculpt it
+    // into the shared weather map so the cloud shadows agree with the visible sky.
+    const x = (k % N) * km, z = Math.floor(k / N) * km;
+    const sx = x > p.period * 0.5 ? x - p.period : x;
+    const sz = z > p.period * 0.5 ? z - p.period : z;
+    if (sx < 0 && sz > 0 && sx > -18 && sz < 18) {
+      const smooth = (v) => v * v * (3 - 2 * v);
+      const west = smooth(Math.min(-sx / 3, 1));
+      const south = smooth(Math.min(sz / 0.6, 1));
+      const far = smooth(Math.min(Math.max((Math.hypot(sx, sz) - 8) / 10, 0), 1));
+      R[k] *= 1 - 0.97 * west * south * (1 - far);
+    }
     data[k * 4] = Math.round(R[k] * 255);
     data[k * 4 + 1] = Math.round(G[k] * 255);
     data[k * 4 + 2] = Math.round(B[k] * 255);
-    data[k * 4 + 3] = 255;
+    data[k * 4 + 3] = Math.round(H[k] * 255);
   }
   const tex = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -304,16 +325,16 @@ float lodFor(float texelKm) { return max(log2(max(gPixKm, 1e-4) / texelKm), 0.0)
 
 // Weather at a map position (km): cumulus amount and top (0..1 of the layer), and the
 // bank's sheet amount.
-vec3 cloudWeather(vec2 xz) {
-  vec3 w = textureLod(uWeather, (xz - uCloudWind) / uCloudLayer.z, lodFor(uCloudLayer.z / 1024.0)).rgb;
+vec4 cloudWeather(vec2 xz) {
+  vec4 w = textureLod(uWeather, (xz - uCloudWind) / uCloudLayer.z, lodFor(uCloudLayer.z / 1024.0));
   float r = length(xz);
   // Keep the sky over the island clear, so it stays in sun as on the photo day.
   w.r *= smoothstep(uCloudLayer.w, uCloudLayer.w * 2.2, r);
   // The island heats the air and grows the big cumulus; out over the open sea the trade
   // cumulus stay small and scattered (the photos' horizon: a thin band of small puffs).
   float open = smoothstep(6.0, 30.0, r);
-  w.g *= 1.0 - 0.75 * open;
-  w.r *= 1.0 - 0.45 * open;
+  w.ga *= 1.0 - 0.82 * open;
+  w.r *= 1.0 - 0.62 * open;
   // The bank: sheets that fill in 25 to 60 km out, where they pile up along the horizon.
   float bank = smoothstep(25.0, 60.0, r) * uCloudBank.x;
   w.b = bank > 0.0 ? clamp((w.b - (1.0 - bank)) / max(bank, 0.05), 0.0, 1.0) : 0.0;
@@ -324,13 +345,11 @@ float remap(float v, float a, float b) { return clamp((v - a) / (b - a), 0.0, 1.
 
 // Density (0..1) at a point p (km, planet-centred, y up) at height h (km) above the sea.
 // detail: 1 with the edge noise, 0 where the march steps are too long to resolve it.
-float cloudDensity(vec3 p, float h, vec3 w, float detail) {
-  // The base is flat under the middle of a cloud and curves up toward its edge, and it sits a
-  // little higher or lower from one cloud to the next (by up to 120 m), so the bases do not
-  // line up across the sky.
+float cloudDensity(vec3 p, float h, vec4 w, float detail) {
+  // Broad billows vary the base height without making the underside a smooth sphere.
   // (v12: flat right to the edge. It curled up by 100 m toward the edge of each cloud, which
   // rounded every underside like a ball.)
-  float lift = 0.12 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 19.0, 3.0).r - 0.5);
+  float lift = 0.18 * (textureLod(uCloudShape, vec3(p.x - uCloudWind.x, 0.37, p.z - uCloudWind.y) / 3.5, 2.0).r - 0.5);
   float hn = (h - uCloudLayer.x - lift) / (uCloudLayer.y - uCloudLayer.x);
   if (hn <= 0.0) return 0.0;
   // Cumulus: a flat base (about 60 m of fade) and the weather map's domes over it, rounded
@@ -346,12 +365,31 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
     float prof = smoothstep(0.0, 0.012, hn) * (1.0 - smoothstep(0.35, 1.0, rel));
     vec3 q = vec3(p.x - uCloudWind.x, h, p.z - uCloudWind.y) / SHAPE_KM;
     float shape = textureLod(uCloudShape, q, lodFor(SHAPE_KM / 64.0)).r;
+    // Small trade cumulus need billows at their own scale. Kilometre-sized noise cut
+    // a 400 m cloud into unrelated dots. Keep the large heaps' original field.
+    float small = 1.0 - smoothstep(0.25, 0.80, w.a * (uCloudLayer.y - uCloudLayer.x));
+    vec3 qs = vec3(p.x - uCloudWind.x, h, p.z - uCloudWind.y) / 0.85;
+    if (small > 0.0) {
+      float smallShape = textureLod(uCloudShape, qs, lodFor(0.85 / 64.0)).r;
+      shape = mix(shape, 0.58 + 0.32 * smallShape, small);
+    }
+    // Fine turbulent relief lives on the existing broad lobes; moving the threshold
+    // gives the sun march actual small-scale surfaces to illuminate.
+    if (detail > 0.0) {
+      vec3 reliefQ = vec3(p.x - uCloudWind.x, h - uCloudBoil, p.z - uCloudWind.y) / DETAIL_KM;
+      float relief = textureLod(uCloudDetail, reliefQ, lodFor(DETAIL_KM / 32.0)).r;
+      shape += (relief - 0.45) * 0.12 * detail * (1.0 - 0.5 * small);
+    }
     // Full density a short way inside the surface: a cumulus has an edge, not a fade.
     // (Far out, where the detail noise is gone, a softer edge.)
     float thr = mix(0.6, 0.3, w.r);
-    dc = remap(shape * prof, thr, thr + EDGE * (1.0 + 2.0 * (1.0 - detail))) * smoothstep(0.02, 0.2, w.r);
-    // (v10) A puff smaller than a couple of pixels fades out rather than showing as a speck.
-    dc *= smoothstep(2.0, 6.0, top * (uCloudLayer.y - uCloudLayer.x) / max(gPixKm, 1e-3));
+    // A continuous core carries the small cloud; noise sculpts its lobes, rather than
+    // selecting separate scraps from a thin dome.
+    prof = mix(prof, smoothstep(0.0, 0.012, hn) * (1.0 - smoothstep(0.55, 1.0, rel)), small);
+    thr = mix(thr, mix(0.72, 0.26, w.r), small);
+    dc = remap(shape * prof, thr, thr + EDGE * (1.0 + 2.0 * (1.0 - detail))) * smoothstep(0.18, 0.42, w.r);
+    // Tiny distant puffs fade into the horizon haze rather than turning into square flecks.
+    dc *= smoothstep(10.0, 20.0, w.a * (uCloudLayer.y - uCloudLayer.x) / max(gPixKm, 1e-3));
   }
   // The bank: flat sheets a couple of hundred metres thick.
   float hk = h - uCloudLayer.x;
@@ -369,7 +407,12 @@ float cloudDensity(vec3 p, float h, vec3 w, float detail) {
     vec3 qd = vec3(p.x - uCloudWind.x, h - uCloudBoil, p.z - uCloudWind.y) / DETAIL_KM;
     float n = textureLod(uCloudDetail, qd, lodFor(DETAIL_KM / 32.0)).r;
     n = mix(1.0 - n, n, smoothstep(0.05, 0.35, rel));
-    d = remap(d, n * ERODE * detail, 1.0);
+    // A broader scale folds the surface into secondary billows. The fine
+    // field erodes the outer shell without producing holes through small cloud bodies.
+    float billow = textureLod(uCloudDetail, qd * 0.28 + vec3(0.17, 0.43, 0.29), lodFor(DETAIL_KM / (32.0 * 0.28))).r;
+    float small = 1.0 - smoothstep(0.25, 0.80, w.a * (uCloudLayer.y - uCloudLayer.x));
+    float erosion = (n * 0.78 + billow * 0.22) * ERODE * detail * mix(1.0, 0.62, small);
+    d = remap(d, erosion, 1.0);
   }
   return d;
 }
@@ -397,7 +440,7 @@ uniform vec3 uCamFwd;
 uniform vec3 uCamRight;
 uniform vec3 uCamUp;
 uniform vec3 uSkySH[9];
-uniform vec2 uHalfRes;        // the clouds' full size (half the drawing buffer)
+uniform vec2 uHalfRes;        // the clouds' history size (three quarters of the drawing buffer)
 uniform vec2 uMarchOffset;    // this frame's pixel within each 4 x 4 block (stride 4), or 0
 uniform float uMarchStride;   // 1 for a whole march, 4 for one pixel in sixteen
 uniform float uMarchFrame;    // moves the steps' jitter on from frame to frame
@@ -427,11 +470,11 @@ vec4 highVeil(vec3 ro, vec3 rd, float cosT) {
   // Streaks along the wind, bent by a slower field so they are not ruled lines.
   vec2 xz = p.xz - uCloudWind * 3.0;
   xz += 6.0 * vec2(vnoise(xz * 0.03), vnoise(xz * 0.03 + 7.3)) - 3.0;
-  vec2 q = xz * vec2(0.11, 0.3);
+  vec2 q = xz * vec2(0.12, 0.19);
   float n = 0.0, a = 0.5;
   for (int i = 0; i < 5; i++) { n += a * vnoise(q); q = q * 2.03 + vec2(1.7, 9.2); a *= 0.5; }
-  float patchy = smoothstep(0.35, 0.75, vnoise(xz * 0.02 + 3.1));
-  float c = smoothstep(0.5, 0.85, n) * patchy * uCloudBank.y * 0.3;
+  float patchy = smoothstep(0.3, 0.7, vnoise(xz * 0.02 + 3.1));
+  float c = smoothstep(0.4, 0.68, n) * patchy * uCloudBank.y * 0.35;
   // Thinner toward the horizon, where the haze and the distance take it.
   c *= smoothstep(0.01, 0.12, rd.y);
   vec3 skyTop = max(uSkySH[0] * 0.886227 + uSkySH[1] * 1.023328, vec3(0.0));
@@ -472,7 +515,9 @@ void main() {
   // Steps grow with distance (1.2% of it, 2.5% past 30 km, where a pixel is a few hundred
   // metres across), and the empty sky between clouds is crossed in longer strides. Detail
   // too fine for the step is left out, not aliased into grain.
-  float jitter = fract(52.9829189 * fract(dot(px + 0.5, vec2(0.06711056, 0.00583715))) + uMarchFrame * 0.618034);
+  // All pixels share the same sample-depth phase; change it between temporal
+  // cycles. Per-pixel coarse jitter produced a comb on low, thin cloud silhouettes.
+  float jitter = fract(0.5 + uMarchFrame * 0.618034);
   float sunY = max(uSunDir.y, 0.15);
   float layerKm = uCloudLayer.y - uCloudLayer.x;
   // Sky light on a cloud: from above, and the sea's light from below.
@@ -486,6 +531,7 @@ void main() {
   // Coarse steps through empty sky; on reaching cloud, back up one step and go on in fine
   // steps (a sixth), so the edge of a cloud lands where it is, not on the step grid.
   float fine = 0.0;
+  bool wasEnvelope = false;
   float pixAngle = 2.0 * length(uCamUp) / uHalfRes.y;
   for (int i = 0; i < 128; i++) {
     if (t > t1) break;
@@ -495,11 +541,28 @@ void main() {
     float ds = fine > 0.0 ? coarse / mix(FINE_DIV, 2.0, smoothstep(8.0, 30.0, t)) : coarse;
     vec3 p = ro + rd * t;
     float h = length(p) - uRg;
-    vec3 w = cloudWeather(p.xz);
-    if (w.r < 0.02 && w.b < 0.02) { fine = 0.0; t += coarse * 2.5; continue; }
+    vec4 w = cloudWeather(p.xz);
+    if (w.r < 0.02 && w.b < 0.02) { fine = 0.0; wasEnvelope = false; t += coarse * 2.5; continue; }
+    // Enter fine steps at the cloud envelope, before finding an opaque sample.
+    // Otherwise a coarse stride can skip a thin cumulus entirely in some rays,
+    // leaving stripes and bright fragments beside rays that did hit it.
+    bool envelope = w.r > 0.08 && h > uCloudLayer.x - 0.10
+                 && h < uCloudLayer.x + w.g * layerKm + 0.05
+                 && w.a * layerKm > gPixKm * 10.0;
+    if (envelope && !wasEnvelope && fine <= 0.0) {
+      wasEnvelope = true;
+      fine = 12.0;
+      t = max(t - coarse, t0);
+      continue;
+    }
+    wasEnvelope = envelope;
+    if (envelope) {
+      fine = max(fine, 2.0);
+      ds = min(coarse / mix(FINE_DIV, 2.0, smoothstep(8.0, 30.0, t)), max(0.01, w.a * layerKm * 0.10));
+    }
     // (And not where a pixel is wider than the eroded billows: v10, it cut the far clouds'
     // edges into pixel-sized holes.)
-    float detail = min(smoothstep(0.25, 0.06, ds), smoothstep(0.06, 0.02, gPixKm));
+    float detail = min(smoothstep(0.25, 0.06, ds), smoothstep(0.14, 0.04, gPixKm));
     float dens = cloudDensity(p, h, w, detail);
     if (dens > 0.0 && fine <= 0.0) {
       fine = 12.0;                 // fine steps for a while
@@ -536,7 +599,7 @@ void main() {
       // (v10: falls off faster with the depth of cloud toward the sun, 0.25 where it was 0.09,
       // so the turrets' shaded sides and the gaps between them are grey, not the same white as
       // their sunlit tops: the clouds read as cotton wool.)
-      float diff = 0.24 / (1.0 + 0.25 * tau);
+      float diff = 0.215 / (1.0 + 0.30 * tau);
       // Powder: the thin outer shell has taken light in but not yet scattered it back out,
       // so it is darker, except toward the sun, where the forward lobe lights it.
       float powder = 1.0 - exp(-2.0 * (tau + sigma * 0.03));
@@ -550,6 +613,7 @@ void main() {
       // however opaque one step through it is. (A step through 100 km of haze-blue sky and a
       // wisp of cloud was all or nothing, and the far clouds' edges came out as blocks.)
       float cover = mix(1.0, clamp(dens / 0.35, 0.0, 1.0), smoothstep(4.0, 20.0, t));
+      cover *= mix(1.0, 0.3, smoothstep(12.0, 40.0, t));
       float Ts = 1.0 - (1.0 - exp(-sigma * ds)) * cover;
       L += Tl * S * (1.0 - Ts);
       dSum += t * Tl * (1.0 - Ts);
@@ -605,12 +669,16 @@ vec4 historyAt(vec2 uv) {
   vec2 w3 = f * f * (-0.5 + 0.5 * f);
   vec2 w12 = w1 + w2;
   vec2 t0 = (c - 1.0) / size, t3 = (c + 2.0) / size, t12 = (c + w2 / w12) / size;
-  vec4 r = texture2D(uHistory, vec2(t12.x, t0.y)) * w12.x * w0.y
-         + texture2D(uHistory, vec2(t0.x, t12.y)) * w0.x * w12.y
-         + texture2D(uHistory, vec2(t12.x, t12.y)) * w12.x * w12.y
-         + texture2D(uHistory, vec2(t3.x, t12.y)) * w3.x * w12.y
-         + texture2D(uHistory, vec2(t12.x, t3.y)) * w12.x * w3.y;
+  vec4 a = texture2D(uHistory, vec2(t12.x, t0.y));
+  vec4 b = texture2D(uHistory, vec2(t0.x, t12.y));
+  vec4 c0 = texture2D(uHistory, vec2(t12.x, t12.y));
+  vec4 d = texture2D(uHistory, vec2(t3.x, t12.y));
+  vec4 e = texture2D(uHistory, vec2(t12.x, t3.y));
+  vec4 r = a * w12.x * w0.y + b * w0.x * w12.y + c0 * w12.x * w12.y
+         + d * w3.x * w12.y + e * w12.x * w3.y;
   r /= w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;
+  // Cubic reconstruction must not invent light outside the sampled cloud.
+  r = clamp(r, min(min(a, b), min(c0, min(d, e))), max(max(a, b), max(c0, max(d, e))));
   return vec4(max(r.rgb, 0.0), clamp(r.a, 0.0, 1.0));
 }
 void main() {
@@ -630,7 +698,9 @@ void main() {
     // This frame's march, blended with what was there: the jitter moves from frame to frame,
     // so an edge settles to its average (smooth) instead of one sample's step.
     vec4 now = texture2D(uMarch, (cell + 0.5) / uMarchRes);
-    gl_FragColor = ok ? mix(historyAt(prev), now, 0.45) : now;
+    // Refresh faster while looking around: long-lived history averaged away the
+    // small billows. A fresh sample replaces 70% instead of 45% of its old value.
+    gl_FragColor = ok ? mix(historyAt(prev), now, 0.70) : now;
     return;
   }
   gl_FragColor = ok ? historyAt(prev) : texture2D(uMarch, ((px - uMarchOffset) / 4.0 + 0.5) / uMarchRes);
@@ -721,7 +791,7 @@ export function createClouds(renderer, atmosphere, opts = {}) {
     get texture() { return output.value; },
     // What the ground, sea and plants need for cloud shadows (CLOUD_SHADOW_GLSL).
     shadowUniforms: { uWeather: uniforms.uWeather, uCloudLayer: uniforms.uCloudLayer, uCloudWind: uniforms.uCloudWind, uCloudShadow: uniforms.uCloudShadow },
-    // Drift with the clock, then march at half the drawing-buffer size: all of it, or one
+    // Drift with the clock, then march at three quarters of the drawing buffer: all, or one
     // pixel in sixteen and the rest carried over. A still view with a still clock (or drift
     // under a metre) keeps the last march. `whole` forces a whole march.
     render(time, camera, whole = false) {
@@ -731,7 +801,10 @@ export function createClouds(renderer, atmosphere, opts = {}) {
       // The edges churn upward at about 2.5 m/s.
       uniforms.uCloudBoil.value = 0.0025 * time;
       renderer.getDrawingBufferSize(size);
-      const w = Math.max(1, Math.round(size.x / 2)), h = Math.max(1, Math.round(size.y / 2));
+      // Resolve at three quarters of the drawing buffer. The sparse march still shades
+      // one sample in sixteen, with a cap for very large Retina windows.
+      const cloudScale = Math.min(0.75, 1920 / size.x);
+      const w = Math.max(1, Math.round(size.x * cloudScale)), h = Math.max(1, Math.round(size.y * cloudScale));
       const setup = `${w}x${h}|${JSON.stringify(params)}|${atmosphere.version}|${camera.projectionMatrix.elements.join()}`;
       const key = `${camera.matrixWorld.elements.join()}|${setup}|${Math.round(params.windSpeed * time * 1000)}`;
       if (key === lastKey && !whole) return;

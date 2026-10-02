@@ -1,0 +1,40 @@
+{
+  "baseline": "51e68d3",
+  "t0": 13,
+  "endTime": 31,
+  "sampleHz": 4,
+  "columnSpacingM": 0.5,
+  "method": "Adjacent active columns; temporal comparisons only when the same column is active in both samples and its stage changes by less than 0.5, excluding the next-wave reset.",
+  "baselineMetrics": {
+    "maxAdjacentCrestGapM": 6.4038301335746315,
+    "maxQuarterSecondTravelM": 6.000047920410234,
+    "adjacentGapsOver4M": 19,
+    "temporalStepsOver2M": 239,
+    "invalidActiveColumns": 0,
+    "spatialComparisons": 15148,
+    "temporalComparisons": 13808
+  },
+  "currentMetrics": {
+    "maxAdjacentCrestGapM": 1.383822508188528,
+    "maxQuarterSecondTravelM": 1.4566191651110525,
+    "adjacentGapsOver4M": 0,
+    "temporalStepsOver2M": 0,
+    "invalidActiveColumns": 0,
+    "spatialComparisons": 14337,
+    "temporalComparisons": 13176
+  },
+  "consoleErrors": [],
+  "camera": {
+    "position": [
+      138.87580572491748,
+      21.42465014142438,
+      -179.83731935783217
+    ],
+    "forward": [
+      -0.9757648823399446,
+      -0.20791169081775934,
+      -0.06823212742846674
+    ],
+    "fov": 50
+  }
+}

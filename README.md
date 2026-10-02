@@ -41,6 +41,7 @@ moving on. The plan, the rules and a brief per version are in
 | v11 | Speed and the shareable build | done |
 | v12 | The breaking wave, and the clouds | done |
 | v13 | The dirt steps and the bamboo handrail | done |
+| v14 | The T-Rex head silhouette | in progress |
 
 ## Run it
 
@@ -53,6 +54,13 @@ to the water's edge (v8). The source needs a local server (a browser will not lo
 or start a module worker from `file://`). `kelingking.html` is the same page built to run
 without one. Nothing to install: the source page loads three.js, GSAP and Lenis from jsDelivr
 and the fonts from Google Fonts, and the standalone file carries its own copies (`vendor/`).
+
+The scene controls beneath “Kelingking” switch between Morning, Noon, Evening and Night.
+The selection is preserved in the URL (for example `?at=4.35&lighting=evening`). Daylight
+uses the photo date's sun; Night is an authored moonlit view. Once off the stairs, the
+camera opens up across the cove. Drag to choose a view; it stays while you scroll along
+the beach. “Reset view” returns to the composed camera. Left/right arrow keys work when
+the scene is focused; Escape resets. A vertical touch swipe still scrolls.
 
 The tools that match the scene to photos are the same page with a shot in the URL:
 http://localhost:5178/?shot=viewpoint. There, keys `1` to `9` switch shots, `O` photo overlay,
@@ -269,9 +277,10 @@ the carved mesh, and how exposed it is to the swell), and the light from `src/sk
   crests in the surf zone), irregular timing and sets. Each wave breaks where it gets too
   big for the depth, bigger waves further out.
 - **The breaking wave** (`breaker.js`) is its own mesh, because a heightfield cannot fold
-  over: a ribbon along each beach whose cross-section steepens, throws a lip, curls into a
-  tube and collapses, each half metre of beach at its own stage, so the wave peels. While a
-  wave breaks, the sea tucks its crest under the ribbon.
+  over: a ribbon along each beach whose cross-section steepens, pitches forward as a thin
+  falling sheet and collapses, each half metre of beach at its own stage, so the wave peels. Its root follows the actual swell crest, with the solid wave body retained underneath.
+  The lip, impact spray and foam share that crest and clock; the collapsing swell becomes
+  the same advancing bore (v26).
 - **Foam has a memory** (`surf-sim.js`): a 1024 by 1024 simulation over the bay carries foam
   and stirred sand with the water (up the beach with each bore, out in the backwash and the
   rips, off the rock after each hit, downwind, in slow eddies), and fades it. The lace is
@@ -311,8 +320,9 @@ sheer face, none on the sand or at the foot of the cliffs. Scrub in patches tens
 across with grass between on the finger, a mosaic of woodland and open grassland with palm
 groves on the plateau, hanging scrub in patches down the sheer faces and along the ledges
 (the tops of the hard beds, from the same bedding table the mesh is carved with). Grass
-tussocks within 22 m of the path, low leafy scrub beside the concrete steps, and views from
-the path kept open (v6's rule).
+tussocks within 22 m of the path plus sparse open-ground tussocks across the headland, low
+leafy scrub beside the concrete steps, and views from the path kept open (v6's rule). Grass
+uses matched distant impostors, so its coverage persists from the aerial view to the path.
 
 **How they are drawn.** Up close, real geometry (`near.js`, `plant-material.js`): the plants
 within reach are picked each frame the camera moves, nearest first, in two or three levels of
@@ -348,7 +358,8 @@ One physical model for the sun, the sky, the haze and the clouds (`src/sky/`), i
   that into pixel values. One exposure for every shot, as with a camera on a sunny day. With
   nothing tuned, the render's sky matched the same-day photo within 0.3 stops from 5 to 32
   degrees up. Then the Khronos PBR Neutral tone curve and a small saturation lift.
-- **Clouds.** Fair-weather cumulus, marched through a volume at half resolution: billow noise
+- **Clouds.** Fair-weather cumulus, marched through a volume at three quarters of the drawing
+  buffer resolution (capped at 1920 px), with bounded temporal reconstruction: billow noise
   kept where a weather map puts cloud clusters, flat bases, rounded tops, lit by the same sun
   and sky and hazed by the same froxels. The sky over the island is kept clear, as on the
   photo day, so their shadows drift over the open sea (and over the island too if the clear

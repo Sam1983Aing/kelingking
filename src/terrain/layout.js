@@ -31,10 +31,12 @@ export function defaultLayout() {
       { at: [109, 70], h: 94, w: 46, p: 1.4 },
       { at: [70, 38], h: 92, w: 50, p: 1.5 },
       { at: [25, 11], h: 105, w: 62, p: 1.7 },
-      { at: [0, 0], h: 111, w: 70, p: 1.9 },
-      { at: [-40, -22], h: 107, w: 74, p: 2.0 },
-      { at: [-100, -28], h: 94, w: 76, p: 2.1 },
-      { at: [-150, -30], h: 78, w: 76, p: 2.0 },
+      // The crown peaks just behind the head, then holds a high, sharper ridge to its blunt
+      // ocean-facing brow. The old rounded dome fell away too early toward the tip.
+      { at: [0, 0], h: 112, w: 68, p: 1.45 },
+      { at: [-40, -22], h: 105, w: 69, p: 1.45 },
+      { at: [-100, -28], h: 96, w: 70, p: 1.55 },
+      { at: [-150, -30], h: 82, w: 70, p: 1.6 },
     ],
 
     // Where the finger leaves the plateau (top of the unpaved ridge steps).
@@ -43,7 +45,7 @@ export function defaultLayout() {
     // Side ridges off the main spine, merged with it by taking the higher surface.
     spurs: [
       // The jaw: the lip of the head that curls over the south end of the beach.
-      { path: [[0, 0], [12, 48], [16, 96]], h: [111, 92, 76], w: 48, p: 2.2 },
+      { path: [[0, 0], [17, 48], [28, 93]], h: [110, 84, 58], w: 38, p: 1.45 },
     ],
 
     // Local lowering of the plateau. The corner where the paved steps run down to the
@@ -63,7 +65,10 @@ export function defaultLayout() {
     // sheerVar around the islet (most on the side facing sheerAz, degrees counterclockwise
     // from east). R: how far in from the waterline the crown takes to round over.
     islets: [
-      { near: [80, -100], h: 68, sheer: 0.62, sheerVar: 0.12, sheerAz: 115, R: 29 }, // Batu Satu, the rock off the head
+      // Batu Satu: a wooded south-east shoulder falls away from an off-centre crest;
+      // the north-west face keeps its exposed, bedded limestone wall.
+      { near: [80, -100], h: 72, sheer: 0.52, sheerVar: 0.34, sheerAz: 115, R: 38,
+        summit: [94, -112], crownDrop: 0.17 },
       { near: [706, -629], h: 24, sheer: 0.6, sheerVar: 0.15, sheerAz: 90, R: 20 },
     ],
 
@@ -93,7 +98,9 @@ export function defaultLayout() {
       // The wall at the south end of the beach drops sheer from its rim; the mesh builder
       // then cuts it back underneath into the overhang (overhangs, below).
       { name: 'beach south wall', at: [58, 58], r: 26, face: 3, pf: 0.55 },
-      { name: 'jaw', at: [30, 80], r: 35, face: 5, pf: 0.6 },
+      // Keep the sloping beak local to the jaw tip. Spreading this gentler face toward the
+      // beach-wall overhang pulled its cave into a blocky cone at sand level.
+      { name: 'jaw', at: [14, 89], r: 20, face: 24, pf: 1.15 },
       { name: 'head', at: [-70, -10], r: 85, face: 7, pf: 0.7 },
       { name: 'neck south-east', at: [110, 35], r: 40, face: 9, pf: 0.8 },
       { name: 'kelingking cove', at: [30, 230], r: 130, L: 220, D: 14, murk: 0.12 },
@@ -145,7 +152,7 @@ export function defaultLayout() {
     // back `cave` metres behind the line of the wall, caveH metres high at the back. Rock in
     // the sea: a deeper notch (notch metres deep, notchTop high).
     overhangs: [
-      { name: 'beach south end', at: [54, 63], r: 34, bulge: 20, lipH: 17, cave: 10, caveH: 5 },
+      { name: 'beach south end', at: [54, 63], r: 34, bulge: 16, lipH: 17, cave: 7, caveH: 5 },
       { name: 'jaw arch', at: [5, 84], r: 26, notch: 11, notchTop: 20 },
     ],
 
@@ -200,9 +207,10 @@ export function defaultLayout() {
       // trailClear: metres kept clear beyond the handrail per unit of the biggest scale a plant
       // can have there (about its canopy's radius), v6.
       density: 0.95, ledgeChance: 0.35, trailClear: 1.4,
-      // Grass tussocks (v7), drawn only near the camera, so only within `reach` metres of the
-      // path: on a grid `spacing` apart, kept with a chance of up to `density`.
-      grass: { reach: 22, spacing: 0.42, density: 1, vergeScrub: 0.22 },
+      // Dense grass beside the path, with a lighter fill on open headland ground. Both
+      // use the same plant positions from the overhead impostors to the close blades.
+      grass: { reach: 22, spacing: 0.42, density: 1, vergeScrub: 0.22,
+        fill: { radius: 300, spacing: 1.25, density: 0.9 } },
       // Scrub down the sheer faces (v7): a clump every `step` metres up the face where its
       // patches are, kept with a chance of up to `density`.
       // (v9: a clump every 1.3 m, kept with a chance of up to 0.75, mostly face scrub in streaks

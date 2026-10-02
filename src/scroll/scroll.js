@@ -15,8 +15,8 @@
 //   pr=1               pixel ratio pinned (else it is picked while loading, then governed)
 //
 // Looking around (v9): drag the scene to turn the head away from the path's view; let go and it
-// eases back. The scroll carries on underneath. With a finger only sideways drags look (the page
-// keeps its vertical swipe, and the vertical part of a sideways drag still scrolls).
+// eases back on the stairs. On the beach the chosen heading stays until reset. The scroll
+// carries on underneath. With a finger only sideways drags look; vertical swipes scroll.
 
 import { gsap } from 'gsap';
 import { SplitText } from 'gsap/SplitText.js';
@@ -63,6 +63,50 @@ export function startScroll({ params }) {
   stage.prepend(renderer.domElement);
   if (params.has('pr')) app.governor.on = false;
 
+  // ---------------------------------------------------------------- time of day
+
+  const lightInputs = [...document.querySelectorAll('input[name="lighting"]')];
+  let dissolve = null, dissolveAnimation = null;
+  function stopDissolve() {
+    dissolveAnimation?.cancel(); dissolveAnimation = null;
+    dissolve?.remove(); dissolve = null;
+  }
+  function syncLighting() {
+    html.classList.toggle('dim-light', ['morning', 'night'].includes(app.state.lighting));
+    lightInputs.forEach((input) => { input.checked = input.value === app.state.lighting; });
+  }
+  syncLighting();
+  function chooseLighting(id) {
+    if (id === app.state.lighting || !started) return;
+    stopDissolve();
+    if (!reduced && !RECORD) {
+      app.renderFrame();
+      const previous = document.createElement('canvas');
+      previous.className = 'lighting-dissolve'; previous.setAttribute('aria-hidden', 'true');
+      previous.width = renderer.domElement.width; previous.height = renderer.domElement.height;
+      previous.getContext('2d').drawImage(renderer.domElement, 0, 0);
+      document.querySelector('.page').prepend(previous);
+      dissolve = previous;
+    }
+    app.setLighting(id);
+    syncLighting();
+    app.advance(0); app.renderFrame();
+    const url = new URL(location.href);
+    url.searchParams.set('lighting', id);
+    url.searchParams.delete('hour'); url.searchParams.delete('sun');
+    history.replaceState(null, '', url);
+    if (dissolve) {
+      const previous = dissolve;
+      dissolveAnimation = previous.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 850, easing: 'ease-in-out' });
+      dissolveAnimation.finished.then(() => { if (dissolve === previous) stopDissolve(); }).catch(() => {});
+    }
+  }
+  lightInputs.forEach((input) => input.addEventListener('change', () => chooseLighting(input.value)));
+  addEventListener('wheel', stopDissolve, { passive: true });
+  stage.addEventListener('pointerdown', stopDissolve, { passive: true });
+  addEventListener('resize', stopDissolve);
+  addEventListener('keydown', (e) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) stopDissolve(); });
+
   // ---------------------------------------------------------------- size and scroll length
 
   const pace = makePace();
@@ -77,11 +121,15 @@ export function startScroll({ params }) {
     // A phone resizes the window as its address bar slides; the stage does not, so only a real
     // change of size re-sizes the canvas.
     if (!force && w === size[0] && Math.abs(h - size[1]) < 2) return;
+    // Retain the route beat when rotating a phone: the scroll is measured in stage
+    // heights, so keeping the old pixel offset would move to another part of the trail.
+    const retainedScreens = descent ? cam.screens : null;
     size = [w, h];
     app.setSize(w, h);
     unit = h;
     track.style.height = `${pace.screens * unit + innerHeight}px`;
     if (walk && Math.abs(w / h / descent.aspect - 1) > 0.03) build();
+    if (retainedScreens !== null) jumpTo(retainedScreens);
   }
   resize(true);
   addEventListener('resize', () => resize());
@@ -135,12 +183,21 @@ export function startScroll({ params }) {
   const cam = { screens: 0, tau: 0, pose: null };
   function placeCamera(dt, snap = false) {
     const target = scrollY() / unit;
-    cam.screens = snap ? target : cam.screens + (target - cam.screens) * (1 - Math.exp(-FOLLOW * dt));
+    cam.screens = (snap || reduced) ? target : cam.screens + (target - cam.screens) * (1 - Math.exp(-FOLLOW * dt));
     if (Math.abs(target - cam.screens) < 1e-4) cam.screens = target;
     cam.tau = pace.tauAt(cam.screens);
     if (!descent) return;
     const p = (cam.pose = descent.poseAt(cam.tau));
+    if (look.pinned && cam.tau >= 4) {
+      look.yaw = angleDelta(look.heading - p.yaw);
+      look.pitch = look.elevation - p.pitch;
+    } else if (look.pinned) {
+      look.pinned = false; look.idle = LOOK_HOLD;
+      if (reduced) look.yaw = look.pitch = 0;
+    }
     easeLook(dt);
+    beachLook.hidden = cam.tau < 4.02;
+    resetButton.disabled = !look.pinned && Math.abs(look.yaw) + Math.abs(look.pitch) < 0.05;
     const pitch = Math.min(Math.max(p.pitch + look.pitch, -88), 60);
     app.setPose(p.pos, p.yaw + look.yaw, pitch, 0, fovFor(p.fov, camera.aspect));
   }
@@ -148,9 +205,9 @@ export function startScroll({ params }) {
   // ---------------------------------------------------------------- looking around
 
   // The head's turn away from the path's view, in degrees, laid on top of it.
-  const look = { yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, id: null, touch: false, x: 0, y: 0, moved: 0, decided: false, idle: 0 };
+  const look = { yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, id: null, touch: false, x: 0, y: 0, moved: 0, decided: false, idle: 0, pinned: false, wasPinned: false, heading: 0, elevation: 0 };
   function easeLook(dt) {
-    if (look.id !== null) return;
+    if (look.id !== null || look.pinned) return;
     look.idle += dt;
     if (look.idle < LOOK_HOLD || (!look.yaw && !look.pitch)) return;
     // x(t) = (x0 + (v0 + w x0) t) exp(-w t), stepped exactly, so it eases out of rest.
@@ -162,14 +219,40 @@ export function startScroll({ params }) {
       if (Math.abs(look[k]) < 0.01 && Math.abs(look[v]) < 0.01) look[k] = look[v] = 0;
     }
   }
+  const angleDelta = (a) => (((a % 360) + 540) % 360) - 180;
+  const beachLook = $('.beach-look'), resetButton = $('.look-reset');
+  function pinLook() {
+    if (cam.tau < 4 || !cam.pose) return;
+    look.pinned = true;
+    look.heading = cam.pose.yaw + look.yaw;
+    look.elevation = Math.min(Math.max(cam.pose.pitch + look.pitch, -88), 60);
+    look.vyaw = look.vpitch = 0;
+  }
+  function resetLook() {
+    look.pinned = look.wasPinned = false; look.idle = LOOK_HOLD; look.vyaw = look.vpitch = 0;
+    if (reduced) look.yaw = look.pitch = 0;
+  }
+  resetButton.addEventListener('click', resetLook);
   if (!RECORD) {
     stage.classList.add('lookable');
+    stage.tabIndex = 0;
+    stage.setAttribute('aria-label', 'Beach view. Drag or use left and right arrows to look around. Escape resets the view.');
+    stage.addEventListener('keydown', (e) => {
+      if (!started) return;
+      if (e.key === 'Escape') { resetLook(); e.preventDefault(); return; }
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      look.yaw = Math.min(Math.max(look.yaw + (e.key === 'ArrowLeft' ? -5 : 5), -180), 180);
+      look.idle = 0; pinLook();
+    });
     stage.addEventListener('pointerdown', (e) => {
       if (look.id !== null || !started || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      look.wasPinned = look.pinned;
+      look.pinned = false;
       look.id = e.pointerId; look.touch = e.pointerType !== 'mouse';
       look.x = e.clientX; look.y = e.clientY; look.moved = 0; look.decided = !look.touch;
       look.vyaw = look.vpitch = 0;
-      if (!look.touch) { e.preventDefault(); stage.setPointerCapture(e.pointerId); html.classList.add('looking'); }
+      if (!look.touch) { e.preventDefault(); stage.focus({ preventScroll: true }); stage.setPointerCapture(e.pointerId); html.classList.add('looking'); }
     });
     stage.addEventListener('pointermove', (e) => {
       if (e.pointerId !== look.id) return;
@@ -182,6 +265,7 @@ export function startScroll({ params }) {
         if (look.moved < 6) return;
         look.decided = true;
       }
+      if (!look.touch) look.moved += Math.hypot(dx, dy);
       // The scene under the pointer moves with it: degrees per pixel from the lens.
       const k = camera.fov / stage.clientHeight;
       look.yaw = Math.min(Math.max(look.yaw - dx * k * (camera.aspect < 1 ? 1.3 : 1), -180), 180);
@@ -192,6 +276,8 @@ export function startScroll({ params }) {
     });
     const end = (e) => {
       if (e.pointerId !== look.id) return;
+      if (look.wasPinned || (look.moved > 3 && e.type === 'pointerup')) pinLook();
+      look.wasPinned = false;
       look.id = null; look.idle = 0;
       html.classList.remove('looking');
     };
@@ -239,7 +325,7 @@ export function startScroll({ params }) {
       const on = !rewinding && cam.tau >= k.a && cam.tau <= k.b;
       if (on !== k.on) { k.on = on; on ? show(k) : hide(k); }
       // (The end is on its own card, the sand chapter in dark ink: no scrim for them.)
-      if (on && (k.el.classList.contains('end') || k.el.classList.contains('on-light'))) continue;
+      if (on && (k.el.classList.contains('end') || (k.el.classList.contains('on-light') && !html.classList.contains('dim-light')))) continue;
       any ||= on;
       // The line drifts across a little while it is up, the number the other way.
       if (on && !reduced) {
@@ -362,12 +448,12 @@ export function startScroll({ params }) {
     started = true;
     performance.mark('kl:begin');
     html.classList.remove('loading');
-    if (skip) { gsap.set(loaderEl, { autoAlpha: 0 }); gsap.set(['.hud', '.rail'], { autoAlpha: 1 }); lenis?.start(); wordsOn = true; window.__ready = true; return; }
+    if (skip) { gsap.set(loaderEl, { autoAlpha: 0 }); gsap.set(['.hud', '.rail', '.scene-controls'], { autoAlpha: 1 }); lenis?.start(); wordsOn = true; window.__ready = true; return; }
     const t = gsap.timeline();
     t.to(loaderEl, { autoAlpha: 0, duration: reduced ? 0 : 1.6, ease: 'power2.inOut' });
     // The title once the black has mostly lifted.
     t.add(() => { wordsOn = true; }, reduced ? 0 : 1.2);
-    t.to(['.hud', '.rail'], { autoAlpha: 1, duration: reduced ? 0 : REVEAL, ease: EASE }, reduced ? 0 : 1.1);
+    t.to(['.hud', '.rail', '.scene-controls'], { autoAlpha: 1, duration: reduced ? 0 : REVEAL, ease: EASE }, reduced ? 0 : 1.1);
     t.add(() => { lenis?.start(); }, 0.4);
     t.add(() => { window.__ready = true; }, reduced ? 0 : 3.2);
   }
@@ -420,7 +506,7 @@ export function startScroll({ params }) {
         tick(dt);
         return cam.tau;
       },
-      pace, get descent() { return descent; }, cam, look,
+      pace, get descent() { return descent; }, cam, look, resetLook, pinLook, chooseLighting,
     };
     // Until the recorder starts, the loader runs on the real clock.
     const idle = () => { if (!started) { updateLoader(1 / 60); if (!done.has('warm')) requestAnimationFrame(idle); } };
@@ -431,7 +517,7 @@ export function startScroll({ params }) {
       lenis?.raf(time * 1000);
       tick(Math.min(deltaMs / 1000, 0.1));
     });
-    window.__scroll = { pace, get descent() { return descent; }, cam, look, jumpTo, get lenis() { return lenis; } };
+    window.__scroll = { pace, get descent() { return descent; }, cam, look, resetLook, pinLook, chooseLighting, jumpTo, get lenis() { return lenis; } };
   }
 
   // ---------------------------------------------------------------- debug

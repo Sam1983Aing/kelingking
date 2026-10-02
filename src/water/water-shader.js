@@ -24,7 +24,7 @@ uniform float uBreakAt;    // distance offshore where waves break on the beach (
 uniform vec2 uSwellDir;    // direction the swell travels, local
 uniform vec4 uOceanL;      // patch size of each ocean cascade (m)
 uniform vec4 uGust;        // gust pattern: scale (1/m), drift east and north (m/s), strength
-uniform float uBreakerOn;  // 1 when the breaker mesh is drawn (the heightfield tucks its breaking crests away)
+uniform float uBreakerOn;  // breaker presence, retained for shared debug controls
 
 const vec4 OCEAN = vec4(-45.0, 900.0, 0.0, 0.0);
 ${SWASH_GLSL}
@@ -106,12 +106,12 @@ struct Surf {
   float foam;     // what it leaves behind (used where the foam simulation does not reach)
   float push;     // how hard the bore is carrying water up the beach (0..1)
   float broken;   // inside the break
-  float hRaw;     // height before the breaking crest is tucked away under the breaker mesh
+  float hRaw;     // solid swell/bore height, also sampled by the folding lip
   float tau;      // how far this wave is through breaking: 0 starting to throw, 1 collapsed
   float vph;      // where this point is on its wave (phase, 0 at the crest, < 0 in front)
   float L;        // wavelength here (m)
   float wf;       // width of the wave's front (phase)
-  float sink;     // how much of the crest is tucked away (breaker.js draws it instead)
+  float sink;     // legacy diagnostic; the solid swell now remains beneath its lip
   // The swash sheet on the sand (swash.js), where it is the water's surface:
   float sheet;    // how much the sheet makes the surface here (0..1)
   float film;     // its thickness (m)
@@ -122,8 +122,7 @@ struct Surf {
   float frontZ;
 };
 
-// The swash sheet is only worked out when this is set (the vertex shader's slope samples
-// leave it out: the sheet lies on the sand, so its slope is the sand's).
+// Only the water vertices and their slope samples read the cached swash sheet.
 bool gSwash = true;
 Surf surfAt(vec2 p, vec4 d) {
   Surf o = Surf(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0);   // L = 0: no surf here
@@ -134,7 +133,16 @@ Surf surfAt(vec2 p, vec4 d) {
   if (beachy <= 0.0) return o;
   float jag = vnoise(p * 0.012) * 0.45 + vnoise(p * 0.035) * 0.16 + vnoise(p * 0.11) * 0.03;
   float clock = waveClock(uTime) / uPeriod;
-  float phase0 = shorePhase(s) + clock + jag;
+  // At the cove's south end the nearest-coast distance turns around the rock before
+  // the beach wave has died out. Let just the incoming phase continue the last part
+  // of the sandy waterline, tapering the correction away at the actual shore. Depth,
+  // break strength and swash still use the physical shore distance.
+  float endMask = smoothstep(55.0, 85.0, p.y) * (1.0 - smoothstep(145.0, 185.0, p.y))
+                * (1.0 - smoothstep(145.0, 175.0, p.x));
+  float phaseBand = smoothstep(5.0, 12.0, s) * (1.0 - smoothstep(45.0, 65.0, s));
+  float guideS = dot(p - vec2(95.0, 200.0), vec2(-0.98, 0.21));
+  float phaseS = mix(s, guideS, endMask * phaseBand);
+  float phase0 = shorePhase(phaseS) + clock + jag;
   // Index the nearest crest, so a wave's own size never changes across its crest. The
   // size hands over to the next wave in the trough, blended, so the surface stays
   // continuous (a jump there is a vertical step that the grid draws as a row of teeth).
@@ -170,38 +178,58 @@ Surf surfAt(vec2 p, vec4 d) {
   Ak = min(Ak, 0.85 * depthHere + 0.35);
 
   float Lhere = L0 + LB * max(s, 0.0);
-  float wf = max(mix(0.14, 0.07, smoothstep(br + 45.0, br, s)), 1.8 / Lhere);   // front at least ~2 m wide
+  float wf = max(mix(0.14, 0.095, smoothstep(br + 45.0, br, s)), 2.3 / Lhere);   // an open shoulder before the lip spills
   float w = v < 0.0 ? wf : 0.24;
   float crest = exp(-(v * v) / (w * w)) * smoothstep(0.44, 0.32, abs(v));
-  // Breaking: this wave's crest reaches its break point, throws its lip and collapses over
-  // 8 m of travel (about 2.5 s). The breaker mesh (breaker.js) draws the face and the lip
-  // then, from 0.45 of a wavelength behind the crest to 0.12 in front, and the heightfield's
-  // own crest is tucked under it.
+  // One stage follows the crest through 8 m of travel: pitching lip, impact,
+  // then a lower shoreward bore. The fold and foam use that same stage.
   float brK = uBreakAt * (0.7 + 0.35 * bigK);
   float sCrest = s - v * Lhere;
-  float tau = (brK + 5.0 - sCrest) / 8.0;
-  float win = smoothstep(-0.17, -0.12, v) * (1.0 - smoothstep(0.25, 0.34, v));
-  // (Inside the stretch where the ribbon is fully up, so the sea never shows a half-tucked,
-  // flattened crest: breaker.js rises from -0.08 and stays until 1.12.)
-  float sink = win * smoothstep(0.02, 0.1, tau) * (1.0 - smoothstep(0.86, 0.98, tau)) * beachy * uBreakerOn;
+  // A broad, wave-specific peel moves the landing point along the crest. It must live
+  // in surfAt: the ribbon, spray, sea-foam source and heightfield handoff all read tau.
+  // Using the crest's existing low-frequency wobble also avoids an unrelated, faster
+  // noise pattern appearing only on the lip at the two sides of the break.
+  float tau = (brK + 5.0 - sCrest) / 8.0 + wob * 0.28;
+  // The swell is the solid body of the breaker. Keep it underneath the lip:
+  // lowering it left a trench around the folding ribbon and severed the motion.
+  float sink = 0.0;
+  float collapse = smoothstep(0.68, 1.12, tau);
+  if (collapse > 0.0) {
+    float borePhase = v + Ak * 0.68 / max(Lhere, 1.0);
+    float boreW = borePhase < 0.0 ? 0.085 : 0.18;
+    float bore = exp(-pow(borePhase / boreW, 2.0)) * 0.64;
+    crest = mix(crest, bore, collapse);
+  }
   float hRaw = max(Ak * crest - 0.28 * A, -0.45 * depthHere);
   float h = max(Ak * crest * (1.0 - sink) - 0.28 * A - 0.05 * sink, -0.45 * depthHere);
   // Only a slight lean. A heightfield cannot curl over (the lip is its own mesh, breaker.js),
   // and squeezing the front into a few grid rows turns it into a staircase of teeth.
   float lean = Ak * 0.1 * crest * smoothstep(br + 25.0, br, s) * (1.0 - broken);
 
-  // (The white lip drawn on the heightfield's own crest, from before the breaker existed.
-  // Where the breaker draws the lip, this only laid a milky veil over the rising crest just
-  // before the breaker took over, so it is nearly off then.)
-  float lip = crest * smoothstep(br + 6.0, br - 1.0, s) * smoothstep(0.1, -0.01, v) * (1.0 - 0.9 * uBreakerOn);
-  // The bore: a white front, the turbulent roller behind it churning for several metres
-  // (v9: a band a fifth of a wavelength deep, where it was a metre or two), then foam that
-  // thins into lace.
-  // (Its leading edge ragged: lobes a metre or two across.)
+  // Air entrainment starts at the spilling crest, then travels with the falling
+  // sheet to its impact. Keeping that source on the solid swell joins the two surfaces.
+  float lip = 0.0;
+  if (tau > 0.20 && tau < 1.05 && abs(v + 0.012) < 0.12)
+    lip = exp(-pow((v + 0.012) / 0.04, 2.0))
+        * smoothstep(0.20, 0.60, tau) * (1.0 - smoothstep(0.78, 1.05, tau));
+  // Foam is born where the thrown lip lands, rather than as a full white bar as soon as
+  // the crest enters shallow water. The source has metre-scale gaps; the surf simulation
+  // carries the broken patches shoreward and lets them spread, tear and thin into lace.
   // (Only inside the break: this runs for every point near a beach, three times per vertex.)
-  float vr = broken > 0.0 && abs(v) < 0.1 ? v + (vnoise(p * 0.45 + idx * 3.3) - 0.5) * 0.05 + (vnoise(p * 1.3) - 0.5) * 0.02 : v;
-  float front = broken * smoothstep(-0.03, 0.0, vr) * (1.0 - smoothstep(0.05, 0.22, v)) * mix(0.7, 1.0, smoothstep(0.15, 0.0, v));
-  float trail = broken * 0.8 * exp(-max(v, 0.0) / 0.3) * step(0.0, v);
+  // The landing point is shoreward of the crest. v < 0 is in front of it.
+  // Keep new foam at that impact and its trailing wake, never behind a falling lip.
+  float impactPhase = -Ak * 0.68 / max(Lhere, 1.0);
+  float landed = smoothstep(0.68, 0.84, tau);
+  float fv = v - impactPhase;
+  float front = 0.0;
+  if (broken * landed > 0.001 && abs(fv) < 0.16)
+    front = broken * landed * exp(-pow(fv / 0.047, 2.0));
+  if (front > 0.001) {
+    float burstPattern = vnoise(p * 0.24 + vec2(idx * 3.17, idx * 7.31)) * 0.7
+                + vnoise(p * 0.62 + vec2(idx * 5.83, -idx * 2.27)) * 0.3;
+    front *= 0.32 + 0.68 * smoothstep(0.28, 0.72, burstPattern);
+  }
+  float trail = broken * landed * 0.5 * exp(-max(fv, 0.0) / 0.18) * smoothstep(-0.035, 0.0, fv);
   float resid = smoothstep(br + 14.0, 0.0, s) * 0.2;
 
   float sz = mix(0.85, 1.1, big) * offshoreFade;
@@ -222,14 +250,16 @@ Surf surfAt(vec2 p, vec4 d) {
     float film = max(sm.z, 0.0);
     // Its surface: the sand plus the water on it, and past its edge diving under the sand.
     float sheetH = d.r + (sm.x > 0.0 ? film : sm.x) - (1.0 - beachy) * 0.5;
-    if (sheetH > o.h) {
-      o.sheet = smoothstep(o.h, o.h + 0.02, sheetH) * beachy;
-      o.h = sheetH;
-    }
+    // A smooth maximum joins the bore and wash without a dipped trough or an
+    // overshooting slope as the higher surface changes through the wave cycle.
+    float join = 0.12;
+    float sheetW = clamp(0.5 + 0.5 * (sheetH - o.h) / join, 0.0, 1.0);
+    o.sheet = sheetW * beachy;
+    o.h = mix(o.h, sheetH, sheetW) + join * sheetW * (1.0 - sheetW);
     o.film = film * beachy;
     o.front = swashFront(sm.y) * beachy;
     o.swVel = sm.w;
-    o.swUp = step(0.0, sm.w);
+    o.swUp = smoothstep(-0.35, 0.35, sm.w);
     o.edgeZ = sm.x;
     o.frontZ = sm.y;
   }
@@ -237,9 +267,10 @@ Surf surfAt(vec2 p, vec4 d) {
   // (On the sand the wave train's phase stops changing, so its bore front would light up the
   // whole beach at once as each crest passed: none of it there, the swash has its own.)
   float sea = smoothstep(-1.0, 0.0, s);
-  o.fresh = max(lip, front * 1.1) * sz * sea;
+  o.fresh = max(lip * 1.15, front * 1.6) * sz * sea;
   o.foam = max(trail, resid) * sz * sea;
-  o.push = broken * smoothstep(-0.03, 0.0, v) * exp(-max(v, 0.0) / 0.1) * offshoreFade * sea;
+  o.push = broken * landed * smoothstep(-0.055, -0.005, fv)
+         * exp(-max(fv, 0.0) / 0.15) * offshoreFade * sea;
   o.broken = broken * offshoreFade * sea;
   o.hRaw = hRaw * offshoreFade;
   o.tau = tau;
@@ -362,8 +393,11 @@ vec2 lacePattern(vec2 pf, float fp) {
     // foam gets thicker. Each size only where it shows.)
     float c1 = fp < 0.6 && coarse > 0.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.45, uTime * 0.1)) : 0.3;
     float c2 = fp < 0.4 && coarse < 1.0 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 0.85 + 5.3, uTime * 0.12)) : 0.3;
+    c1 = mix(0.3, c1, 1.0 - smoothstep(0.35, 0.6, fp));
+    c2 = mix(0.3, c2, 1.0 - smoothstep(0.23, 0.4, fp));
     float big = mix(c2, c1, coarse);
     float small = fp < 0.22 ? 1.0 - smoothstep(0.0, 0.3, cells4(qq * 2.0 + 3.1, uTime * 0.16)) : 0.28;
+    small = mix(0.28, small, 1.0 - smoothstep(0.12, 0.22, fp));
     // Finer threads and bubbles up close.
     float near = smoothstep(0.06, 0.02, fp);
     float tiny = near > 0.0 ? 1.0 - smoothstep(0.0, 0.35, cells4(qq * 6.0 + 7.7, uTime * 0.3)) : 0.35;
@@ -372,6 +406,7 @@ vec2 lacePattern(vec2 pf, float fp) {
     // The threads break up into strings of bubble clumps, thicken and thin along their length,
     // and break off, leaving loose ends (v10: they ran unbroken all round every cell).
     float clumps = fp < 0.3 ? vnoise(qq * 3.3 + 1.9) * 0.6 + vnoise(qq * 8.1 + 6.2) * 0.4 : 0.5;
+    clumps = mix(0.5, clumps, 1.0 - smoothstep(0.18, 0.3, fp));
     walls *= mix(0.55, 1.2, clumps);
     walls *= mix(0.35, 1.0, smoothstep(0.18, 0.4, vnoise(qq * 1.4 + 21.0) * 0.7 + vnoise(qq * 3.7 - 5.0) * 0.3));
     // In places the foam is drawn out into filaments by the flow instead: ridges of stretched
@@ -382,7 +417,7 @@ vec2 lacePattern(vec2 pf, float fp) {
       vec2 sd = normalize(w1 + vec2(0.3, 0.1));
       vec2 qs = vec2(dot(qq, sd) * 0.8, dot(qq, vec2(-sd.y, sd.x)) * 2.8);
       float fil = 1.0 - abs(2.0 * (vnoise(qs + w2 * 2.0) * 0.7 + vnoise(qs * 2.1 + 3.3) * 0.3) - 1.0);
-      walls = mix(walls, pow(fil, 2.5) * mix(0.7, 1.2, clumps), strands * 0.8);
+      walls = mix(walls, pow(fil, 2.5) * mix(0.7, 1.2, clumps), strands * 0.8 * (1.0 - smoothstep(0.25, 0.4, fp)));
     }
     // Where it is thick and where it is thin: patches a few metres across.
     float body = fbm3(qw * 0.1 + 11.0) * 0.7 + vnoise(qq * 0.33 + 4.4) * 0.3;
@@ -407,7 +442,7 @@ float swashCover(vec2 q, vec2 up, float str, float amount, float fp) {
   float soft = clamp(fwidth(base) * 1.5, 0.03, 0.12);
   float cover = smoothstep(1.0 - amount - soft, 1.0 - amount + soft, base);
   // Holes where it thins: bubble walls between them (warped cells, two sizes).
-  float thin = cover * (1.0 - smoothstep(0.6, 0.97, amount));
+  float thin = cover * (1.0 - smoothstep(0.32, 0.55, amount));
   if (thin > 0.01 && fp < 0.08) {
     vec2 qw = qa + (vec2(vnoise(qa * 1.9 + 1.3), vnoise(qa * 1.9 + 7.9)) - 0.5) * 0.7;
     float w1 = 1.0 - smoothstep(0.0, 0.28, cells(qw * 3.4, uTime * 0.4));
@@ -564,8 +599,11 @@ void roughReflect(vec3 N0, vec3 V, float sub, out float F, out vec3 refl) {
   if (sub < 0.015) {
     F = 0.02 + 0.98 * pow(1.0 - NoV, 5.0);
     vec3 Rd = reflect(-V, N0);
-    Rd.y = abs(Rd.y);
-    refl = skyRadiance(Rd);
+    // Match the rough branch as its slope spread fades: below-horizon facets see
+    // masked neighbouring water, not the sky mirrored upward.
+    float seen = smoothstep(-0.05, 0.03, Rd.y);
+    Rd.y = max(Rd.y, 0.01);
+    refl = skyRadiance(Rd) * mix(uWaveMask, 1.0, seen);
     return;
   }
   vec3 t = V - N0 * dot(V, N0);
@@ -655,11 +693,18 @@ void main() {
 #else
   if (sf.L > 0.0) {
     vec4 dx = dataAt(p + vec2(se, 0.0)), dy = dataAt(p + vec2(0.0, se));
-    gSwash = false;
+    // Differentiate the same surface that is displaced, including the wash. Comparing
+    // a sheet-covered centre with bare-sea neighbours made a false slope at their join.
     float hx = surfAt(p + vec2(se, 0.0), dx).h, hy = surfAt(p + vec2(0.0, se), dy).h;
-    gSwash = true;
-    // On the sheet, the sand's own slope.
-    vSurfSlope = mix(vec2(hx - sf.h, hy - sf.h), vec2(dx.r - d.r, dy.r - d.r), sf.sheet) / se;
+    vSurfSlope = vec2(hx - sf.h, hy - sf.h) / se;
+    if (sf.sheet > 0.0) {
+      // The cached bed has a narrow shoreline shoulder. A thin flowing film sees
+      // its metre-scale slope, rather than reflecting each coarse depth-map kink.
+      float r = 2.0;
+      vec2 bed = vec2(dataAt(p + vec2(r, 0.0)).r - dataAt(p - vec2(r, 0.0)).r,
+                      dataAt(p + vec2(0.0, r)).r - dataAt(p - vec2(0.0, r)).r) / (2.0 * r);
+      vSurfSlope = mix(vSurfSlope, bed, sf.sheet);
+    }
   } else vSurfSlope = vec2(0.0);
 #endif
   // Beyond the sheet's edge the surface dives under the sand, but only after a few millimetres
@@ -725,6 +770,13 @@ varying vec4 vSheetA;
 varying vec2 vSheetB;
 
 
+vec2 washRipple(vec2 q, vec2 stretch) {
+  vec2 qa = q * stretch;
+  float e = 0.35;
+  float h = fbm3(qa);
+  return vec2(fbm3(qa + vec2(e, 0.0)) - h, fbm3(qa + vec2(0.0, e)) - h) / e * stretch;
+}
+
 void main() {
   #include <logdepthbuf_fragment>
 #ifdef FRAG_FLAT
@@ -780,13 +832,13 @@ void main() {
   if (sf.sheet > 0.01) {
 #endif
     vec2 up = -offshoreAt(p);
-    vec2 q = vec2(dot(p, up), dot(p, vec2(-up.y, up.x)));
-    float flow = sf.swVel * uTime;
-    vec2 qa = sf.swUp > 0.5 ? vec2(q.x * 3.0 - flow * 3.0, q.y * 3.0) : vec2(q.x * 1.2 - flow * 1.2, q.y * 9.0);
-    float ee = 0.35;
-    float n0 = fbm3(qa), nx = fbm3(qa + vec2(ee, 0.0)), ny = fbm3(qa + vec2(0.0, ee));
-    vec2 g = vec2(nx - n0, ny - n0) / ee;
-    g = vec2(g.x * (sf.swUp > 0.5 ? 3.0 : 1.2), g.y * (sf.swUp > 0.5 ? 3.0 : 9.0));
+    // The simulation integrates the wash's travel. Instantaneous velocity times the
+    // absolute clock raced the pattern backwards as the water slowed or reversed.
+    vec2 advected = p - sim.ba * simW;
+    vec2 q = vec2(dot(advected, up), dot(advected, vec2(-up.y, up.x)));
+    vec2 g = vec2(0.0);
+    if (sf.swUp > 0.0) g += washRipple(q, vec2(3.0)) * sf.swUp;
+    if (sf.swUp < 1.0) g += washRipple(q, vec2(1.2, 9.0)) * (1.0 - sf.swUp);
     vec2 gm = up * g.x + vec2(-up.y, up.x) * g.y;
     float amp = mix(0.006, 0.02, sf.swUp) * smoothstep(0.001, 0.015, sf.film) * sf.sheet * smoothstep(0.3, 0.05, fp);
     slope += gm * amp;
@@ -794,7 +846,7 @@ void main() {
   vec3 N = normalize(vec3(-slope.x, 1.0, slope.y));
   vec3 V = normalize(cameraPosition - vWorld);
   vec3 L = uSunDir;
-  float sub = sqrt(oc.z);   // spread of the slopes this pixel cannot show
+  float sub = sqrt(oc.z + sf.sheet * 0.0009);   // spread of the slopes this pixel cannot show
 
   float shadow = bakedShadow(vWorld, 0.05) * cloudShadow(vWorld, uSunDir);
 
@@ -840,7 +892,7 @@ void main() {
 #else
   if ((simW > 0.0 && sim.r > 0.02) || sf.fresh > 0.0) {
 #endif
-    float fa = max(sim.r * simW, sf.fresh);
+    float fa = max(sim.r * simW, sf.fresh * 0.6);
     bubbles = smoothstep(0.02, 0.6, fa) * (0.55 + 0.45 * vnoise((p - sim.ba * simW) * 0.25 + 3.7)) * (1.0 - sf.sheet);
     vec3 milk = uGordonF * 0.5 * (uSunIrr * sunY * mix(0.4, 1.0, shadow) + uSkyIrr) / PI * vec3(0.9, 0.97, 1.0);
     under = mix(under, milk, bubbles * 0.55);
@@ -853,19 +905,31 @@ void main() {
 
   // Foam: a lacy pattern thresholded by how much foam this spot should have.
   // (The band at the rock only where the simulation does not reach, and there is rock.)
-  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), sim.r, simW) : sim.r;
-  // The front of an uprush is a band of foam and bubbles.
-  float amount = clamp(max(max(sf.fresh, older), sf.front * 0.92) * uFoam, 0.0, 1.0);
+  // Old foam rides in the trough, then thins on a newly steepening face. Drawing its
+  // advected cell pattern at full strength on the rising face stretched a few
+  // bubble rims into tall white hooks at the sides of the advancing break.
+  float faceFoamW = 1.0 - smoothstep(0.12, 0.42, length(vSurfSlope));
+  float simFoam = sim.r * faceFoamW;
+  float older = simW < 0.999 ? mix(max(sf.foam, cd.a > 0.001 ? rockFoamBand(p, d, cd) : 0.0), simFoam, simW) : simFoam;
+  vec2 travel = sim.ba * simW;
+  // The uprush has one continuous leading edge, but its bubbles gather into scallops and
+  // little fingers. Break up the cover along that edge before it settles into older lace.
+  float frontCover = 1.0;
+  if (sf.front > 0.002) {
+    vec2 qf = p - travel;
+    frontCover = 0.38 + 0.86 * (vnoise(qf * 0.42 + 6.1) * 0.65
+                            + vnoise(qf * 1.8 + 17.3) * 0.35);
+  }
+  float amount = clamp(max(max(sf.fresh * 0.55, older), sf.front * frontCover * 0.8) * uFoam, 0.0, 1.0);
   // (v12: heaped down to a thinner cover, 0.25 where it was 0.45. White water thins into
   // patches with holes long before it is lace; it went from a white heap to a net of polygon
   // cells within a second of the bore passing.)
-  float fresh = max(sf.fresh, smoothstep(0.25, 0.95, sim.r) * simW);
+  float fresh = max(sf.fresh * 0.55, smoothstep(0.25, 0.95, sim.r) * simW * faceFoamW);
   float caps = clamp(oc.w * uWhitecaps, 0.0, 1.0);
   // Foam lace, drawn where the foam started from (the simulation carries that along), so it
   // stretches into streaks with the water. Bubbles in cells, the foam along their walls,
   // warped so no two cells match, and a slower variation in how dense it is.
   float pattern = 0.0, ridge = 0.0;
-  vec2 travel = sim.ba * simW;
   // On the swash and in the shallows, the net of bubbles.
   float swFoam = smoothstep(1.0, 0.3, wLoc.y - d.r) * smoothstep(0.25, 0.6, d.b) * smoothstep(7.0, 2.0, d.g);
   // (Whitecaps only use the lace up close; further out they take a flat 0.6, v9.)
@@ -884,8 +948,15 @@ void main() {
   // On the swash sheet even the thickest foam is a single layer of bubbles, with clear water
   // showing between its clumps: it never closes up into a white carpet.
   float onSheet = swFoam * sf.sheet;
-  if (swFoam > 0.001 && amount > 0.002)
-    lace = mix(lace, swashCover(p - travel, -offshoreAt(p), sf.swUp > 0.5 ? 0.6 : 2.5, amount * mix(1.0, 0.84, onSheet), fp), swFoam);
+  if (swFoam > 0.001 && amount > 0.002) {
+    // Blend two fixed-coordinate patterns through the turn. Rescaling world
+    // coordinates by a changing stretch value made the entire foam texture slide.
+    float cover = 0.0, a = amount * mix(1.0, 0.68, onSheet);
+    vec2 up = -offshoreAt(p);
+    if (sf.swUp > 0.0) cover += swashCover(p - travel, up, 0.6, a, fp) * sf.swUp;
+    if (sf.swUp < 1.0) cover += swashCover(p - travel, up, 2.5, a, fp) * (1.0 - sf.swUp);
+    lace = mix(lace, cover, swFoam);
+  }
   fresh *= 1.0 - 0.8 * onSheet;
   // Fresh foam is a thick, lumpy body torn by a few holes; older foam is lace.
   float lumps = 0.5, lumpsMid = 0.5;
@@ -914,7 +985,8 @@ void main() {
     farCover *= clamp(mix(0.25, 0.75, amount) + (brk - 0.5) * mix(2.2, 1.3, amount) + 0.3, 0.0, 1.0);
   }
   float foam = mix(lace, farCover, farW) * smoothstep(0.0, 0.06, amount);
-  foam = max(foam, smoothstep(0.9, 1.05, amount) * (1.0 - onSheet) * (1.0 - 0.6 * farW) * mix(0.5, 1.0, farW));
+  // The texture's bubble pattern can now leave holes even at peak foam density. A solid
+  // white override made a freshly broken crest read as a slab moving toward the beach.
   // Whitecaps: bright where the crest is breaking now, thinning into streaks as the foam ages.
   float capLace = smoothstep(1.0 - caps - 0.1, 1.0 - caps + 0.25, mix(pattern, 0.6, smoothstep(0.1, 0.6, fp)));
   foam = max(foam, capLace * smoothstep(0.02, 0.3, caps) * 0.9);
@@ -983,7 +1055,8 @@ void main() {
 #endif
     if (cs > 0.0) {
       vec2 up = -offshoreAt(p);
-      vec2 qc = vec2(dot(p, up) * 2.2 - sf.swVel * uTime * 2.2, dot(p, vec2(-up.y, up.x)) * 5.0);
+      vec2 causticP = p - travel;
+      vec2 qc = vec2(dot(causticP, up) * 2.2, dot(causticP, vec2(-up.y, up.x)) * 5.0);
       float cc = max(caustics(qc, uTime * 2.5) - 0.2, 0.0) * smoothstep(0.35, 0.7, fbm3(p * 0.8 + uTime * 0.2));
       caus = uWetSandAlb / PI * uSunIrr * sunY * shadow * cc * 0.3 * cs * T;
     }
