@@ -1,4 +1,4 @@
-# v32 — Clean foliage edges and pixelation
+# v32: Clean foliage edges and pixelation
 
 ## Goal
 

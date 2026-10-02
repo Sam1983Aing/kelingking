@@ -1,4 +1,4 @@
-# v26 — Continuous shore break
+# v26: Continuous shore break
 
 ## Goal
 

@@ -32,7 +32,7 @@ const LOCAL = process.argv.includes('--local');
 
 // Bump after pushing new assets to the assets repo. A tag, never a branch: a file already out
 // in the world must not change because something was pushed later.
-export const TAG = '1.10.0';
+export const TAG = '1.11.0';
 const CDN = `https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@${TAG}/kelingking/`;
 const assetBase = process.argv.find((arg) => arg.startsWith('--asset-base='))?.slice(13);
 const BASE = LOCAL ? (assetBase ?? 'http://localhost:5178/assets/').replace(/\/?$/, '/') : CDN;

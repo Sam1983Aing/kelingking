@@ -8,3 +8,6 @@ assets-src/
 
 # The standalone build made against the local server, for testing (tools/build-standalone.mjs --local).
 kelingking-local.html
+
+# Raw chat histories behind the teaching pack: local only, never published.
+teach/_history*.md

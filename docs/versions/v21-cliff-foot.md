@@ -1,4 +1,4 @@
-# v21 — Cliff foot and sand contact
+# v21: Cliff foot and sand contact
 
 ## Goal
 

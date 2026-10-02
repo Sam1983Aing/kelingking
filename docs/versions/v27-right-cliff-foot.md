@@ -1,4 +1,4 @@
-# v27 — Right beach wall foot
+# v27: Right beach wall foot
 
 ## Goal
 

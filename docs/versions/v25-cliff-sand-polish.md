@@ -1,4 +1,4 @@
-# v25 — Cliff toe and sand polish
+# v25: Cliff toe and sand polish
 
 ## Goal
 

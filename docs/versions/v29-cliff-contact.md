@@ -1,4 +1,4 @@
-# v29 — Lower cliff texture and sand contact
+# v29: Lower cliff texture and sand contact
 
 ## Goal
 

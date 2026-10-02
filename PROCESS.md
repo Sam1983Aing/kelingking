@@ -2877,7 +2877,7 @@ underwater-camera limits also remain; verification covers the recorded cameras a
 state rather than every possible wave.
 
 
-### v27 — Right beach wall foot (2026-09-30, 18:40 report)
+## v27: Right beach wall foot (2026-09-30, 18:40 report)
 
 Sam reports that the bottom of the right beach wall looks much less natural than the
 left, with an artificial blue stepped region and a broad ochre shelf. Four matched
@@ -2931,7 +2931,7 @@ not a new geological reconstruction. The visibility approximation remains column
 and verification covers the specified cameras rather than every possible view.
 
 
-### v28 — Natural beach sand (2026-09-30, 18:41 report)
+## v28: Natural beach sand (2026-09-30, 18:41 report)
 
 Sam reports that the sand feels flat and perfect from the lower stairs and requests a
 pass grounded in real beaches. Browser-viewed sand references showed interrupted,
@@ -2980,7 +2980,7 @@ exception remains. The material is an authored approximation, judged from the ma
 cameras and approach, without a claim of perfect photographic realism.
 
 
-### v29 — Lower cliff texture and sand contact (2026-09-30, 21:15 report)
+## v29: Lower cliff texture and sand contact (2026-09-30, 21:15 report)
 
 Sam reports a residual odd lower-wall shape in the opposite cove and an unclean sand
 contact beside the last stairs. Five fixed cameras, with textured and plant-free clay
@@ -3034,7 +3034,7 @@ uploads. The lower geometry and column visibility remain approximations; the che
 the specified cameras and approaches rather than a claim of perfect realism everywhere.
 
 
-### v30 — Final water texture and continuous wave polish (2026-09-30)
+## v30: Final water texture and continuous wave polish (2026-09-30)
 
 Sam approves the latest wave's motion and asks for one final texture and smoothness
 pass. Matched beach and lower-stair cycles reproduce a thin blue stripe across the
@@ -3089,7 +3089,7 @@ uploads or publication. The shore wash still has a broad reflective shoulder; wa
 and foam are authored approximations verified in the recorded views and cycles.
 
 
-### v31 — Beach camera and selectable time of day (2026-10-01)
+## v31: Beach camera and selectable time of day (2026-10-01)
 
 Sam asks for a better view after the stairs and morning, noon, evening and night options.
 The previous beach view continued looking down along the walking direction, and dragging
@@ -3147,7 +3147,7 @@ clouds remain authored approximations; the controlled switch dissolves between s
 rather than simulating hours of changing daylight.
 
 
-### v32 — Clean foliage edges and pixelation (2026-10-01)
+## v32: Clean foliage edges and pixelation (2026-10-01)
 
 Sam reports pixelated plants along the ridge and switchbacks, most obvious in evening light
 at 94, 88 and 61 m. The main renderer already has multisampling. Matched diagnostic views
@@ -3206,7 +3206,7 @@ baked directions. This pass removes the conspicuous stochastic pixel breakup wit
 adding temporal post-processing or changing the accepted scene.
 
 
-## v33 — Correct the artificial cliff shadow line (2026-10-01)
+## v33: Correct the artificial cliff shadow line (2026-10-01)
 
 Sam reported a long thin dark line across the rock behind the final stairs, in evening
 light at beach level. Reproduced from local position (124.091, 189.952, 4.209), looking
@@ -3258,7 +3258,7 @@ corrects its units; it does not claim a full ray-traced rock surface. Gallery an
 readbacks are in docs/gallery/v33; the local sweep is captures/v33/cliff-sweep.mp4.
 
 
-## v34 — Remove remaining foliage coverage patterns (2026-10-01)
+## v34: Remove remaining foliage coverage patterns (2026-10-01)
 
 Sam still saw pixelation after v32, especially in close plants during evening descent.
 Matched the three supplied views by camera height: 27 m at tau 3.690, 63 m at tau 2.823,

@@ -1,4 +1,4 @@
-# v27 — Right beach wall foot
+# v27: Right beach wall foot
 
 The September 30 18:40 report showed a blue staircase and a broad orange band beneath
 the right beach wall. The staircase was a lighting discontinuity on the curved mesh:

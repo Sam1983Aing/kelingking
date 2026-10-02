@@ -1,4 +1,4 @@
-# v26 — Wave continuity
+# v26: Wave continuity
 
 The swell remains solid beneath a forward-pitching lip. The crest, falling sheet, impact spray
 and persistent foam follow the same phase and irregular clock.

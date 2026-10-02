@@ -1,47 +1,76 @@
 # Kelingking, in three.js
 
-A real place rebuilt in the browser: Kelingking Beach on Nusa Penida, the T-Rex headland.
-It is a scroll piece that starts with the whole bay from the air, walks down the trail on
-the ridge, and ends standing on the sand with the waves coming in. The water, sand and rock
-are physically based and matched against photos of the place, and the plants are grown in
-code as the page loads. Nothing is sculpted in a 3D tool: the shape comes from OpenStreetMap
-and a few numbers tuned against photos.
+A real place rebuilt in the browser: Kelingking Beach on Nusa Penida, Bali, the cliff everyone
+calls the T-Rex. You scroll from high above the bay, down the path on the cliff, to the water's
+edge. There is no 3D model file and no video. The cliffs, the path, the plants and the waves are
+all built by code when the page loads.
 
-**To see it**, download `kelingking.html` and open it (a double-click is enough, it needs no
-server). It fetches about 35 MB of textures and terrain from a CDN the first time. Or run the
-source, below.
+**[Open the live page](https://sam1983aing.github.io/kelingking/)** (a laptop with Chrome or
+Safari works best, it takes about 10 seconds to load)
 
-![The clifftop viewpoint, v11](docs/gallery/v11/viewpoint.jpg)
+![The clifftop viewpoint, final version](docs/gallery/v34/viewpoint.jpg)
 
-Every version's frames are in [docs/gallery](docs/gallery/README.md). How it started:
+## Three ways to use this
+
+1. **Just look at it.** Open the live page above and scroll. Drag the scene to look around.
+   The switch under "Kelingking" changes the time of day (Morning, Noon, Evening, Night).
+2. **Keep a copy.** Download [`kelingking.html`](kelingking.html) (the download button on that
+   page) and double-click it. It's the whole page in one file. It fetches about 35 MB of
+   textures and terrain the first time, and still runs without internet, just plainer.
+3. **Read or change the code.** Click the green **Code** button, then **Download ZIP** (or
+   `git clone` it), and run it on your own machine:
+
+   ```bash
+   python3 tools/serve.py
+   ```
+
+   Then open http://localhost:5178. Nothing to install apart from Python, which Macs have.
+   More under [Run it](#run-it).
+
+## How it was made
+
+It took 34 versions over eight days (24 September to 1 October 2026). Versions 1 to 13 were
+built with Claude Code (Opus 5.5), one chat per version. Versions 14 to 34 were polished in
+Codex. Every version is a git tag you can check out and run (`v1` to `v34`), and every
+version rendered the same nine camera shots, so any two can be compared.
+
+- [docs/versions](docs/versions/README.md): the plan, the rules every version followed, and a
+  short brief per version.
+- [docs/gallery](docs/gallery/README.md): the same nine shots for every version, plus before
+  and after images and clips for the later ones.
+- [PROCESS.md](PROCESS.md): what each version changed, what went wrong and how it was fixed.
 
 ![How v1 was built, stage by stage](docs/gallery/history/progression.jpg)
 
 v1 was built in three stages (shape, sea, surfaces) plus a first pass of scanned textures and
-trees. Each stage is a tagged commit you can check out and run: `stage-1`, `stage-2`,
-`stage-3`, `stage-3b`, and `v1` (the same look plus the setup for the versions). See [how v1 was built](docs/gallery/history/README.md).
+trees. Each stage is a tagged commit: `stage-1`, `stage-2`, `stage-3`, `stage-3b`, and `v1`.
+See [how v1 was built](docs/gallery/history/README.md).
 
-From here it is built one element per version, each checked against real photos before
-moving on. The plan, the rules and a brief per version are in
-[docs/versions](docs/versions/README.md), and every version's hero frames are in
-[docs/gallery](docs/gallery/README.md).
+| Version | Element |
+|---|---|
+| v1 | Shape, sea, surfaces, first scans and trees |
+| v2 | Light and atmosphere |
+| v3 | Rock |
+| v4 | Water |
+| v5 | Sand and the waterline |
+| v6 | Trail and stairs |
+| v7 | Plants |
+| v8 | The scroll descent: it becomes a landing page |
+| v9 | Clouds, water at the beach, the camera on the path, the green on the rock |
+| v10 | Polish pass over v1 to v9 |
+| v11 | Speed and the single-file build |
+| v12 | The breaking wave, and the clouds |
+| v13 | The dirt steps and the bamboo handrail |
+| v14 to v17 | The T-Rex head, the shore wave, the islet, the clouds |
+| v18 | The breaking wave rebuilt as a spilling wave |
+| v19 to v25 | The rope lashings, footprints, the cliff foot and where it meets the sand |
+| v26 | One continuous wave: swell, lip, foam and swash on one clock |
+| v27 to v30 | The right beach wall, natural sand, the last water pass |
+| v31 | The beach camera, and morning, noon, evening and night |
+| v32 to v34 | Plant edges and a dark line on the cliff |
 
-| Version | Element | Status |
-|---|---|---|
-| v1 | Shape, sea, surfaces, first scans and trees | done |
-| v2 | Light and atmosphere | done |
-| v3 | Rock | done |
-| v4 | Water | done |
-| v5 | Sand and the waterline | done |
-| v6 | Trail and stairs | done |
-| v7 | Plants | done |
-| v8 | The scroll descent | done |
-| v9 | Final pass: clouds, water at the beach, the camera on the path, the green on the rock | done |
-| v10 | Polish pass over v1 to v9 | done |
-| v11 | Speed and the shareable build | done |
-| v12 | The breaking wave, and the clouds | done |
-| v13 | The dirt steps and the bamboo handrail | done |
-| v14 | The T-Rex head silhouette | in progress |
+**Credits in short:** map data © OpenStreetMap contributors (ODbL), textures from Poly Haven
+(CC0), the code under the MIT licence. Details at the bottom.
 
 ## Run it
 
@@ -79,14 +108,15 @@ the tools (`src/debug.js`), which `src/main.js` picks from the URL.
   to 1 the camera flies: it turns while still looking straight down, then tilts up and drops
   onto the platform along the viewpoint's own line of sight. From 1 on it walks v6's walk line
   at eye height and crosses the sand to where the `swash` frame stands.
-- **It looks at the place, not at its feet.** The path swings through every compass
-  direction on the switchbacks, but the head stays within about 20 degrees of south-west from
-  all of it, so the camera looks at the head (and, past the hairpin, at the south end of the
-  beach) while it walks. Pitch and lens are keyframed by metres walked and smoothed over a few
-  metres. `node tools/descent.mjs` prints how fast it moves and turns per screen of scroll.
+- **It looks where it walks** (v9). The heading follows the path, smoothed across each bend so
+  the turn starts a little before it, and leans toward the view (the head, the beach) on the
+  straights. Where the view turns fast the scroll slows down (`TURN_PACE`), so a hairpin takes
+  its time. Pitch follows the grade of the steps, so going down you see the steps. Drag to look
+  around: on the path the view eases back when you let go, on the sand it stays where you put
+  it (v31). `node tools/descent.mjs` prints how fast it moves and turns per screen of scroll.
 - **Pacing** is a monotone curve through `PACE` knots (screens of scroll against `tau`), with
   beats at the stops where the camera slows almost to a stop while the words come in. About
-  15 screens top to bottom.
+  19 screens top to bottom.
 - **The page layer** (`scroll.js`, `page.css`): Lenis for a weighted smooth scroll, GSAP for
   the words (lines rising out of masks, SplitText), all driven from GSAP's ticker in one loop
   with the camera and the frame. Each block of words shows while the camera's `tau` is in its
@@ -98,8 +128,8 @@ the tools (`src/debug.js`), which `src/main.js` picks from the URL.
   it, so no shader compiles and no texture uploads the first time the camera gets somewhere,
   and times a few of them to pick the pixel ratio (aiming for 13 ms a frame).
 - **The terrain is baked** (v11). Generating it (heightfield, mesh, plants' places, the water's
-  maps) takes 3 to 8 s in a worker, so the page downloads it instead: 12 MB packed and gzipped
-  (`assets/terrain/terrain-1024.bin`, `src/terrain/bake-format.js`), decoded in about 0.3 s.
+  maps) takes 3 to 8 s in a worker, so the page downloads it instead: about 13.5 MB packed and
+  gzipped (`assets/terrain/terrain-1024.bin`, `src/terrain/bake-format.js`), decoded in about 0.3 s.
   The file carries a hash of the layout and of the generator's source files. When the page is
   served from localhost and either has changed, it says so in the console and generates the
   terrain as before. After changing anything the terrain worker imports, run
@@ -124,7 +154,7 @@ Landing page switches: `debug`, `at=2.5` (start at that `tau`), `notext`, `recor
 modules and module workers from `file://`, so `tools/build-standalone.mjs` rewrites every
 module (the page's and three.js's) as a function that returns its exports and joins them into
 one classic script. GSAP, SplitText and Lenis go in as their browser builds, the stylesheet
-and the three font files as data inside the file (3.1 MB in all). The tools (`debug.js`) are
+and the three font files as data inside the file (3.2 MB in all). The tools (`debug.js`) are
 left out. The build refuses code it cannot rewrite (`export default`, `export *`, `import()`,
 top-level `await`) and compiles every script in the page as a classic script before it
 writes the file.
@@ -134,13 +164,13 @@ repo `Sam1983Aing/aura-assets`, folder `kelingking/`, pinned to a tag so a copy 
 already out there never changes:
 
 ```
-https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/terrain/terrain-1024.bin
-https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.10.0/kelingking/textures/<surface>_<color|normal|mask>.jpg
+https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.11.0/kelingking/terrain/terrain-1024.bin
+https://cdn.jsdelivr.net/gh/Sam1983Aing/aura-assets@1.11.0/kelingking/textures/<surface>_<color|normal|mask>.jpg
 ```
 
 (33 JPEGs: the eleven surfaces in `src/terrain/surfaces.js` and `src/trail/surfaces.js`, each
-with a colour, normal and mask map, plus `textures/CREDITS.md`. The tag `kelingking-v1` points
-at the same commit.)
+with a colour, normal and mask map, plus `textures/CREDITS.md`. The tag `kelingking-v2` points
+at the same commit. `1.10.0` / `kelingking-v1` hold the terrain of v11 and v12.)
 
 Without a network it still runs. The textures come out flat, each in its surface's own average
 colour, and the terrain is generated on the page itself, which freezes it for 5 to 8 s before
@@ -158,8 +188,8 @@ node tools/test-standalone.mjs --offline        # the same with the network cut
 1. Copy `assets/textures/*.jpg`, `assets/textures/CREDITS.md` and
    `assets/terrain/terrain-1024.bin` into `kelingking/textures/` and `kelingking/terrain/` of a
    clone of `aura-assets`. Never the reference photos. Commit and push `main`.
-2. Tag it twice and push both tags: the next number in the shared series (after `1.10.0`
-   comes `1.11.0`, unless another project took it) and `kelingking-v2`, `-v3` ...
+2. Tag it twice and push both tags: the next number in the shared series (after `1.11.0`
+   comes `1.12.0`, unless another project took it) and `kelingking-v3`, `-v4` ...
 3. Set `TAG` at the top of `tools/build-standalone.mjs` to the new number and rebuild.
 4. Rebuild. The build fetches every asset from the CDN at `TAG` and stops unless each is the
    same bytes as the local copy, and stops if the bake is older than the code (jsDelivr can
@@ -328,7 +358,8 @@ uses matched distant impostors, so its coverage persists from the aerial view to
 within reach are picked each frame the camera moves, nearest first, in two or three levels of
 detail. Further off, impostors (`impostors.js`): each plant variant is baked on the GPU at
 load into 64 views, colour plus normal, depth and how deep in the crown, and drawn as one card
-that shows the view nearest to the camera's. Every hand-over is a stipple dissolve. Both are
+that shows the view nearest to the camera's. A hand-over swaps whole leaves and blades in and
+out, never single pixels, so nothing breaks into dots or a grid (v32 to v34). Both are
 lit by the same code (`foliage-glsl.js`): light through the leaves, a waxy sheen that
 broadens as a pixel covers more leaves, the sky from the atmosphere's harmonics, and the
 sunlight left after passing through the crown.
@@ -404,7 +435,9 @@ caught.
   at a 14-inch MacBook Pro's screen at pixel ratio 1.5 (v11). It loads in about 7 s. Nothing
   slower has been tried, and phones have not run it: the scene is the desktop's (3.4 M terrain
   triangles, 205,000 plants). Timings on one Mac swing 2x to 8x with whatever else is using the
-  GPU, so compare builds side by side (`tools/ab.mjs`, `tools/path-bench.mjs`).
+  GPU, so compare builds side by side (`tools/ab.mjs`, `tools/path-bench.mjs`). One
+  exception to the speed budget is kept on purpose: since v26 the close camera at water level
+  draws the whole wave body under the lip, which costs about twice what it did.
 - **Season.** The scrub is wet-season green. Most trail photos are dry season.
 - **Materials after v2.** Every material was retuned under v2's physical light: the rock in
   v3, the water in v4, the sand in v5, the plants in v7 (to measured leaf reflectance).

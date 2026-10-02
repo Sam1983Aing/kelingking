@@ -1,4 +1,4 @@
-# v33 — Remove the artificial cliff line
+# v33: Remove the artificial cliff line
 
 ## Goal
 

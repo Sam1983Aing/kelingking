@@ -1,4 +1,4 @@
-# v31 — Beach camera and time of day
+# v31: Beach camera and time of day
 
 The beach view widens after the last stair. Drag to choose a view, use **Reset view**
 to return to the guide, and select **Morning / Noon / Evening / Night** above the scene.

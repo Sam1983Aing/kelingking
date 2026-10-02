@@ -1,4 +1,4 @@
-# v26 review polish — Forming lip
+# v26 review polish: Forming lip
 
 The accepted continuous wave occasionally developed a rounded clear-water pocket near its
 peeling crest. The lip reached forward while its tip was still high, and the penultimate

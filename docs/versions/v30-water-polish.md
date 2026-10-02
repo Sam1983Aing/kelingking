@@ -1,4 +1,4 @@
-# v30 — Final water texture and wave polish
+# v30: Final water texture and wave polish
 
 ## Goal
 

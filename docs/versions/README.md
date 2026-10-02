@@ -19,27 +19,27 @@ version. A session works on its element only, and goes deep on it.
 | v11 | Speed and the shareable build | [v11-speed.md](v11-speed.md) | done, tag `v11` |
 | v12 | The breaking wave, and the clouds (Sam's notes after v11) | [v12-surf.md](v12-surf.md) | done, tag `v12` |
 | v13 | The dirt steps and the bamboo handrail (Sam's notes after v12) | [v13-stairs.md](v13-stairs.md) | done, tag `v13` |
-| v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | in progress |
-| v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | in progress |
-| v16 | Batu Satu shape and greenery | [v16-islet-shape-greenery.md](v16-islet-shape-greenery.md) | in progress |
-| v17 | More natural clouds | [v17-cloud-realism.md](v17-cloud-realism.md) | in progress |
-| v18 | Natural shore break | [v18-shore-wave-rebuild.md](v18-shore-wave-rebuild.md) | in progress |
-| v19 | Stair path and blue rail lashings | [v19-stair-path-rail.md](v19-stair-path-rail.md) | in progress |
-| v20 | Last bamboo joints and beach sand | [v20-last-rail-sand.md](v20-last-rail-sand.md) | in progress |
-| v21 | Cliff foot and sand contact | [v21-cliff-foot.md](v21-cliff-foot.md) | in progress |
-| v22 | Continuous lower cliff and beach junction | [v22-cliff-junction.md](v22-cliff-junction.md) | in progress |
-| v23 | Clouds, clifftop platform, persistent grass and attached blue cord | [v23-cloud-detail.md](v23-cloud-detail.md) | ready for review |
-| v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | ready for review |
-| v25 | Curved cliff toes and beach relief | [v25-cliff-sand-polish.md](v25-cliff-sand-polish.md) | ready for review |
-| v26 | Continuous swell, falling lip and whitewater | [v26-wave-continuity.md](v26-wave-continuity.md) | ready for review; water-level performance exception |
-| v27 | Right beach wall foot and rock weathering | [v27-right-cliff-foot.md](v27-right-cliff-foot.md) | ready for review |
-| v28 | Natural beach sand texture and surface relief | [v28-natural-sand.md](v28-natural-sand.md) | ready for review |
-| v29 | Lower cliff texture and seamless sand contact | [v29-cliff-contact.md](v29-cliff-contact.md) | ready for review |
-| v30 | Final water texture and continuous wave polish | [v30-water-polish.md](v30-water-polish.md) | ready for review |
-| v31 | Beach camera and selectable time of day | [v31-beach-camera-light.md](v31-beach-camera-light.md) | ready for review |
-| v32 | Clean foliage edges and pixelation | [v32-foliage-edge-cleanup.md](v32-foliage-edge-cleanup.md) | ready for review |
-| v33 | Correct the artificial cliff shadow line | [v33-cliff-line.md](v33-cliff-line.md) | ready for review |
-| v34 | Remove remaining foliage coverage patterns | [v34-foliage-coverage.md](v34-foliage-coverage.md) | ready for review |
+| v14 | The T-Rex head silhouette from the clifftop | [v14-head-shape.md](v14-head-shape.md) | done, tag `v14` |
+| v15 | Continuous breaking wave and shore foam | [v15-shore-wave.md](v15-shore-wave.md) | done, tag `v15` |
+| v16 | Batu Satu shape and greenery | [v16-islet-shape-greenery.md](v16-islet-shape-greenery.md) | done, tag `v16` |
+| v17 | More natural clouds | [v17-cloud-realism.md](v17-cloud-realism.md) | done, tag `v17` |
+| v18 | Natural shore break | [v18-shore-wave-rebuild.md](v18-shore-wave-rebuild.md) | done, tag `v18` |
+| v19 | Stair path and blue rail lashings | [v19-stair-path-rail.md](v19-stair-path-rail.md) | done, tag `v19` |
+| v20 | Last bamboo joints and beach sand | [v20-last-rail-sand.md](v20-last-rail-sand.md) | done, tag `v20` |
+| v21 | Cliff foot and sand contact | [v21-cliff-foot.md](v21-cliff-foot.md) | done, tag `v21` |
+| v22 | Continuous lower cliff and beach junction | [v22-cliff-junction.md](v22-cliff-junction.md) | done, tag `v22` |
+| v23 | Clouds, clifftop platform, persistent grass and attached blue cord | [v23-cloud-detail.md](v23-cloud-detail.md) | done, tag `v23` |
+| v24 | Terrain closure beside the stairs | [v24-terrain-closure.md](v24-terrain-closure.md) | done, tag `v24` |
+| v25 | Curved cliff toes and beach relief | [v25-cliff-sand-polish.md](v25-cliff-sand-polish.md) | done, tag `v25` |
+| v26 | Continuous swell, falling lip and whitewater | [v26-wave-continuity.md](v26-wave-continuity.md) | done, tag `v26` (water-level speed exception, kept on purpose) |
+| v27 | Right beach wall foot and rock weathering | [v27-right-cliff-foot.md](v27-right-cliff-foot.md) | done, tag `v27` |
+| v28 | Natural beach sand texture and surface relief | [v28-natural-sand.md](v28-natural-sand.md) | done, tag `v28` |
+| v29 | Lower cliff texture and seamless sand contact | [v29-cliff-contact.md](v29-cliff-contact.md) | done, tag `v29` |
+| v30 | Final water texture and continuous wave polish | [v30-water-polish.md](v30-water-polish.md) | done, tag `v30` |
+| v31 | Beach camera and selectable time of day | [v31-beach-camera-light.md](v31-beach-camera-light.md) | done, tag `v31` |
+| v32 | Clean foliage edges and pixelation | [v32-foliage-edge-cleanup.md](v32-foliage-edge-cleanup.md) | done, tag `v32` |
+| v33 | Correct the artificial cliff shadow line | [v33-cliff-line.md](v33-cliff-line.md) | done, tag `v33` |
+| v34 | Remove remaining foliage coverage patterns | [v34-foliage-coverage.md](v34-foliage-coverage.md) | done, tag `v34` |
 
 Why this order: light first, because every colour decision after it is made under it. Then
 the elements Sam cares most about (rock, water, sand). The trail before the plants, so the

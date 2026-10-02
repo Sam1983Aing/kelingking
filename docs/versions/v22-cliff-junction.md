@@ -1,4 +1,4 @@
-# v22 — Continuous beach cliff junction
+# v22: Continuous beach cliff junction
 
 ## Goal
 

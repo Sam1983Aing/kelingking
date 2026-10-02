@@ -1,4 +1,4 @@
-# v31 — Beach camera and time of day
+# v31: Beach camera and time of day
 
 ## Goal
 
@@ -28,7 +28,7 @@ or publication. Night lighting is an authored moonlit setting, not a lunar ephem
 Preserve v30's accepted wave and swash sequence and v29's lower cliff/sand contact.
 The historical v26 water-level performance exception remains.
 
-## Verification — 1 October 2026
+## Verification: 1 October 2026
 
 Ready for review. Eight camera stills and a 377-frame, 24 fps recording cover the last
 stairs, beach panorama and water approach. Returning to the stairs clears the persistent

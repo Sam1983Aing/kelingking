@@ -1,4 +1,4 @@
-# v28 — Natural beach sand
+# v28: Natural beach sand
 
 ## Goal
 

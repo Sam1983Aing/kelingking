@@ -1,4 +1,4 @@
-# v30 — Final water texture and wave polish
+# v30: Final water texture and wave polish
 
 A final material pass over the accepted swell, folding lip, impact and shore wash.
 The crest solve and timing remain unchanged. Ripple travel, wash thickness through

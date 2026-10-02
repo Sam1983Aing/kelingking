@@ -1,4 +1,4 @@
-# v34 — Resolve remaining foliage pixelation
+# v34: Resolve remaining foliage pixelation
 
 ## Goal
 

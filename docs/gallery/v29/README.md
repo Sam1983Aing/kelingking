@@ -1,4 +1,4 @@
-# v29 — Lower cliff texture and sand contact
+# v29: Lower cliff texture and sand contact
 
 The opposite-cove wall now continues below the shrub gully as a rounded recess.
 A shallow deposited sand bank follows the final carved rock toe, with matching fades

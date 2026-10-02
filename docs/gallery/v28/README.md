@@ -1,4 +1,4 @@
-# v28 — Natural beach sand
+# v28: Natural beach sand
 
 The sand material now combines elongated hummocks and hollows, interrupted shallow
 ripple patches, granular normal relief and sparse coral/shell fragments. Quiet areas
