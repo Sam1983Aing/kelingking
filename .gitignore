@@ -11,3 +11,8 @@ kelingking-local.html
 
 # Raw chat histories behind the teaching pack: local only, never published.
 teach/_history*.md
+teach/broll/
+
+# A separate test run of the starter prompt, recorded for the video. Its own repo, with
+# reference photos inside: never part of this one.
+foundation-broll/
