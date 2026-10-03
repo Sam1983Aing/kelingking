@@ -10,7 +10,7 @@ Safari works best, it takes about 10 seconds to load)
 
 ![The clifftop viewpoint, final version](docs/gallery/v34/viewpoint.jpg)
 
-## Three ways to use this
+## Four ways to use this
 
 1. **Just look at it.** Open the live page above and scroll. Drag the scene to look around.
    The switch under "Kelingking" changes the time of day (Morning, Noon, Evening, Night).
@@ -26,6 +26,10 @@ Safari works best, it takes about 10 seconds to load)
 
    Then open http://localhost:5178. Nothing to install apart from Python, which Macs have.
    More under [Run it](#run-it).
+4. **Build your own.** Paste the [starter prompt](teach/03-starter-prompt.md) into Claude Code
+   or Codex, in an empty folder. It builds the foundation of the island in five steps and
+   stops after each one to show you. The same page explains how to point it at another place,
+   and how to refine the result one element at a time, the way the 34 versions here were made.
 
 ## How it was made
 
